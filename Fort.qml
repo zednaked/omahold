@@ -70,14 +70,25 @@ Item {
                                       c: Sim.B_KITCHEN, u: Sim.B_SMELTER, j: Sim.B_FORGE, l: Sim.B_TORCH, r: Sim.B_TRAINING, g: Sim.B_JEWELER })
   readonly property var buildOrder: ["b", "t", "f", "e", "p", "w", "l", "o", "d", "c", "u", "j", "g", "r", "s"]
   readonly property var buildGlyph: ({ 1: "X", 2: "θ", 3: "Π", 4: "≡", 5: "¶", 6: "⌂", 7: "O", 8: "+", 9: "=", 10: "Ω", 11: "π", 12: "∆", 13: "‡", 14: "¡", 15: "Ξ", 16: "◊", 17: "†" })
-  readonly property var viewModes: [["normal", "Normal", "o mapa como ele é"], ["light", "Luz", "mapa de calor da iluminação: sol, tochas (tremulando) e magma; sombras atrás da rocha"], ["mood", "Humor", "cada anão com um halo: verde contente, amarelo ok, laranja infeliz, vermelho miserável, roxo possuído/melancólico"], ["access", "Acesso", "o que se alcança a pé a partir do portão ou de onde os anões estão: azul alcançável, vermelho isolado (falta escada, muro no caminho)"]]
+  // a list, not a binding: it has to be rebuilt when the language changes
+  function viewModeList() {
+    return [["normal", root.t("view.normal"), root.t("m.view.normal")],
+            ["light", root.t("view.light"), root.t("m.view.light")],
+            ["mood", root.t("view.mood"), root.t("m.view.mood")],
+            ["access", root.t("view.access"), root.t("m.view.access")]]
+  }
+  readonly property var viewModes: root.viewModeList()
   function setViewMode(m) { World.viewMode = m; for (var k = 0; k < root.viewModes.length; k++) if (root.viewModes[k][0] === m) root.flash("ver: " + root.viewModes[k][1] + " — " + root.viewModes[k][2]) }
   function cycleViewMode() { var i = 0; for (var k = 0; k < root.viewModes.length; k++) if (root.viewModes[k][0] === World.viewMode) i = k; setViewMode(root.viewModes[(i + 1) % root.viewModes.length][0]) }
-  readonly property var toolNames: ({ look: "olhar", dig: "cavar", stair: "escada", chop: "cortar", build: "construir", cancel: "cancelar designação", remove: "remover construção" })
+  // everything on screen goes through World, which owns the language
+  function t(key) { return World.t(key) }
+  function tf(key, a, b, c, d, e) { return World.tf(key, a, b, c, d, e) }
+  readonly property var toolKeys: ({ look: "tool.look", dig: "tool.dig", stair: "tool.stair", chop: "tool.chop", build: "tool.build", cancel: "tool.cancel", remove: "tool.remove" })
+  function toolName(tool) { return World.t(root.toolKeys[tool] || "tool.look") }
 
   function toolLabel() {
-    if (root.tool === "build") { var bi = Sim.BUILD_INFO[root.buildType]; return bi ? "construir " + bi.name : "construir" }
-    return root.toolNames[root.tool] || root.tool
+    if (root.tool === "build") { var bn = Sim.buildName(root.buildType); return bn ? root.tf("fl.build", bn) : root.t("tool.build") }
+    return root.toolName(root.tool)
   }
   function isAreaTool() { return root.tool !== "look" }
 
@@ -85,23 +96,23 @@ Item {
     var w = World.w; if (!w) return
     if (root.tool === "look") { selectAt(b); return }
     var n = World.designateRect(a, b, root.tool, root.buildType)
-    if (n > 0) root.flash(n === 1 ? "1 célula: " + toolLabel() : n + " células: " + toolLabel())
+    if (n > 0) root.flash(n === 1 ? root.tf("fl.cells.one", toolLabel()) : root.tf("fl.cells.many", n, toolLabel()))
     else root.flash(reasonFor(b))
   }
   function reasonFor(i) {
     var w = World.w, t = w.tile[i]
     switch (root.tool) {
-      case "dig": return t === Sim.T_OPEN ? "nada para cavar aqui (já é aberto)" : t === Sim.T_TREE ? "isso é uma árvore: use cortar (c)" : (t === Sim.T_WATER || t === Sim.T_MAGMA) ? "não se cava líquido" : "não dá para cavar aqui"
-      case "stair": return "escada precisa de rocha/solo ou de um chão livre"
-      case "chop": return "nada para cortar aqui"
+      case "dig": return t === Sim.T_OPEN ? root.t("why.dig.open") : t === Sim.T_TREE ? root.t("why.dig.tree") : (t === Sim.T_WATER || t === Sim.T_MAGMA) ? root.t("why.dig.liquid") : root.t("why.dig.no")
+      case "stair": return root.t("why.stair")
+      case "chop": return root.t("why.chop")
       case "build":
-        if (t !== Sim.T_OPEN) return "precisa de um espaço aberto (cave primeiro)"
-        if (w.floor[i] === Sim.F_NONE) return "isso é céu aberto: não há chão neste nível"
-        if (w.build[i] !== Sim.B_NONE) return "já existe " + Sim.BUILD_INFO[w.build[i]].name + " aqui"
-        if (root.buildType === Sim.B_FARM) return "plantação precisa de terra, grama ou musgo de caverna"
-        return "não dá para construir aqui"
-      case "cancel": return "nenhuma designação aqui"
-      case "remove": return "nenhuma construção aqui"
+        if (t !== Sim.T_OPEN) return root.t("why.build.open")
+        if (w.floor[i] === Sim.F_NONE) return root.t("why.build.sky")
+        if (w.build[i] !== Sim.B_NONE) return root.tf("why.build.taken", Sim.buildName(w.build[i]))
+        if (root.buildType === Sim.B_FARM) return root.t("p.farm.needs")
+        return root.t("p.cant.build")
+      case "cancel": return root.t("p.desig.none")
+      case "remove": return root.t("p.build.none")
     }
     return ""
   }
@@ -160,83 +171,84 @@ Item {
     var slotsMeta = World.slots || {}
     function slotLabel(n) {
       var m = slotsMeta[String(n)]
-      if (!m) return "Slot " + n + "  —  vazio"
+      if (!m) return root.tf("m.slot.empty", n)
       var ago = Math.max(0, Math.round((Date.now() - (m.at || 0)) / 60000))
-      var agoTxt = ago < 1 ? "agora" : ago < 60 ? "há " + ago + " min" : ago < 1440 ? "há " + Math.round(ago / 60) + " h" : "há " + Math.round(ago / 1440) + " d"
-      return "Slot " + n + "  —  " + m.name + (m.preset ? " · " + m.preset : "") + " · " + m.date + " · " + m.pop + " anões · " + agoTxt
+      var agoTxt = ago < 1 ? root.t("m.ago.now") : ago < 60 ? root.tf("m.ago.min", ago) : ago < 1440 ? root.tf("m.ago.hour", Math.round(ago / 60)) : root.tf("m.ago.day", Math.round(ago / 1440))
+      return root.tf("m.slot.full", n, m.name + (m.preset ? " · " + m.preset : "") + " · " + m.date + " · " + root.tf("m.dwarves.count", m.pop) + " · " + agoTxt)
     }
     rows.push({ kind: "brand" })
     if (root.menuSection === "main") {
-      title(w ? w.name : "sem mundo", w ? (w.preset ? w.preset + " · " : "") + root.fmtDate(Sim.date(w)) + " · " + Sim.pop(w) + " anões" : "")
-      item("Continuar", "volta ao mapa", "Esc", function () { closeMenu() })
+      title(w ? w.name : "—", w ? (w.preset ? w.preset + " · " : "") + root.fmtDate(Sim.date(w)) + " · " + root.tf("m.dwarves.count", Sim.pop(w)) : "")
+      item(root.t("m.continue"), root.t("m.continue.sub"), "Esc", function () { closeMenu() })
       gap()
-      item("Novo jogo", "predefinições e personalizado", "n", function () { root.menuSection = "new"; root.menuIndex = 0; rebuildMenu() })
-      item("Salvar em slot", "cinco slots, reutilizáveis", "s", function () { root.menuSection = "save"; root.menuIndex = 0; rebuildMenu() })
-      item("Carregar slot", "", "l", function () { root.menuSection = "load"; root.menuIndex = 0; rebuildMenu() })
-      item("Ordens de oficina", "encomende o que quiser produzido", "w", function () { root.menuSection = "orders"; root.menuIndex = 0; rebuildMenu() })
-      item("Ver / inspecionar", "luz, humor, acesso", "v", function () { root.menuSection = "view"; root.menuIndex = 0; rebuildMenu() })
-      item("Opções", "ritmo, visual, população, inimigos", "o", function () { root.menuSection = "options"; root.menuIndex = 0; rebuildMenu() })
+      item(root.t("m.new"), root.t("m.new.sub"), "n", function () { root.menuSection = "new"; root.menuIndex = 0; rebuildMenu() })
+      item(root.t("m.save"), root.t("m.save.sub"), "s", function () { root.menuSection = "save"; root.menuIndex = 0; rebuildMenu() })
+      item(root.t("m.load"), "", "l", function () { root.menuSection = "load"; root.menuIndex = 0; rebuildMenu() })
+      item(root.t("m.orders"), root.t("m.orders.sub"), "w", function () { root.menuSection = "orders"; root.menuIndex = 0; rebuildMenu() })
+      item(root.t("m.view"), root.t("m.view.sub"), "v", function () { root.menuSection = "view"; root.menuIndex = 0; rebuildMenu() })
+      item(root.t("m.options"), root.t("m.options.sub"), "o", function () { root.menuSection = "options"; root.menuIndex = 0; rebuildMenu() })
       gap()
-      item("Fechar painel", "o mundo continua devagar", "q", function () { closeMenu(); World.open = false })
+      item(root.t("m.close"), root.t("m.close.sub"), "q", function () { closeMenu(); World.open = false })
     } else if (root.menuSection === "new") {
-      title("Novo jogo", "o mundo atual é substituído — salve num slot antes, se quiser voltar")
+      title(root.t("m.new"), root.t("m.new.warn"))
       for (k = 0; k < Sim.PRESETS.length; k++) (function (pr) { item(pr.name, pr.desc, String(k + 1), function () { World.newFromPreset(pr.id, 0, ""); closeMenu(); root.flash(pr.name + ": " + World.w.name) }, { wrap: true }) })(Sim.PRESETS[k])
       gap()
-      item("Personalizado…", "predefinição, número de anões e semente", "p", function () { root.menuSection = "custom"; root.menuIndex = 0; rebuildMenu() })
-      item("Voltar", "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
+      item(root.t("m.custom"), root.t("m.custom.sub"), "p", function () { root.menuSection = "custom"; root.menuIndex = 0; rebuildMenu() })
+      item(root.t("m.back"), "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
     } else if (root.menuSection === "custom") {
       var pr = null; for (k = 0; k < Sim.PRESETS.length; k++) if (Sim.PRESETS[k].id === root.customPreset) pr = Sim.PRESETS[k]
-      title("Personalizado", "← → ajustam; Enter em Fundar")
-      item("Predefinição", pr ? pr.name : root.customPreset, "◂ ▸", null, { value: true, adjust: function (d) { var i = 0; for (var q = 0; q < Sim.PRESETS.length; q++) if (Sim.PRESETS[q].id === root.customPreset) i = q; i = (i + d + Sim.PRESETS.length) % Sim.PRESETS.length; root.customPreset = Sim.PRESETS[i].id; root.customCount = Sim.PRESETS[i].n; rebuildMenu() } })
-      item("Anões", String(root.customCount), "◂ ▸", null, { value: true, adjust: function (d) { root.customCount = Math.max(4, Math.min(24, root.customCount + d)); rebuildMenu() } })
-      item("Semente", root.customSeed === "" ? "aleatória (digite números)" : root.customSeed, "0-9 ⌫", null, { value: true, seed: true })
+      title(root.t("m.custom.title"), root.t("m.custom.hint"))
+      item(root.t("m.preset"), pr ? pr.name : root.customPreset, "◂ ▸", null, { value: true, adjust: function (d) { var i = 0; for (var q = 0; q < Sim.PRESETS.length; q++) if (Sim.PRESETS[q].id === root.customPreset) i = q; i = (i + d + Sim.PRESETS.length) % Sim.PRESETS.length; root.customPreset = Sim.PRESETS[i].id; root.customCount = Sim.PRESETS[i].n; rebuildMenu() } })
+      item(root.t("m.dwarves"), String(root.customCount), "◂ ▸", null, { value: true, adjust: function (d) { root.customCount = Math.max(4, Math.min(24, root.customCount + d)); rebuildMenu() } })
+      item(root.t("m.seed"), root.customSeed === "" ? root.t("m.seed.random") : root.customSeed, "0-9 ⌫", null, { value: true, seed: true })
       gap()
-      item("Fundar", "", "Enter", function () { World.newFromPreset(root.customPreset, root.customCount, root.customSeed); closeMenu(); root.flash((pr ? pr.name : "") + ": " + World.w.name + " (semente " + World.w.seed + ")") })
-      item("Voltar", "", "Esc", function () { root.menuSection = "new"; root.menuIndex = 0; rebuildMenu() })
+      item(root.t("m.found"), "", "Enter", function () { World.newFromPreset(root.customPreset, root.customCount, root.customSeed); closeMenu(); root.flash((pr ? pr.name : "") + ": " + World.w.name + " (semente " + World.w.seed + ")") })
+      item(root.t("m.back"), "", "Esc", function () { root.menuSection = "new"; root.menuIndex = 0; rebuildMenu() })
     } else if (root.menuSection === "save") {
-      title("Salvar em slot", "Enter grava por cima · x duas vezes limpa o slot")
-      for (k = 1; k <= 5; k++) (function (n) { item(slotLabel(n), slotsMeta[String(n)] ? "" : "", String(n), function () { if (World.saveSlot(n)) { root.flash("salvo no slot " + n); rebuildMenu() } else root.flash("não consegui salvar") }, { slot: n, empty: !slotsMeta[String(n)], wrap: true }) })(k)
+      title(root.t("m.save"), root.t("m.save.hint"))
+      for (k = 1; k <= 5; k++) (function (n) { item(slotLabel(n), slotsMeta[String(n)] ? "" : "", String(n), function () { if (World.saveSlot(n)) { root.flash(root.tf("fl.saved", n)); rebuildMenu() } else root.flash(root.t("fl.savefail")) }, { slot: n, empty: !slotsMeta[String(n)], wrap: true }) })(k)
       gap()
-      item("Voltar", "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
+      item(root.t("m.back"), "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
     } else if (root.menuSection === "load") {
-      title("Carregar slot", "o mundo atual é substituído · x duas vezes limpa o slot")
+      title(root.t("m.load"), root.t("m.load.hint"))
       var any = false
-      for (k = 1; k <= 5; k++) (function (n) { if (!slotsMeta[String(n)]) return; any = true; item(slotLabel(n), "", String(n), function () { if (World.loadSlot(n)) { closeMenu(); root.flash("carregando o slot " + n) } }, { slot: n, wrap: true }) })(k)
-      if (!any) rows.push({ kind: "note", t: "Nenhum slot gravado ainda." })
+      for (k = 1; k <= 5; k++) (function (n) { if (!slotsMeta[String(n)]) return; any = true; item(slotLabel(n), "", String(n), function () { if (World.loadSlot(n)) { closeMenu(); root.flash(root.tf("fl.loading", n)) } }, { slot: n, wrap: true }) })(k)
+      if (!any) rows.push({ kind: "note", t: root.t("m.load.none") })
       gap()
-      item("Voltar", "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
+      item(root.t("m.back"), "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
     } else if (root.menuSection === "orders") {
-      title("Ordens de oficina", "▸ encomenda uma · ◂ devolve uma · a fortaleza já anota sozinha o que falta")
+      title(root.t("m.orders"), root.t("m.orders.hint"))
       for (k = 0; k < Sim.ORDER_KINDS.length; k++) (function (kind) {
         var spec = Sim.ORDER_SPEC[kind], cnt = Sim.orderCounts(w, kind)
-        var hint = cnt.mine ? "você pediu " + cnt.mine : cnt.hold ? "a fortaleza anotou " + cnt.hold : "nada na fila"
-        item(spec.name, hint, "◂ ▸", null, { value: true, adjust: function (d) {
+        var hint = cnt.mine ? root.tf("m.orders.you", cnt.mine) : cnt.hold ? root.tf("m.orders.noted", cnt.hold) : root.t("m.orders.nothing")
+        item(Sim.orderName(kind), hint, "◂ ▸", null, { value: true, adjust: function (d) {
           if (d > 0) Sim.fileOrder(w, kind, 1, true); else Sim.dropPlayerOrder(w, kind, 1)
           World.rev++; rebuildMenu()
         } })
       })(Sim.ORDER_KINDS[k])
       gap()
-      rows.push({ kind: "note", t: "Eles não obedecem na hora: fome, sede e sono vêm primeiro, e quem detesta a oficina deixa para outro." })
-      item("Cancelar as minhas ordens", "as da fortaleza ficam", "x", function () { Sim.clearPlayerOrders(w); World.rev++; rebuildMenu(); root.flash("suas ordens canceladas") })
-      item("Voltar", "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
+      rows.push({ kind: "note", t: root.t("m.orders.note") })
+      item(root.t("m.orders.clear"), root.t("m.orders.clear.sub"), "x", function () { Sim.clearPlayerOrders(w); World.rev++; rebuildMenu(); root.flash(root.t("fl.orders.cleared")) })
+      item(root.t("m.back"), "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
     } else if (root.menuSection === "view") {
-      title("Ver / inspecionar", "no jogo, o alterna os modos · a página Local mostra a luz em % no cursor")
+      title(root.t("m.view"), root.t("m.view.hint"))
       for (k = 0; k < root.viewModes.length; k++) (function (vm, n) { item((World.viewMode === vm[0] ? "● " : "○ ") + vm[1], vm[2], String(n + 1), function () { setViewMode(vm[0]); closeMenu() }, { wrap: true }) })(root.viewModes[k], k)
       gap()
-      item("Pular para uma hora do dia", "← → : madrugada, manhã, meio-dia, entardecer, noite", "◂ ▸", null, { value: true, adjust: function (d) { var hs = [3, 8, 12, 18.5, 22]; var cur = Sim.date(w).hour; var i = 0, bd = 99; for (var q = 0; q < hs.length; q++) { var dd = Math.abs(hs[q] - cur); if (dd < bd) { bd = dd; i = q } } i = (i + d + hs.length) % hs.length; Sim.setHour(w, hs[i]); World.rev++; rebuildMenu() } })
-      item("Voltar", "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
+      item(root.t("m.hour"), root.t("m.hour.sub"), "◂ ▸", null, { value: true, adjust: function (d) { var hs = [3, 8, 12, 18.5, 22]; var cur = Sim.date(w).hour; var i = 0, bd = 99; for (var q = 0; q < hs.length; q++) { var dd = Math.abs(hs[q] - cur); if (dd < bd) { bd = dd; i = q } } i = (i + d + hs.length) % hs.length; Sim.setHour(w, hs[i]); World.rev++; rebuildMenu() } })
+      item(root.t("m.back"), "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
     } else if (root.menuSection === "options") {
-      title("Opções", "← → ou Enter alternam · ficam salvas")
-      var bgLabel = World.backgroundMs === 0 ? "congelado" : World.backgroundMs >= 4000 ? "1 tick a cada 4 s (lento)" : World.backgroundMs >= 2000 ? "1 tick a cada 2 s" : World.backgroundMs >= 1000 ? "1 tick por segundo" : "4 ticks por segundo"
-      item("Ritmo com o painel fechado", bgLabel, "◂ ▸", null, { value: true, adjust: function (d) { var seq = [0, 4000, 2000, 1000, 250]; var i = seq.indexOf(World.backgroundMs); if (i < 0) i = 2; i = (i + d + seq.length) % seq.length; World.backgroundMs = seq[i]; rebuildMenu() } })
-      item("Velocidade com o painel aberto", World.speed + "×", "◂ ▸", null, { value: true, adjust: function (d) { var sq = [1, 2, 4]; var i = sq.indexOf(World.speed); i = (i + d + 3) % 3; World.speed = sq[i]; World.saveOptions(); rebuildMenu() } })
-      item("Visual", World.glyphs ? "glifos (clássico)" : "blocos + glifos", "◂ ▸", null, { value: true, adjust: function () { World.glyphs = !World.glyphs; rebuildMenu() } })
-      item("Janelinha de canto ao fechar", World.peek ? "ligada" : "desligada", "◂ ▸", null, { value: true, adjust: function () { World.peek = !World.peek; rebuildMenu() } })
-      item("Teto de população", String(World.popCap), "◂ ▸", null, { value: true, adjust: function (d) { var caps = [12, 20, 30, 40]; var i = caps.indexOf(World.popCap); if (i < 0) i = 1; i = (i + d + caps.length) % caps.length; World.popCap = caps[i]; rebuildMenu() } })
-      item("Inimigos", World.enemies ? "sim (goblins, lobos, kobolds)" : "não (vale tranquilo)", "◂ ▸", null, { value: true, adjust: function () { World.setEnemies(!World.enemies); rebuildMenu() } })
-      item("Ondas goblin", World.difficulty === "calma" ? "calmas (−40%)" : World.difficulty === "brutal" ? "brutais (+60%)" : "normais", "◂ ▸", null, { value: true, adjust: function (d) { var ds = ["calma", "normal", "brutal"]; var i = ds.indexOf(World.difficulty); i = (i + d + 3) % 3; World.setDifficulty(ds[i]); rebuildMenu() } })
+      title(root.t("m.options"), root.t("m.options.hint"))
+      var bgLabel = root.t(World.backgroundMs === 0 ? "m.opt.bg.frozen" : World.backgroundMs >= 4000 ? "m.opt.bg.4s" : World.backgroundMs >= 2000 ? "m.opt.bg.2s" : World.backgroundMs >= 1000 ? "m.opt.bg.1s" : "m.opt.bg.fast")
+      item(root.t("m.opt.bg"), bgLabel, "◂ ▸", null, { value: true, adjust: function (d) { var seq = [0, 4000, 2000, 1000, 250]; var i = seq.indexOf(World.backgroundMs); if (i < 0) i = 2; i = (i + d + seq.length) % seq.length; World.backgroundMs = seq[i]; rebuildMenu() } })
+      item(root.t("m.opt.speed"), World.speed + "×", "◂ ▸", null, { value: true, adjust: function (d) { var sq = [1, 2, 4]; var i = sq.indexOf(World.speed); i = (i + d + 3) % 3; World.speed = sq[i]; World.saveOptions(); rebuildMenu() } })
+      item(root.t("m.opt.look"), root.t(World.glyphs ? "m.opt.look.glyphs" : "m.opt.look.blocks"), "◂ ▸", null, { value: true, adjust: function () { World.glyphs = !World.glyphs; rebuildMenu() } })
+      item(root.t("m.opt.peek"), root.t(World.peek ? "m.on" : "m.off"), "◂ ▸", null, { value: true, adjust: function () { World.peek = !World.peek; rebuildMenu() } })
+      item(root.t("m.opt.popcap"), String(World.popCap), "◂ ▸", null, { value: true, adjust: function (d) { var caps = [12, 20, 30, 40]; var i = caps.indexOf(World.popCap); if (i < 0) i = 1; i = (i + d + caps.length) % caps.length; World.popCap = caps[i]; rebuildMenu() } })
+      item(root.t("m.opt.enemies"), root.t(World.enemies ? "m.opt.enemies.yes" : "m.opt.enemies.no"), "◂ ▸", null, { value: true, adjust: function () { World.setEnemies(!World.enemies); rebuildMenu() } })
+      item(root.t("m.opt.waves"), root.t(World.difficulty === "calma" ? "m.opt.waves.calm" : World.difficulty === "brutal" ? "m.opt.waves.brutal" : "m.opt.waves.normal"), "◂ ▸", null, { value: true, adjust: function (d) { var ds = ["calma", "normal", "brutal"]; var i = ds.indexOf(World.difficulty); i = (i + d + 3) % 3; World.setDifficulty(ds[i]); rebuildMenu() } })
+      item(root.t("m.opt.lang"), World.langName(), "◂ ▸", null, { value: true, adjust: function () { World.cycleLang(); root.flash(root.tf("fl.lang", World.langName())); rebuildMenu() } })
       gap()
-      item("Voltar", "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
+      item(root.t("m.back"), "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
     }
     root.menuRows = rows
     // keep the cursor on an item
@@ -271,8 +283,8 @@ Item {
       case Qt.Key_Return: case Qt.Key_Enter: case Qt.Key_Space: menuActivate(1); e.accepted = true; return
       case Qt.Key_X:
         if (r && r.slot && (root.menuSection === "save" || root.menuSection === "load")) {
-          if (root.pendingClear === r.slot) { World.clearSlot(r.slot); root.pendingClear = 0; root.flash("slot " + r.slot + " limpo"); rebuildMenu() }
-          else { root.pendingClear = r.slot; clearTimer.restart(); root.flash("x de novo para limpar o slot " + r.slot) }
+          if (root.pendingClear === r.slot) { World.clearSlot(r.slot); root.pendingClear = 0; root.flash(root.tf("fl.cleared", r.slot)); rebuildMenu() }
+          else { root.pendingClear = r.slot; clearTimer.restart(); root.flash(root.tf("fl.clear.confirm", r.slot)) }
           e.accepted = true; return
         }
         break
@@ -299,13 +311,13 @@ Item {
       case Qt.Key_Escape:
         if (root.selStart >= 0) root.selStart = -1
         else if (root.tool !== "look") root.tool = "look"
-        else if (World.followId) { World.followId = 0; root.flash("parou de seguir (Esc de novo limpa a seleção)") }
+        else if (World.followId) { World.followId = 0; root.flash(root.t("fl.unfollow.esc")) }
         else if (World.selectedId) World.selectedId = 0
         else openMenu("main")
         break
       case Qt.Key_F10: case Qt.Key_QuoteLeft: openMenu("main"); break
       case Qt.Key_Left: case Qt.Key_H: moveCursor(-stepN, 0); break
-      case Qt.Key_Right: case Qt.Key_L: if (e.key === Qt.Key_L && shift) { World.toggleLockdown(); root.flash(w.lockdown ? "portas trancadas: goblins, lobos e kobolds não passam" : "portas destrancadas") } else moveCursor(stepN, 0); break
+      case Qt.Key_Right: case Qt.Key_L: if (e.key === Qt.Key_L && shift) { World.toggleLockdown(); root.flash(w.lockdown ? root.t("h.lock") : "portas destrancadas") } else moveCursor(stepN, 0); break
       case Qt.Key_Up: case Qt.Key_K: moveCursor(0, -stepN); break
       case Qt.Key_Down: case Qt.Key_J: moveCursor(0, stepN); break
       case Qt.Key_Less: case Qt.Key_Comma: case Qt.Key_PageUp: setZ(root.vz + 1); break
@@ -314,12 +326,12 @@ Item {
       case Qt.Key_Space: World.paused = !World.paused; root.flash(World.paused ? "pausado" : "correndo"); break
       case Qt.Key_Plus: case Qt.Key_Equal: World.speed = World.speed >= 4 ? 4 : World.speed * 2; root.flash("velocidade " + World.speed + "x"); break
       case Qt.Key_Minus: World.speed = World.speed <= 1 ? 1 : World.speed / 2; root.flash("velocidade " + World.speed + "x"); break
-      case Qt.Key_D: root.tool = "dig"; root.selStart = -1; root.flash("cavar: Enter marca o canto, Enter de novo aplica (ou arraste com o mouse)"); break
-      case Qt.Key_S: if (shift) { openMenu("save") } else { root.tool = "stair"; root.selStart = -1; root.flash("escada: num chão, marca a descida (célula + rocha de baixo); desça com > e marque de novo para ir mais fundo") } break
-      case Qt.Key_C: root.tool = "chop"; root.selStart = -1; root.flash("cortar árvores, cogumelos e arbustos"); break
+      case Qt.Key_D: root.tool = "dig"; root.selStart = -1; root.flash(root.t("fl.dig")); break
+      case Qt.Key_S: if (shift) { openMenu("save") } else { root.tool = "stair"; root.selStart = -1; root.flash(root.t("fl.stair")) } break
+      case Qt.Key_C: root.tool = "chop"; root.selStart = -1; root.flash(root.t("fl.chop")); break
       case Qt.Key_B: root.buildMenu = true; break
-      case Qt.Key_X: root.tool = "cancel"; root.selStart = -1; root.flash("cancelar designações"); break
-      case Qt.Key_R: root.tool = "remove"; root.selStart = -1; root.flash("remover construções (devolve o material)"); break
+      case Qt.Key_X: root.tool = "cancel"; root.selStart = -1; root.flash(root.t("fl.cancel")); break
+      case Qt.Key_R: root.tool = "remove"; root.selStart = -1; root.flash(root.t("fl.remove")); break
       case Qt.Key_V: root.tool = "look"; root.selStart = -1; break
       case Qt.Key_Tab: { var pages = ["units", "local", "orders", "legends", "help"]; root.page = pages[(pages.indexOf(root.page) + (shift ? 4 : 1)) % 5]; e.accepted = true; return }
       case Qt.Key_Backtab: { var pg = ["units", "local", "orders", "legends", "help"]; root.page = pg[(pg.indexOf(root.page) + 4) % 5]; e.accepted = true; return }
@@ -328,9 +340,9 @@ Item {
       case Qt.Key_Y: root.page = "legends"; break
       case Qt.Key_W: root.page = "orders"; break
       case Qt.Key_Question: case Qt.Key_F1: root.page = root.page === "help" ? "units" : "help"; break
-      case Qt.Key_G: World.glyphs = !World.glyphs; root.flash(World.glyphs ? "modo glifos (clássico)" : "modo blocos"); break
-      case Qt.Key_M: World.peek = !World.peek; root.flash(World.peek ? "janelinha de canto ligada (aparece ao fechar)" : "janelinha desligada"); break
-      case Qt.Key_F: if (World.selectedId) { if (World.followId) { World.followId = 0; root.flash("parou de seguir") } else focusUnit(Sim.unitById(w, World.selectedId)) } else root.flash("selecione um anão primeiro (Enter sobre ele, clique na lista, ou ] e [)"); break
+      case Qt.Key_G: World.glyphs = !World.glyphs; root.flash(root.t(World.glyphs ? "fl.glyphs" : "fl.blocks")); break
+      case Qt.Key_M: World.peek = !World.peek; root.flash(root.t(World.peek ? "fl.peek.on" : "fl.peek.off")); break
+      case Qt.Key_F: if (World.selectedId) { if (World.followId) { World.followId = 0; root.flash(root.t("fl.unfollow")) } else focusUnit(Sim.unitById(w, World.selectedId)) } else root.flash(root.t("fl.selectfirst")); break
       case Qt.Key_BracketRight: selectNext(1); break
       case Qt.Key_BracketLeft: selectNext(-1); break
       case Qt.Key_Home: if (w) { root.cx = Sim.ix(w.depot); root.cy = Sim.iy(w.depot); setZ(Sim.iz(w.depot)) } break
@@ -349,11 +361,11 @@ Item {
   function levelName(z) {
     var w = World.w; if (!w) return ""
     var c = Sim.cache(w)
-    if (z > c.maxGround) return "céu"
-    if (z >= c.minGround) return "superfície"
-    if (z === 1) return "cavernas"
-    if (z === 0) return "magma"
-    return "subsolo " + (c.minGround - z)
+    if (z > c.maxGround) return root.t("lvl.sky")
+    if (z >= c.minGround) return root.t("lvl.surface")
+    if (z === 1) return root.t("lvl.caves")
+    if (z === 0) return root.t("lvl.magma")
+    return root.tf("lvl.under", c.minGround - z)
   }
 
   property var lines: []
@@ -363,45 +375,45 @@ Item {
     var sel = World.selectedId ? Sim.unitById(w, World.selectedId) : null
     if (root.page === "units") {
       var ds = Sim.dwarves(w)
-      if (ds.length === 0) out.push({ t: "Ninguém restou. A fortaleza caiu. (n abre o menu Novo jogo)", c: "urgent", wrap: true })
+      if (ds.length === 0) out.push({ t: root.t("p.nobody"), c: "urgent", wrap: true })
       var shown = 0
       for (k = 0; k < ds.length; k++) {
         u = ds[k]
         var mark = sel && sel.id === u.id ? "▶ " : "  "
         var moodc = u.mood_state ? "magenta" : u.mood < 18 ? "urgent" : u.mood < 35 ? "warn" : ""
         out.push({ t: mark + u.name + "  " + Sim.jobName(u), c: sel && sel.id === u.id ? "accent" : "", c2: moodc, tail: Sim.moodWord(u), id: u.id })
-        if (++shown >= 14 && ds.length > 15) { out.push({ t: "  … e mais " + (ds.length - shown), c: "muted" }); break }
+        if (++shown >= 14 && ds.length > 15) { out.push({ t: root.tf("p.more", ds.length - shown), c: "muted" }); break }
       }
       out.push({ t: "", c: "" })
       if (sel) {
         if (sel.k === "dwarf") {
           out.push({ t: sel.name, c: "accent" })
-          out.push({ t: Sim.skillTitle(sel) + " · " + sel.trait + " · hp " + sel.hp + "/" + sel.maxhp + (sel.militia ? " · MILÍCIA" : ""), c: sel.militia ? "accent" : "muted", wrap: true })
-          var gear = []; if (sel.weapon) gear.push("arma"); if (sel.armor) gear.push("armadura"); if (sel.tool) gear.push(sel.tool === "pick" ? "picareta" : "machado")
-          out.push({ t: "equipamento: " + (gear.length ? gear.join(", ") : "nenhum"), c: "muted" })
-          out.push({ t: "humor " + bar(sel.mood, 10) + " " + Sim.moodWord(sel), c: sel.mood < 18 ? "urgent" : "" })
-          out.push({ t: "fome  " + bar(Math.min(100, sel.hunger), 10) + "  sede " + bar(Math.min(100, sel.thirst), 10) + "  sono " + bar(Math.min(100, sel.sleep), 10), c: "" })
+          out.push({ t: Sim.skillTitle(sel) + " · " + Sim.traitName(sel.trait) + " · hp " + sel.hp + "/" + sel.maxhp + (sel.militia ? root.t("p.militia") : ""), c: sel.militia ? "accent" : "muted", wrap: true })
+          var gear = []; if (sel.weapon) gear.push(root.t("p.gear.weapon")); if (sel.armor) gear.push(root.t("p.gear.armor")); if (sel.tool) gear.push(root.t(sel.tool === "pick" ? "p.gear.pick" : "p.gear.axe"))
+          out.push({ t: root.tf("p.gear", gear.length ? gear.join(", ") : root.t("p.gear.none")), c: "muted" })
+          out.push({ t: root.tf("p.mood", bar(sel.mood, 10), Sim.moodWord(sel)), c: sel.mood < 18 ? "urgent" : "" })
+          out.push({ t: root.tf("p.needs", bar(Math.min(100, sel.hunger), 10), bar(Math.min(100, sel.thirst), 10), bar(Math.min(100, sel.sleep), 10)), c: "" })
           var sk = Object.keys(sel.skills).filter(function (s) { return sel.skills[s] > 0 }).sort(function (a, b) { return sel.skills[b] - sel.skills[a] }).slice(0, 4)
-          out.push({ t: "ofícios: " + (sk.length ? sk.map(function (s) { return Sim.SKILL_NAME[s] + " " + sel.skills[s] }).join(", ") : "nenhum"), c: "muted", wrap: true })
-          if (sel.likes) out.push({ t: "prefere " + (Sim.WORK_NAME[sel.likes] || sel.likes) + " · detesta " + (Sim.WORK_NAME[sel.dislikes] || sel.dislikes), c: "muted", wrap: true })
-          if (sel.avoid && (sel.avoidUntil || 0) > w.tick) out.push({ t: "largou " + (Sim.WORK_NAME[sel.avoid] || sel.avoid) + " de frustração — volta amanhã", c: "warn", wrap: true })
-          else if ((sel.frust || 0) > 0) out.push({ t: "irritado: estragou " + sel.frust + " trabalho(s) seguido(s)", c: "warn" })
-          out.push({ t: "agora: " + Sim.jobName(sel) + " · z" + Sim.iz(sel.i) + (World.followId === sel.id ? " · seguindo (f)" : ""), c: "", wrap: true })
-          if (sel.thoughts.length) { out.push({ t: "pensamentos:", c: "muted" }); for (k = 0; k < Math.min(5, sel.thoughts.length); k++) { var th = sel.thoughts[k]; out.push({ t: "  " + (th.v >= 0 ? "+" : "") + th.v + " " + th.m, c: th.v < 0 ? "warn" : "good", wrap: true }) } }
+          out.push({ t: root.tf("p.skills", sk.length ? sk.map(function (s) { return Sim.skillName(s) + " " + sel.skills[s] }).join(", ") : root.t("p.skills.none")), c: "muted", wrap: true })
+          if (sel.likes) out.push({ t: root.tf("p.prefers", Sim.workName(sel.likes), Sim.workName(sel.dislikes)), c: "muted", wrap: true })
+          if (sel.avoid && (sel.avoidUntil || 0) > w.tick) out.push({ t: root.tf("p.frustrated.off", Sim.workName(sel.avoid)), c: "warn", wrap: true })
+          else if ((sel.frust || 0) > 0) out.push({ t: root.tf("p.frustrated", sel.frust), c: "warn" })
+          out.push({ t: root.tf("p.now", Sim.jobName(sel), Sim.iz(sel.i), World.followId === sel.id ? root.t("p.following") : ""), c: "", wrap: true })
+          if (sel.thoughts.length) { out.push({ t: root.t("p.thoughts"), c: "muted" }); for (k = 0; k < Math.min(5, sel.thoughts.length); k++) { var th = sel.thoughts[k]; out.push({ t: "  " + (th.v >= 0 ? "+" : "") + th.v + " " + th.m, c: th.v < 0 ? "warn" : "good", wrap: true }) } }
         } else {
-          var kinds = { goblin: "goblin", wolf: "lobo", deer: "veado", kobold: "kobold ladrão", merchant: "mercador das Montanhas-Lar" }
+          var kinds = { goblin: root.t("unit.goblin"), wolf: root.t("unit.wolf"), deer: root.t("unit.deer"), kobold: root.t("unit.kobold"), merchant: root.t("unit.merchant") }
           out.push({ t: kinds[sel.k] || sel.k, c: "accent" }); out.push({ t: "hp " + sel.hp + "/" + sel.maxhp + " · z" + Sim.iz(sel.i), c: "muted" })
         }
-      } else out.push({ t: "Enter sobre um anão, clique na lista ou ] [ : o cursor vai até ele e o segue (mover o cursor solta).", c: "muted", wrap: true })
+      } else out.push({ t: root.t("p.selecthint"), c: "muted", wrap: true })
     } else if (root.page === "local") {
       out.push({ t: "(" + root.cx + "," + root.cy + ") z" + root.vz + " · " + levelName(root.vz), c: "muted" })
       out.push({ t: Sim.tileName(w, i), c: "accent" })
       if (w.desig[i]) {
-        out.push({ t: "designado: " + ({ 1: "cavar", 2: "escada", 3: "cortar", 4: "construir " + (Sim.BUILD_INFO[w.dbuild[i]] || {}).name })[w.desig[i]], c: "" })
-        if (Sim.isUnreachable(w, i)) out.push({ t: "sem caminho até aqui: cave a partir de uma célula vizinha alcançável, ou ligue os níveis com escada (s) — uma escada marcada num chão cava também a rocha de baixo", c: "warn", wrap: true })
+        out.push({ t: root.tf("p.desig", ({ 1: root.t("tool.dig"), 2: root.t("tool.stair"), 3: root.t("tool.chop"), 4: root.tf("fl.build", Sim.buildName(w.dbuild[i])) })[w.desig[i]]), c: "" })
+        if (Sim.isUnreachable(w, i)) out.push({ t: root.t("p.noway"), c: "warn", wrap: true })
       }
       var nbad = Sim.countUnreachable(w)
-      if (nbad > 0) out.push({ t: nbad + " designação(ões) em vermelho: sem caminho por enquanto (tentam de novo em breve)", c: "warn", wrap: true })
+      if (nbad > 0) out.push({ t: root.tf("p.desig.red", nbad), c: "warn", wrap: true })
       var its = Sim.itemsAt(w, i)
       if (its.length) {
         var cnt = {}; for (k = 0; k < its.length; k++) cnt[its[k].t] = (cnt[its[k].t] || 0) + 1
@@ -411,72 +423,72 @@ Item {
       for (k = 0; k < w.units.length; k++) if (w.units[k].i === i) out.push({ t: "aqui: " + (w.units[k].name || w.units[k].k) + (w.units[k].k === "dwarf" ? " — " + Sim.jobName(w.units[k]) : ""), c: "" })
       if (root.vz > 0 && w.tile[i] === Sim.T_OPEN && w.floor[i] === Sim.F_NONE) out.push({ t: "abaixo: " + Sim.tileName(w, i - Sim.N), c: "muted" })
       out.push({ t: "", c: "" })
-      out.push({ t: "ferramenta: " + toolLabel() + (root.selStart >= 0 ? "  (canto marcado; Enter aplica)" : ""), c: "accent" })
-      if (root.tool === "build") { var bi = Sim.BUILD_INFO[root.buildType]; if (bi) out.push({ t: bi.mat ? "consome 1 " + Sim.ITEM_NAME[bi.mat] : (root.buildType === Sim.B_FARM ? "só em terra, grama ou musgo" : "não consome material"), c: "muted" }) }
+      out.push({ t: root.tf("p.tool", toolLabel(), root.selStart >= 0 ? root.t("p.tool.corner") : ""), c: "accent" })
+      if (root.tool === "build") { var bi = Sim.BUILD_INFO[root.buildType]; if (bi) out.push({ t: bi.mat ? "consome 1 " + Sim.ITEM_NAME[bi.mat] : (root.buildType === Sim.B_FARM ? root.t("h.soilonly") : root.t("h.nomat")), c: "muted" }) }
       out.push({ t: "", c: "" })
       out.push({ t: "despensa: " + Sim.countItems(w, "food") + " comida · " + Sim.countItems(w, "booze") + " bebida", c: Sim.countItems(w, "booze") < w.units.length ? "warn" : "" })
-      out.push({ t: "toras " + Sim.countItems(w, "log") + " · pedras " + Sim.countItems(w, "stone") + " · minério " + Sim.countItems(w, "ore") + " · gemas " + Sim.countItems(w, "gem"), c: "muted" })
-      out.push({ t: "refeições " + Sim.countItems(w, "meal") + " · barras " + Sim.countItems(w, "bar") + " · picaretas " + Sim.countItems(w, "pick") + " · machados " + Sim.countItems(w, "axe"), c: "muted" })
-      out.push({ t: "armas " + Sim.countItems(w, "weapon") + " · armaduras " + Sim.countItems(w, "armor") + " · artesanato " + Sim.countItems(w, "craft") + " · artefatos " + w.artifacts.length, c: "muted" })
-      out.push({ t: "gemas lapidadas " + Sim.countItems(w, "cutgem") + " · joias " + Sim.countItems(w, "jewel") + " · joalherias " + Sim.cache(w).jewelers.length, c: "muted" })
+      out.push({ t: root.tf("p.counts.raw", Sim.countItems(w, "log"), Sim.countItems(w, "stone"), Sim.countItems(w, "ore"), Sim.countItems(w, "gem")), c: "muted", wrap: true })
+      out.push({ t: root.tf("p.counts.meals", Sim.countItems(w, "meal"), Sim.countItems(w, "bar"), Sim.countItems(w, "pick"), Sim.countItems(w, "axe")), c: "muted", wrap: true })
+      out.push({ t: root.tf("p.counts.arms", Sim.countItems(w, "weapon"), Sim.countItems(w, "armor"), Sim.countItems(w, "craft"), w.artifacts.length), c: "muted", wrap: true })
+      out.push({ t: root.tf("p.counts.gems", Sim.countItems(w, "cutgem"), Sim.countItems(w, "jewel"), Sim.cache(w).jewelers.length), c: "muted", wrap: true })
       var cc = Sim.cache(w)
-      out.push({ t: "camas " + cc.beds.length + " · mesas " + cc.tables.length + " · plantações " + cc.farms.length + " · tochas " + cc.torches.length, c: "muted" })
-      out.push({ t: "destilarias " + cc.stills.length + " · cozinhas " + cc.kitchens.length + " · oficinas " + cc.shops.length + " · fundições " + cc.smelters.length + " · forjas " + cc.forges.length + " · treino " + cc.trainings.length, c: "muted" })
+      out.push({ t: root.tf("p.counts.rooms", cc.beds.length, cc.tables.length, cc.farms.length, cc.torches.length), c: "muted", wrap: true })
+      out.push({ t: root.tf("p.counts.shops", cc.stills.length, cc.kitchens.length, cc.shops.length, cc.smelters.length, cc.forges.length, cc.trainings.length), c: "muted", wrap: true })
       var mil = Sim.dwarves(w).filter(function (q) { return q.militia }).length
-      out.push({ t: "milícia: " + mil + " anões" + (w.scenario ? " · próxima onda goblin (" + w.scenario.wave + ") em " + Math.max(0, Math.ceil((w.scenario.nextRaid - w.tick) / Sim.DAY)) + " dia(s)" : ""), c: w.raid ? "urgent" : "", wrap: true })
+      out.push({ t: root.tf("p.militia.count", mil, w.scenario ? root.tf("p.nextwave", w.scenario.wave, Math.max(0, Math.ceil((w.scenario.nextRaid - w.tick) / Sim.DAY))) : ""), c: w.raid ? "urgent" : "", wrap: true })
       var lt = Sim.cellLight(w, i)
-      out.push({ t: "luz aqui: " + Math.round(lt * 100) + "%" + (lt < 0.3 ? " (escuro: uma tocha, b l, alcança ~4 células e não atravessa rocha)" : ""), c: lt < 0.3 ? "muted" : "" })
-      if (w.lockdown) out.push({ t: "portas trancadas (L)", c: "warn" })
+      out.push({ t: root.tf("p.light", Math.round(lt * 100), lt < 0.3 ? root.t("p.light.dark") : ""), c: lt < 0.3 ? "muted" : "" })
+      if (w.lockdown) out.push({ t: root.t("p.locked"), c: "warn" })
     } else if (root.page === "orders") {
       var ol = w.orders || []
-      out.push({ t: "Ordens de oficina", c: "accent" })
-      out.push({ t: "A fortaleza anota o que falta cada manhã. As suas vêm antes.", c: "muted", wrap: true })
+      out.push({ t: root.t("p.orders.title"), c: "accent" })
+      out.push({ t: root.t("p.orders.sub"), c: "muted", wrap: true })
       out.push({ t: "", c: "" })
       var mineRows = [], holdRows = [], oq
       for (oq = 0; oq < ol.length; oq++) {
         var o = ol[oq], sp = Sim.ORDER_SPEC[o.what]
         if (!sp) continue
-        var row = "  " + sp.name + "  " + o.done + "/" + o.n
+        var row = "  " + Sim.orderName(o.what) + "  " + o.done + "/" + o.n
         if (o.by) mineRows.push(row); else holdRows.push(row)
       }
-      if (mineRows.length) { out.push({ t: "Suas ordens", c: "" }); for (oq = 0; oq < mineRows.length; oq++) out.push({ t: mineRows[oq], c: "good" }) ; out.push({ t: "", c: "" }) }
-      if (holdRows.length) { out.push({ t: "A fortaleza anotou", c: "" }); for (oq = 0; oq < holdRows.length; oq++) out.push({ t: holdRows[oq], c: "muted" }); out.push({ t: "", c: "" }) }
-      if (!mineRows.length && !holdRows.length) out.push({ t: "Nada na fila: não falta nada que uma oficina resolva.", c: "muted", wrap: true })
+      if (mineRows.length) { out.push({ t: root.t("p.orders.mine"), c: "" }); for (oq = 0; oq < mineRows.length; oq++) out.push({ t: mineRows[oq], c: "good" }) ; out.push({ t: "", c: "" }) }
+      if (holdRows.length) { out.push({ t: root.t("p.orders.hold"), c: "" }); for (oq = 0; oq < holdRows.length; oq++) out.push({ t: holdRows[oq], c: "muted" }); out.push({ t: "", c: "" }) }
+      if (!mineRows.length && !holdRows.length) out.push({ t: root.t("p.orders.empty"), c: "muted", wrap: true })
       // who is on what right now
       var busy = []
       var dl = Sim.dwarves(w)
       for (oq = 0; oq < dl.length; oq++) if (dl[oq].job && dl[oq].job.order) busy.push("  " + dl[oq].name.split(" ")[0] + " — " + Sim.jobName(dl[oq]))
-      if (busy.length) { out.push({ t: "Agora nas oficinas", c: "" }); for (oq = 0; oq < busy.length; oq++) out.push({ t: busy[oq], c: "" }); out.push({ t: "", c: "" }) }
-      out.push({ t: "≡ menu → Ordens (ou n → Ordens) para encomendar e cancelar.", c: "muted", wrap: true })
-      out.push({ t: "Ninguém obedece na hora: fome, sede e sono vêm antes, e cada anão pega o que aguenta fazer.", c: "muted", wrap: true })
+      if (busy.length) { out.push({ t: root.t("p.orders.busy"), c: "" }); for (oq = 0; oq < busy.length; oq++) out.push({ t: busy[oq], c: "" }); out.push({ t: "", c: "" }) }
+      out.push({ t: root.t("p.orders.how"), c: "muted", wrap: true })
+      out.push({ t: root.t("p.orders.note"), c: "muted", wrap: true })
     } else if (root.page === "legends") {
-      out.push({ t: w.name + " · fundada há " + Math.floor(w.tick / Sim.YEAR) + " ano(s) · semente " + w.seed, c: "accent" })
+      out.push({ t: root.tf("p.founded", w.name, Math.floor(w.tick / Sim.YEAR), w.seed), c: "accent", wrap: true })
       var st = w.stats
-      out.push({ t: "cavou " + st.dug + " · cortou " + st.chopped + " · construiu " + st.built + " · fermentou " + st.brewed + " · criou " + st.crafted, c: "muted", wrap: true })
-      out.push({ t: "migrantes " + st.migrants + " · caravanas " + st.caravans + " · emboscadas " + st.raids + " · mortos " + st.deaths, c: "muted", wrap: true })
-      out.push({ t: "cozinhou " + (st.cooked || 0) + " · fundiu " + (st.smelted || 0) + " · forjou " + (st.forged || 0) + " · lapidou " + (st.cut || 0) + " · joias " + (st.jewels || 0), c: "muted", wrap: true })
-      out.push({ t: "estragou " + (st.spoiled || 0) + " comida(s) · quebrou " + (st.broken || 0) + " equipamento(s) · estragou " + (st.botched || 0) + " trabalho(s) · sepultou " + (st.buried || 0), c: "muted", wrap: true })
+      out.push({ t: root.tf("p.st.1", st.dug, st.chopped, st.built, st.brewed, st.crafted), c: "muted", wrap: true })
+      out.push({ t: root.tf("p.st.2", st.migrants, st.caravans, st.raids, st.deaths), c: "muted", wrap: true })
+      out.push({ t: root.tf("p.st.3", st.cooked || 0, st.smelted || 0, st.forged || 0, st.cut || 0, st.jewels || 0), c: "muted", wrap: true })
+      out.push({ t: root.tf("p.st.4", st.spoiled || 0, st.broken || 0, st.botched || 0, st.buried || 0), c: "muted", wrap: true })
       out.push({ t: "", c: "" })
-      out.push({ t: "Resiliência", c: "accent" })
-      out.push({ t: st.raids + " ataque(s) · " + (st.repelled || 0) + " repelido(s) · " + (st.goblinsKilled || 0) + " goblins mortos · " + st.deaths + " anões perdidos" + (w.scenario ? " · onda " + w.scenario.wave + " a caminho" : ""), c: st.deaths > (st.goblinsKilled || 0) ? "warn" : "", wrap: true })
+      out.push({ t: root.t("p.resilience"), c: "accent" })
+      out.push({ t: root.tf("p.res.line", st.raids, st.repelled || 0, st.goblinsKilled || 0, st.deaths, w.scenario ? root.tf("p.res.wave", w.scenario.wave) : ""), c: st.deaths > (st.goblinsKilled || 0) ? "warn" : "", wrap: true })
       out.push({ t: "", c: "" })
-      if (w.artifacts.length) { out.push({ t: "Artefatos", c: "accent" }); for (k = w.artifacts.length - 1; k >= Math.max(0, w.artifacts.length - 4); k--) { var a = w.artifacts[k]; out.push({ t: "☼ " + a.name + ", '" + a.title + "'", c: "", wrap: true }); out.push({ t: "  " + a.desc + " — " + a.maker, c: "muted", wrap: true }) } out.push({ t: "", c: "" }) }
-      if (w.dead.length) { out.push({ t: "Memorial", c: "accent" }); for (k = w.dead.length - 1; k >= Math.max(0, w.dead.length - 5); k--) out.push({ t: "† " + w.dead[k].name + " — " + w.dead[k].how, c: "muted", wrap: true }); out.push({ t: "", c: "" }) }
-      out.push({ t: "Crônica", c: "accent" })
+      if (w.artifacts.length) { out.push({ t: root.t("p.artifacts"), c: "accent" }); for (k = w.artifacts.length - 1; k >= Math.max(0, w.artifacts.length - 4); k--) { var a = w.artifacts[k]; out.push({ t: "☼ " + a.name + ", '" + a.title + "'", c: "", wrap: true }); out.push({ t: "  " + a.desc + " — " + a.maker, c: "muted", wrap: true }) } out.push({ t: "", c: "" }) }
+      if (w.dead.length) { out.push({ t: root.t("p.memorial"), c: "accent" }); for (k = w.dead.length - 1; k >= Math.max(0, w.dead.length - 5); k--) out.push({ t: "† " + w.dead[k].name + " — " + w.dead[k].how, c: "muted", wrap: true }); out.push({ t: "", c: "" }) }
+      out.push({ t: root.t("p.chronicle"), c: "accent" })
       for (k = w.legends.length - 1; k >= Math.max(0, w.legends.length - 10); k--) { var d = Sim.date({ tick: w.legends[k].t }); out.push({ t: "a" + d.year + " " + d.seasonName + ": " + w.legends[k].m, c: "", wrap: true }) }
     } else {
       var H = [
-        ["setas / hjkl", "mover cursor (Shift: 5)"], ["< >  , .  PgUp/PgDn", "subir / descer um nível"], ["roda do mouse", "subir / descer"],
-        ["Enter", "marcar canto; Enter de novo aplica"], ["mouse: arrastar", "aplicar ferramenta na área"], ["botão direito", "selecionar o que está sob o cursor"],
-        ["d", "cavar"], ["s", "escada: no chão, cava a descida (célula + rocha de baixo); na rocha, é cavada de cima"], ["c", "cortar árvore / arbusto"], ["b", "construir… (b cama, t mesa, f plantação, e estoque, p porta, w muro, l tocha, o oficina, d destilaria, c cozinha, u fundição, j forja, g joalheria, r treino, s estátua)"],
-        ["x", "cancelar designação"], ["r", "remover construção"], ["v / Esc", "voltar a olhar"],
-        ["] [", "próximo / anterior anão"], ["f", "seguir o anão selecionado"], ["Home", "voltar ao acampamento"],
-        ["Espaço", "pausar"], ["+ -", "velocidade 1x 2x 4x"], ["L", "trancar portas (segura goblins)"],
-        ["o / Shift+o", "alternar visão: normal, luz, humor, acesso / menu Ver"], ["g", "blocos ↔ glifos"], ["m", "janelinha de canto ao fechar"], ["Tab u i w y ?", "páginas do painel (w = ordens de oficina)"], ["n", "menu Novo jogo: predefinições, personalizado"], ["Shift+S", "menu Salvar em slot"], ["Esc", "sair da ferramenta; sem nada a cancelar, abre o menu"]]
+        [root.t("h.key.arrows"), root.t("h.arrows")], ["< >  , .  PgUp/PgDn", root.t("h.levels")], [root.t("h.key.wheel"), root.t("h.wheel")],
+        ["Enter", root.t("h.enter")], [root.t("h.key.drag"), root.t("h.drag")], [root.t("h.rclick.key"), root.t("h.rclick")],
+        ["d", root.t("h.dig")], ["s", root.t("h.stair")], ["c", root.t("h.chop")], ["b", root.t("h.build")],
+        ["x", root.t("h.cancel")], ["r", root.t("h.remove")], ["v / Esc", root.t("h.look")],
+        ["] [", root.t("h.nextdwarf")], ["f", root.t("h.follow")], ["Home", root.t("h.home")],
+        [root.t("key.space"), root.t("h.pause")], ["+ -", root.t("h.speed")], ["L", root.t("h.lock.short")],
+        ["o / Shift+o", root.t("h.view")], ["g", root.t("h.glyphs")], ["m", root.t("h.peek")], ["Tab u i w y ?", root.t("h.pages")], ["n", root.t("h.new")], ["Shift+S", root.t("h.save")], ["Esc", root.t("h.esc")]]
       for (k = 0; k < H.length; k++) out.push({ t: H[k][0], c: "accent", tail: H[k][1] })
       out.push({ t: "", c: "" })
-      out.push({ t: "Como começar: escadas (s) no acampamento e no nível de baixo, cave (d) um salão, construa camas, mesas, uma destilaria e uma oficina; plante (b f) em terra, grama ou musgo. Cuidado ao cavar perto do riacho e do magma.", c: "muted", wrap: true })
-      out.push({ t: "Enquanto o painel está fechado o mundo anda devagar (um dia a cada poucos minutos). Perder é divertido.", c: "muted", wrap: true })
+      out.push({ t: root.t("h.start"), c: "muted", wrap: true })
+      out.push({ t: root.t("h.tail"), c: "muted", wrap: true })
     }
     root.lines = out
   }
@@ -869,7 +881,7 @@ Item {
               id: tabs
               spacing: Style.space(4)
               Repeater {
-                model: [["units", "Anões", "u"], ["local", "Local", "i"], ["orders", "Ordens", "w"], ["legends", "Lendas", "y"], ["help", "Ajuda", "?"]]
+                model: [["units", root.t("tab.units"), "u"], ["local", root.t("tab.local"), "i"], ["orders", root.t("tab.orders"), "w"], ["legends", root.t("tab.legends"), "y"], ["help", root.t("tab.help"), "?"]]
                 delegate: Rectangle {
                   required property var modelData
                   readonly property bool active: root.page === modelData[0]
@@ -943,7 +955,7 @@ Item {
                 id: buildCol
                 anchors { fill: parent; margins: Style.space(10) }
                 spacing: 3
-                Text { font.family: root.mono; font.pixelSize: Style.font.bodySmall; color: Color.accent; text: "Construir o quê?  (Esc sai)" }
+                Text { font.family: root.mono; font.pixelSize: Style.font.bodySmall; color: Color.accent; text: root.t("h.buildwhat") }
                 Repeater {
                   model: root.buildOrder
                   delegate: Item {
@@ -1001,9 +1013,9 @@ Item {
             Flow {
               anchors { left: parent.left; right: parent.right; rightMargin: Style.space(150); bottom: parent.bottom }
               spacing: Style.space(10)
-              KeyHint { key: "d"; label: "cavar" } KeyHint { key: "s"; label: "escada" } KeyHint { key: "c"; label: "cortar" } KeyHint { key: "b"; label: "construir" }
-              KeyHint { key: "x"; label: "cancelar" } KeyHint { key: "r"; label: "remover" } KeyHint { key: "< >"; label: "níveis" } KeyHint { key: "Enter"; label: "marca / aplica" }
-              KeyHint { key: "Espaço"; label: "pausa" } KeyHint { key: "] ["; label: "anões" } KeyHint { key: "?"; label: "ajuda" } KeyHint { key: "Esc"; label: "menu" }
+              KeyHint { key: "d"; label: root.t("tool.dig") } KeyHint { key: "s"; label: root.t("tool.stair") } KeyHint { key: "c"; label: root.t("tool.chop") } KeyHint { key: "b"; label: root.t("tool.build") }
+              KeyHint { key: "x"; label: root.t("hint.cancel") } KeyHint { key: "r"; label: root.t("hint.remove") } KeyHint { key: "< >"; label: root.t("hint.levels") } KeyHint { key: "Enter"; label: root.t("hint.apply") }
+              KeyHint { key: root.t("key.space"); label: root.t("hint.pause") } KeyHint { key: "] ["; label: root.t("hint.dwarves") } KeyHint { key: "?"; label: root.t("hint.help") } KeyHint { key: "Esc"; label: root.t("hint.menu") }
             }
           }
 

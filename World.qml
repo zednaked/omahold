@@ -6,6 +6,7 @@ import Quickshell.Io
 import qs.Commons
 import "sim.js" as Sim
 import "palette.js" as Pal
+import "I18n.js" as I18n
 
 // The one copy of the world, shared by the bar widget, the corner window and
 // the overlay. Owns the clock, the save file and the theme palette.
@@ -43,6 +44,31 @@ Singleton {
 
   property var theme: ({})
   property var pal: Pal.build({})
+
+  // ---- language ---------------------------------------------------------------
+  // The system's language for the first load — whoever installed this on a
+  // pt_BR machine should not have to find a menu to read their own. After that
+  // options.json decides: an explicit choice outranks the environment.
+  //
+  // sim.js runs under QML and under node (test/run.js), so it cannot import
+  // I18n.js the way this file does; it takes an injection instead, and with
+  // nothing injected falls back to the Portuguese it was written in.
+  property string lang: I18n.fromLocale(Quickshell.env("LANG") || Qt.locale().name)
+  onLangChanged: {
+    Sim.setLang(root.lang)
+    root.rev++
+    if (root.ready && !root.applyingOptions) root.saveOptions()
+  }
+  function setLang(code) {
+    if (!I18n.known(code) || code === root.lang) return root.lang
+    root.lang = code
+    return root.lang
+  }
+  function cycleLang() { return root.setLang(I18n.nextLang(root.lang)) }
+  function langName(code) { return I18n.langName(code || root.lang) }
+  function t(key) { return I18n.t(root.lang, key) }
+  function tf(key, a, b, c, d, e) { return I18n.tf(root.lang, key, a, b, c, d, e) }
+  Component.onCompleted: Sim.setI18n(I18n, root.lang)
 
   readonly property string home: Quickshell.env("HOME")
   readonly property string stateDir: (Quickshell.env("XDG_STATE_HOME") || (home + "/.local/state")) + "/omarchy/omahold"
@@ -344,10 +370,11 @@ Singleton {
     if (o.difficulty !== undefined) root.setDifficulty(String(o.difficulty), true)
     if (o.enemies !== undefined) { root.enemies = !!o.enemies; if (root.w) root.w.peaceful = !root.enemies }
     if (o.speed !== undefined) root.speed = Number(o.speed)
+    if (o.lang !== undefined && I18n.known(String(o.lang))) root.lang = String(o.lang)
     root.applyingOptions = false
   }
   function saveOptions() {
-    var o = { backgroundMs: root.backgroundMs, glyphs: root.glyphs, peek: root.peek, popCap: root.popCap, difficulty: root.difficulty, enemies: root.enemies, speed: root.speed }
+    var o = { backgroundMs: root.backgroundMs, glyphs: root.glyphs, peek: root.peek, popCap: root.popCap, difficulty: root.difficulty, enemies: root.enemies, speed: root.speed, lang: root.lang }
     root.queueWrite("options.json", JSON.stringify(o))
   }
   function setDifficulty(d, quiet) {
@@ -403,7 +430,7 @@ Singleton {
 
   // ---- orders from the UI -----------------------------------------------------
   function designateRect(a, b, tool, bt) { if (!root.w) return 0; var n = Sim.designateRect(root.w, a, b, tool, bt); if (n) root.rev++; return n }
-  function toggleLockdown() { if (!root.w) return; root.w.lockdown = !root.w.lockdown; Sim.announce(root.w, root.w.lockdown ? "Portas trancadas. Ninguém de fora entra." : "Portas destrancadas.", 0); root.rev++ }
+  function toggleLockdown() { if (!root.w) return; root.w.lockdown = !root.w.lockdown; Sim.announce(root.w, root.t(root.w.lockdown ? "ipc.lockdown" : "ipc.unlockdown"), 0); root.rev++ }
   function cycleSpeed() { root.speed = root.speed >= 4 ? 1 : root.speed * 2 }
 
   // ---- IPC: omarchy-shell omahold <method> --------------------------------------
@@ -417,10 +444,10 @@ Singleton {
     function status(): string { if (!root.w) return "no world"; var s = Sim.summary(root.w); s.open = root.open; s.peek = root.peek; s.paused = root.paused; s.viewZ = root.viewZ; return JSON.stringify(s) }
     function save(): string { root.save(); return "ok" }
     function newWorld(seed: string): string { root.newWorld(seed); return root.w ? root.w.name + " (seed " + root.w.seed + ")" : "failed" }
-    function scenario(n: string): string { root.newScenario(n); return root.w ? root.w.name + " (cenário, " + Sim.pop(root.w) + " anões)" : "failed" }
+    function scenario(n: string): string { root.newScenario(n); return root.w ? root.w.name + root.tf("ipc.scenario", Sim.pop(root.w)) : "failed" }
     function hour(h: string): string { if (!root.w) return "no world"; Sim.setHour(root.w, parseFloat(h)); root.rev++; return String(Sim.sunLevel(root.w).toFixed(2)) }
     function view(mode: string): string { root.viewMode = mode; return mode }
-    function raid(): string { return root.raidNow() ? "goblins a caminho" : "já há um ataque em curso (ou sem mundo)" }
+    function raid(): string { return root.raidNow() ? root.t("ipc.goblins") : root.t("ipc.raid.busy") }
     function preset(id: string): string { root.newFromPreset(id, 0, ""); return root.w ? root.w.name + " · " + (root.w.preset || id) : "failed" }
     function presets(): string { return Sim.PRESETS.map(function (p) { return p.id + ": " + p.name }).join("\n") }
     function saveSlot(n: string): string { return root.saveSlot(parseInt(n, 10)) ? "ok" : "failed" }

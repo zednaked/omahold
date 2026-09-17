@@ -15,7 +15,7 @@
   },
   "barWidget": {
     "displayName": "Omahold",
-    "description": "População da fortaleza; acende quando algo acontece. Clique abre o mundo, botão direito liga a janelinha de canto.",
+    "description": "The hold's population; lights up when something happens. Click opens the world, right click toggles the corner window.",
     "category": "Desktop",
     "defaultSection": "right",
     "allowMultiple": false

@@ -45,12 +45,12 @@ Panel {
     tooltipText: {
       World.rev
       var s = World.summary || {}, d = s.date || {}
-      if (!World.w) return "Omahold: carregando o mundo"
-      var moodWord = s.mood >= 60 ? "contentes" : s.mood >= 40 ? "ok" : "infelizes"
-      return World.w.name + "\n" + (d.seasonName || "") + ", dia " + (d.day || 1) + " do ano " + (d.year || 1)
-        + "\n" + s.pop + " anões, " + moodWord + " · comida " + s.food + " · bebida " + s.booze + " · riqueza " + s.wealth
-        + (s.raid ? "\n!! emboscada em curso" : "") + (s.caravan ? "\ncaravana no depósito" : "")
-        + (s.fallen ? "\na fortaleza caiu" : "") + (World.paused ? "\npausado" : "")
+      if (!World.w) return World.t("bar.loading")
+      var moodWord = World.t(s.mood >= 60 ? "bar.mood.good" : s.mood >= 40 ? "bar.mood.ok" : "bar.mood.bad")
+      return World.w.name + "\n" + World.tf("bar.date", Sim.seasonName(d.seasonName || ""), d.day || 1, d.year || 1)
+        + "\n" + World.tf("bar.line", s.pop, moodWord, s.food, s.booze, s.wealth)
+        + (s.raid ? World.t("bar.raid") : "") + (s.caravan ? World.t("bar.caravan") : "")
+        + (s.fallen ? World.t("bar.fallen") : "") + (World.paused ? World.t("bar.paused") : "")
     }
 
     iconComponent: Component {

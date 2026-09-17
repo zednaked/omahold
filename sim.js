@@ -179,11 +179,17 @@ var ART_TAIL = ["Ameaça com espinhos de cobre.", "Traz a imagem de um anão e u
   "Nas laterais, círculos de gemas.", "Todo o artesanato é da mais alta qualidade.", "Traz a imagem de queijo.",
   "Está decorado com pontas de osso de veado.", "Traz a imagem da fundação desta fortaleza."]
 
-function dwarfName(w) { return pick(w, SYL_A) + pick(w, SYL_B) + " " + pick(w, SUR_A) + pick(w, SUR_B) }
-function fortName(w) { return pick(w, FORT_A) + " " + pick(w, FORT_B) }
+// A name is given once and then lives in the save: a hold founded in
+// Portuguese keeps its Portuguese name, which is right — a dwarf's name is not
+// a label. Only new worlds come out in the language that is active.
+function tbl(key, fallback) { return I18N && I18N.table ? I18N.table(I18N_LANG, key) : fallback }
+function dwarfName(w) { return pick(w, SYL_A) + pick(w, SYL_B) + " " + pick(w, tbl("SUR_A", SUR_A)) + pick(w, tbl("SUR_B", SUR_B)) }
+function fortName(w) { return pick(w, tbl("FORT_A", FORT_A)) + " " + pick(w, tbl("FORT_B", FORT_B)) }
 function artifactName(w, mat) {
+  var mats = tbl("ART_MAT", ART_MAT), dflt = tbl("ART_MAT_DEFAULT", "de pedra")
   return pick(w, SYL_A).toLowerCase() + pick(w, SYL_B) + pick(w, SYL_A).toLowerCase() + pick(w, SYL_B) + "|"
-    + pick(w, ART_A) + " " + pick(w, ART_B) + "|" + pick(w, ART_KIND) + " " + (ART_MAT[mat] || "de pedra") + ". " + pick(w, ART_TAIL)
+    + pick(w, tbl("ART_A", ART_A)) + " " + pick(w, tbl("ART_B", ART_B)) + "|"
+    + pick(w, tbl("ART_KIND", ART_KIND)) + " " + (mats[mat] || dflt) + ". " + pick(w, tbl("ART_TAIL", ART_TAIL))
 }
 
 // ---- noise ------------------------------------------------------------------
@@ -309,8 +315,8 @@ function generate(w) {
   // wildlife
   for (var a = 0; a < 3; a++) { var sp = randomSurface(w); if (sp >= 0) addUnit(w, "deer", sp) }
   w.dirty = true
-  announce(w, "Golpeie a terra! " + w.name + " foi fundada com sete anões.", 1)
-  legend(w, "Fundação de " + w.name + ".")
+  announce(w, LF("msg.founded", "Golpeie a terra! {0} foi fundada com sete anões.", w.name), 1)
+  legend(w, LF("lg.founded", "Fundação de {0}.", w.name))
 }
 
 // Embark spot: the flattest, most open square near the middle. `minGround`
@@ -884,7 +890,7 @@ function gainSkill(w, u, s, n) {
   var lvl = u.skills[s] || 0
   if (u.xp[s] >= (lvl + 1) * 6 && lvl < 15) {
     u.skills[s] = lvl + 1; u.xp[s] = 0
-    if (lvl + 1 === 12) announce(w, u.name + " tornou-se lendário em " + SKILL_NAME[s] + "!", 1)
+    if (lvl + 1 === 12) announce(w, LF("msg.legendary", "{0} tornou-se lendário em {1}!", u.name, skillName(s)), 1)
   }
 }
 // Which kind of work a job counts as, for inclination and frustration.
@@ -929,19 +935,19 @@ function botches(w, u, cat) {
 function botch(w, u, cat, what) {
   w.stats.botched++
   u.frust = (u.frust || 0) + 1
-  thought(w, u, "estragou " + what, -3)
+  thought(w, u, LF("th.botched", "estragou {0}", what), -3)
   if (u.frust >= 3) {
     u.frust = 0; u.avoid = cat; u.avoidUntil = w.tick + DAY
-    thought(w, u, "largou " + (WORK_NAME[cat] || "o trabalho") + " por hoje", -2)
-    announce(w, u.name + " largou " + (WORK_NAME[cat] || "o trabalho") + " de frustração.", 0)
+    thought(w, u, LF("th.gaveup", "largou {0} por hoje", workName(cat)), -2)
+    announce(w, LF("msg.gaveup", "{0} largou {1} de frustração.", u.name, workName(cat)), 0)
   }
 }
 // It came out right: a little pride if it is the work they love, and the
 // frustration eases.
 function wellDone(w, u, cat) {
   if (u.frust > 0) u.frust--
-  if (u.likes === cat && chance(w, 0.12)) thought(w, u, "passou o dia fazendo o que gosta: " + (WORK_NAME[cat] || "um bom trabalho"), 4)
-  else if (u.dislikes === cat && chance(w, 0.10)) thought(w, u, "detesta " + (WORK_NAME[cat] || "esse trabalho"), -2)
+  if (u.likes === cat && chance(w, 0.12)) thought(w, u, LF("th.likes", "passou o dia fazendo o que gosta: {0}", workName(cat)), 4)
+  else if (u.dislikes === cat && chance(w, 0.10)) thought(w, u, LF("th.dislikes", "detesta {0}", workName(cat)), -2)
 }
 
 function skillTitle(u) {
@@ -996,7 +1002,7 @@ function finishDig(w, u, i, stair) {
   var t = w.tile[i]
   if (t === T_STONE) addItem(w, "stone", i)
   else if (t === T_ORE) addItem(w, "ore", i)
-  else if (t === T_GEM) { addItem(w, "gem", i); thought(w, u, "encontrou uma gema", 4) }
+  else if (t === T_GEM) { addItem(w, "gem", i); thought(w, u, L("th.gem", "encontrou uma gema"), 4) }
   if (t !== T_OPEN) w.floor[i] = t === T_SOIL ? F_SOIL : F_STONE
   w.tile[i] = T_OPEN
   if (stair) {
@@ -1019,9 +1025,9 @@ function checkBreach(w, i) {
     if (t === T_WATER || t === T_MAGMA) {
       w.tile[i] = t; if (w.floor[i] === F_NONE) w.floor[i] = F_STONE
       w.build[i] = B_NONE; w.desig[i] = DG_NONE; w.dirty = true
-      if (t === T_WATER) announce(w, "Água! A escavação rompeu o riacho.", 2)
-      else announce(w, "Magma! A escavação rompeu o mar de magma.", 2)
-      legend(w, t === T_WATER ? "Inundação em " + w.name + "." : "Magma invadiu " + w.name + ".")
+      if (t === T_WATER) announce(w, L("msg.water", "Água! A escavação rompeu o riacho."), 2)
+      else announce(w, L("msg.magma", "Magma! A escavação rompeu o mar de magma."), 2)
+      legend(w, t === T_WATER ? LF("lg.flood", "Inundação em {0}.", w.name) : LF("lg.magma", "Magma invadiu {0}.", w.name))
       return
     }
   }
@@ -1124,8 +1130,8 @@ function graveyard(w) {
   }
   w.graveyard = pickGraveyard(w)
   if (w.graveyard >= 0) {
-    announce(w, "Os anões escolheram um lugar para os seus mortos, num canto quieto.", 1)
-    legend(w, "Um cemitério foi aberto num canto afastado da fortaleza.")
+    announce(w, L("msg.graveyard", "Os anões escolheram um lugar para os seus mortos, num canto quieto."), 1)
+    legend(w, L("lg.graveyard", "Um cemitério foi aberto num canto afastado da fortaleza."))
   }
   return w.graveyard
 }
@@ -1256,7 +1262,7 @@ function orderDone(w, j) {
     if (list[k].id !== j.order) continue
     list[k].done++
     if (list[k].done >= list[k].n) {
-      if (list[k].by) announce(w, "Ordem cumprida: " + list[k].n + " × " + ORDER_SPEC[list[k].what].name + ".", 1)
+      if (list[k].by) announce(w, LF("msg.order.done", "Ordem cumprida: {0} × {1}.", list[k].n, orderName(list[k].what)), 1)
       list.splice(k, 1)
     }
     return
@@ -1458,10 +1464,10 @@ function idle(w, u) {
   if (target >= 0 && passable(w, target)) go(w, u, function (c) { return c === target }, target, 400)
   // socializing
   if (nearBuilding(w, u.i, B_TABLE, 2) && chance(w, 0.08)) {
-    for (var k = 0; k < w.units.length; k++) { var o = w.units[k]; if (o !== u && o.k === "dwarf" && dist(o.i, u.i) <= 2) { thought(w, u, "conversou com " + o.name.split(" ")[0], 2); break } }
+    for (var k = 0; k < w.units.length; k++) { var o = w.units[k]; if (o !== u && o.k === "dwarf" && dist(o.i, u.i) <= 2) { thought(w, u, LF("th.talked", "conversou com {0}", o.name.split(" ")[0]), 2); break } }
   }
-  if (nearBuilding(w, u.i, B_STATUE, 2) && chance(w, 0.05)) thought(w, u, "admirou uma bela estátua", 3)
-  if (nearBuilding(w, u.i, B_GRAVE, 2) && chance(w, 0.06)) thought(w, u, "prestou respeito aos mortos da fortaleza", 2)
+  if (nearBuilding(w, u.i, B_STATUE, 2) && chance(w, 0.05)) thought(w, u, L("th.statue", "admirou uma bela estátua"), 3)
+  if (nearBuilding(w, u.i, B_GRAVE, 2) && chance(w, 0.06)) thought(w, u, L("th.grave", "prestou respeito aos mortos da fortaleza"), 2)
 }
 
 // ---- job execution ----------------------------------------------------------
@@ -1510,7 +1516,7 @@ function work(w, u) {
         if (info.mat) consumeCarried(w, u)
         w.build[j.i] = j.bt; w.desig[j.i] = DG_NONE; w.dbuild[j.i] = 0; w.grow[j.i] = 0; w.dirty = true
         w.stats.built++; gainSkill(w, u, "build", 1)
-        if (j.bt === B_STOCK || j.bt === B_FARM) {} else thought(w, u, "construiu " + info.name, 1)
+        if (j.bt === B_STOCK || j.bt === B_FARM) {} else thought(w, u, LF("th.built", "construiu {0}", buildName(j.bt)), 1)
         if (j.bt === B_WALL && u.i === j.i) u.i = nearestPassable(w, u.i)
         dropJob(w, u)
       }
@@ -1533,12 +1539,12 @@ function work(w, u) {
       if (!it || it.i !== u.i) { dropJob(w, u); return }
       removeItem(w, it.id)
       if (j.slot === "weapon") u.weapon = true; else if (j.slot === "armor") u.armor = true; else u.tool = j.slot
-      thought(w, u, j.slot === "weapon" ? "pegou em armas" : j.slot === "armor" ? "vestiu uma armadura" : j.slot === "pick" ? "ganhou uma picareta nova" : "ganhou um machado novo", 2)
+      thought(w, u, j.slot === "weapon" ? L("th.armed", "pegou em armas") : j.slot === "armor" ? L("th.armored", "vestiu uma armadura") : j.slot === "pick" ? L("th.newpick", "ganhou uma picareta nova") : L("th.newaxe", "ganhou um machado novo"), 2)
       dropJob(w, u); return
     case "train":
       if (w.build[j.i] !== B_TRAINING) { dropJob(w, u); return }
       j.prog++
-      if (j.prog >= 20) { gainSkill(w, u, "fight", 2); if (chance(w, 0.3)) thought(w, u, "treinou com os companheiros", 1); dropJob(w, u) }
+      if (j.prog >= 20) { gainSkill(w, u, "fight", 2); if (chance(w, 0.3)) thought(w, u, L("th.trained", "treinou com os companheiros"), 1); dropJob(w, u) }
       return
     case "cut": case "setgem":
       if (j.stage === "fetch") {
@@ -1550,10 +1556,10 @@ function work(w, u) {
       }
       j.prog += skillMul(u, "craft")
       if (j.prog >= (j.k === "cut" ? 26 : 34)) {
-        if (botches(w, u, "craft")) { consumeCarried(w, u); botch(w, u, "craft", j.k === "cut" ? "a gema ao lapidar" : "a joia"); dropJob(w, u); return }
+        if (botches(w, u, "craft")) { consumeCarried(w, u); botch(w, u, "craft", j.k === "cut" ? L("botch.gem", "a gema ao lapidar") : L("botch.jewel", "a joia")); dropJob(w, u); return }
         consumeCarried(w, u)
-        if (j.k === "cut") { addItem(w, "cutgem", j.i); w.stats.cut = (w.stats.cut || 0) + 1; thought(w, u, "lapidou uma gema", 2) }
-        else { addItem(w, "jewel", j.i); w.stats.jewels = (w.stats.jewels || 0) + 1; u.made++; thought(w, u, "fez uma joia", 3) }
+        if (j.k === "cut") { addItem(w, "cutgem", j.i); w.stats.cut = (w.stats.cut || 0) + 1; thought(w, u, L("th.cutgem", "lapidou uma gema"), 2) }
+        else { addItem(w, "jewel", j.i); w.stats.jewels = (w.stats.jewels || 0) + 1; u.made++; thought(w, u, L("th.jewel", "fez uma joia"), 3) }
         gainSkill(w, u, "craft", 1); wellDone(w, u, "craft"); orderDone(w, j)
         dropJob(w, u)
       }
@@ -1571,13 +1577,13 @@ function work(w, u) {
       if (j.prog >= (j.k === "cook" ? 16 : j.k === "smelt" ? 24 : 30)) {
         if (botches(w, u, ccat)) {
           consumeCarried(w, u)
-          botch(w, u, ccat, j.k === "cook" ? "a refeição" : j.k === "smelt" ? "a fundição e perdeu o minério" : "o trabalho na forja")
+          botch(w, u, ccat, j.k === "cook" ? L("botch.meal", "a refeição") : j.k === "smelt" ? L("botch.smelt", "a fundição e perdeu o minério") : L("botch.forge", "o trabalho na forja"))
           dropJob(w, u); return
         }
         consumeCarried(w, u)
         if (j.k === "cook") { addItem(w, "meal", j.i); addItem(w, "meal", j.i); w.stats.cooked = (w.stats.cooked || 0) + 1; gainSkill(w, u, "brew", 1) }
         else if (j.k === "smelt") { addItem(w, "bar", j.i); w.stats.smelted = (w.stats.smelted || 0) + 1; gainSkill(w, u, "craft", 1) }
-        else { addItem(w, j.product, j.i); w.stats.forged = (w.stats.forged || 0) + 1; u.made++; gainSkill(w, u, "craft", 1); if (j.product !== "craft") thought(w, u, "forjou uma " + ITEM_NAME[j.product], 2) }
+        else { addItem(w, j.product, j.i); w.stats.forged = (w.stats.forged || 0) + 1; u.made++; gainSkill(w, u, "craft", 1); if (j.product !== "craft") thought(w, u, LF("th.forged", "forjou uma {0}", itemName(j.product)), 2) }
         wellDone(w, u, ccat); orderDone(w, j)
         dropJob(w, u)
       }
@@ -1595,7 +1601,7 @@ function work(w, u) {
       if (j.prog >= (isBrew ? 22 : 30)) {
         if (botches(w, u, bcat)) {
           consumeCarried(w, u)
-          botch(w, u, bcat, isBrew ? "a fornada de cerveja" : "a peça na oficina")
+          botch(w, u, bcat, isBrew ? L("botch.brew", "a fornada de cerveja") : L("botch.craft", "a peça na oficina"))
           dropJob(w, u); return
         }
         var mat = itemById(w, j.item); var matType = mat ? mat.t : "stone"
@@ -1603,7 +1609,7 @@ function work(w, u) {
         if (isBrew) { for (var q = 0; q < 3; q++) addItem(w, "booze", j.i); w.stats.brewed++; gainSkill(w, u, "brew", 1) }
         else {
           addItem(w, "craft", j.i); w.stats.crafted++; u.made++; gainSkill(w, u, "craft", 1)
-          if (u.skills.craft >= 8 && chance(w, 0.2)) thought(w, u, "criou uma obra-prima", 4)
+          if (u.skills.craft >= 8 && chance(w, 0.2)) thought(w, u, L("th.masterwork", "criou uma obra-prima"), 4)
         }
         wellDone(w, u, bcat); orderDone(w, j)
         dropJob(w, u)
@@ -1623,8 +1629,8 @@ function work(w, u) {
         consumeCarried(w, u)
         if (gs >= 0) { w.build[gs] = B_GRAVE; w.dirty = true }
         w.stats.buried++
-        thought(w, u, "sepultou um companheiro como se deve", 3)
-        announce(w, u.name + " sepultou um companheiro no cemitério.", 0)
+        thought(w, u, L("th.buried", "sepultou um companheiro como se deve"), 3)
+        announce(w, LF("msg.buried", "{0} sepultou um companheiro no cemitério.", u.name), 0)
         dropJob(w, u)
       }
       return
@@ -1645,33 +1651,33 @@ function work(w, u) {
         var cooked = it.t === "meal"
         removeItem(w, it.id); u.hunger = 0
         var table = nearBuilding(w, u.i, B_TABLE, 1), litHere = isLit(w, u.i)
-        if (cooked && table) thought(w, u, litHere ? "jantou uma refeição preparada à luz de tochas" : "comeu uma refeição preparada à mesa", litHere ? 6 : 5)
-        else if (table) thought(w, u, litHere ? "comeu à mesa, num salão iluminado" : "comeu à mesa no escuro", litHere ? 3 : 2)
-        else thought(w, u, cooked ? "comeu uma refeição preparada sem mesa" : "comeu sem mesa", cooked ? 2 : -1)
+        if (cooked && table) thought(w, u, litHere ? L("th.meal.lit", "jantou uma refeição preparada à luz de tochas") : L("th.meal.table", "comeu uma refeição preparada à mesa"), litHere ? 6 : 5)
+        else if (table) thought(w, u, litHere ? L("th.table.lit", "comeu à mesa, num salão iluminado") : L("th.table.dark", "comeu à mesa no escuro"), litHere ? 3 : 2)
+        else thought(w, u, cooked ? L("th.meal.notable", "comeu uma refeição preparada sem mesa") : L("th.notable", "comeu sem mesa"), cooked ? 2 : -1)
         dropJob(w, u)
       }
       return
     case "forage":
       j.prog++
-      if (j.prog >= 8) { u.hunger = Math.max(0, u.hunger - 60); thought(w, u, "comeu frutinhas do mato", -1); dropJob(w, u) }
+      if (j.prog >= 8) { u.hunger = Math.max(0, u.hunger - 60); thought(w, u, L("th.berries", "comeu frutinhas do mato"), -1); dropJob(w, u) }
       return
     case "drink":
       it = itemById(w, j.item)
       if (!it || it.i !== u.i) { dropJob(w, u); return }
       j.prog++
-      if (j.prog >= 5) { removeItem(w, it.id); u.thirst = 0; thought(w, u, "bebeu cerveja de cogumelo", 4); dropJob(w, u) }
+      if (j.prog >= 5) { removeItem(w, it.id); u.thirst = 0; thought(w, u, L("th.beer", "bebeu cerveja de cogumelo"), 4); dropJob(w, u) }
       return
     case "drinkwater":
       j.prog++
-      if (j.prog >= 5) { u.thirst = 0; thought(w, u, "teve que beber água", -2); dropJob(w, u) }
+      if (j.prog >= 5) { u.thirst = 0; thought(w, u, L("th.water", "teve que beber água"), -2); dropJob(w, u) }
       return
     case "sleep":
       j.prog++
       u.sleep = Math.max(0, u.sleep - (j.bed ? 3.5 : 2.5))
       if (u.sleep <= 0) {
         var bedLit = isLit(w, u.i)
-        if (j.bed) thought(w, u, bedLit ? "dormiu numa cama, num quarto iluminado" : "dormiu numa cama no escuro", bedLit ? 4 : 2)
-        else thought(w, u, "dormiu no chão", -3)
+        if (j.bed) thought(w, u, bedLit ? L("th.bed.lit", "dormiu numa cama, num quarto iluminado") : L("th.bed.dark", "dormiu numa cama no escuro"), bedLit ? 4 : 2)
+        else thought(w, u, L("th.floor", "dormiu no chão"), -3)
         dropJob(w, u)
       }
       return
@@ -1716,14 +1722,14 @@ function maybeStrangeMood(w) {
   var want = pick(w, mats)
   u.mood_state = "strange"; u.moodWant = want; u.moodSince = w.tick
   setJob(w, u, { k: "mood", i: -1, stage: "claim", want: want, prog: 0, since: w.tick })
-  announce(w, u.name + " foi tomado por um humor estranho!", 1)
+  announce(w, LF("msg.mood.struck", "{0} foi tomado por um humor estranho!", u.name), 1)
 }
 function strangeMoodWork(w, u) {
   var j = u.job
   if (j.stage === "claim") {
     var shop = findBuilding(w, B_WORKSHOP, u.i)
     if (shop < 0) {
-      if (w.tick - j.since > DAY * 2) { announce(w, u.name + " não encontrou uma oficina e mergulhou na melancolia.", 2); u.mood_state = "melancholy"; dropJob(w, u) }
+      if (w.tick - j.since > DAY * 2) { announce(w, LF("msg.mood.noshop", "{0} não encontrou uma oficina e mergulhou na melancolia.", u.name), 2); u.mood_state = "melancholy"; dropJob(w, u) }
       return
     }
     if (!go(w, u, function (c) { return c === shop }, shop)) { if (w.tick - j.since > DAY * 2) { u.mood_state = "melancholy"; dropJob(w, u) } return }
@@ -1731,7 +1737,7 @@ function strangeMoodWork(w, u) {
   }
   if (j.stage === "goclaim") {
     w.claim[j.i] = u.id
-    announce(w, u.name + " reivindicou a oficina e resmunga sobre '" + ITEM_NAME[j.want] + "'.", 1)
+    announce(w, LF("msg.mood.claimed", "{0} reivindicou a oficina e resmunga sobre '{1}'.", u.name, itemName(j.want)), 1)
     j.stage = "fetch"; j.since = w.tick; return
   }
   if (j.stage === "fetch") {
@@ -1740,9 +1746,9 @@ function strangeMoodWork(w, u) {
     if (it && go(w, u, function (c) { return c === it.i }, it.i)) { it.res = u.id; j.item = it.id; j.stage = "pick"; return }
     if (w.tick - j.since > DAY * 3) {
       w.claim[j.i] = 0
-      if (chance(w, 0.5)) { announce(w, u.name + " enlouqueceu! Correu berrando pela fortaleza.", 2); u.mood_state = "berserk" }
-      else { announce(w, u.name + " caiu em melancolia sem seu " + ITEM_NAME[j.want] + ".", 2); u.mood_state = "melancholy" }
-      legend(w, u.name + " perdeu a razão num humor estranho.")
+      if (chance(w, 0.5)) { announce(w, LF("msg.mood.berserk", "{0} enlouqueceu! Correu berrando pela fortaleza.", u.name), 2); u.mood_state = "berserk" }
+      else { announce(w, LF("msg.mood.fell", "{0} caiu em melancolia sem seu {1}.", u.name, itemName(j.want)), 2); u.mood_state = "melancholy" }
+      legend(w, LF("lg.mood.lost", "{0} perdeu a razão num humor estranho.", u.name))
       dropJob(w, u)
     }
     return
@@ -1757,7 +1763,7 @@ function strangeMoodWork(w, u) {
   if (j.stage === "back") {
     if (u.i !== j.i) { j.stage = "fetch"; return }
     j.stage = "work"; j.prog = 0
-    announce(w, u.name + " trabalha furiosamente na oficina.", 0)
+    announce(w, LF("msg.mood.working", "{0} trabalha furiosamente na oficina.", u.name), 0)
     return
   }
   if (j.stage === "work") {
@@ -1769,10 +1775,10 @@ function strangeMoodWork(w, u) {
       w.artifacts.push({ name: nm[0], title: nm[1], desc: nm[2], maker: u.name, t: w.tick })
       w.stats.artifacts++
       u.skills.craft = Math.max(u.skills.craft, 12)
-      u.mood_state = ""; thought(w, u, "criou um artefato lendário", 25)
+      u.mood_state = ""; thought(w, u, L("th.artifact", "criou um artefato lendário"), 25)
       w.claim[j.i] = 0
-      announce(w, u.name + " criou " + nm[0] + ", '" + nm[1] + "', " + nm[2], 1)
-      legend(w, u.name + " criou o artefato " + nm[0] + ", '" + nm[1] + "'.")
+      announce(w, LF("msg.artifact", "{0} criou {1}, '{2}', {3}", u.name, nm[0], nm[1], nm[2]), 1)
+      legend(w, LF("lg.artifact", "{0} criou o artefato {1}, '{2}'.", u.name, nm[0], nm[1]))
       dropJob(w, u)
     }
   }
@@ -1783,31 +1789,31 @@ function moodTick(w, u) {
   // drift toward a baseline the trait sets
   var base = u.trait === "alegre" ? 58 : u.trait === "melancólico" ? 42 : u.trait === "rabugento" ? 46 : 50
   if (w.tick % 12 === 0) u.mood += u.mood > base ? -1 : 1
-  if (u.hunger > 90 && w.tick % 25 === 0) thought(w, u, "está faminto", -3)
-  if (u.thirst > 90 && w.tick % 25 === 0) thought(w, u, "está morrendo de sede", -3)
-  if (u.sleep > 95 && w.tick % 25 === 0) thought(w, u, "está exausto", -2)
+  if (u.hunger > 90 && w.tick % 25 === 0) thought(w, u, L("th.starving", "está faminto"), -3)
+  if (u.thirst > 90 && w.tick % 25 === 0) thought(w, u, L("th.parched", "está morrendo de sede"), -3)
+  if (u.sleep > 95 && w.tick % 25 === 0) thought(w, u, L("th.exhausted", "está exausto"), -2)
   // A companion left lying where they fell weighs on whoever walks past
   if (w.tick % 60 === 0 && countItems(w, "remains") > 0) {
     for (var rq = 0; rq < w.items.length; rq++) {
       var ri2 = w.items[rq]
       if (ri2.t !== "remains" || ri2.by) continue
       if (dist(ri2.i, u.i) > 5) continue
-      thought(w, u, "passou pelos restos de um companheiro sem sepultura", u.trait === "melancólico" ? -6 : -4)
+      thought(w, u, L("th.unburied", "passou pelos restos de um companheiro sem sepultura"), u.trait === "melancólico" ? -6 : -4)
       break
     }
   }
   if (u.mood_state === "melancholy") {
     if (w.tick % 30 === 0) u.mood = Math.max(0, u.mood - 1)
-    if (chance(w, 0.0004)) die(w, u, "definhou de melancolia")
+    if (chance(w, 0.0004)) die(w, u, L("death.melancholy", "definhou de melancolia"))
     return
   }
   if (u.mood_state === "berserk") {
-    if (chance(w, 0.003)) die(w, u, "morreu de exaustão em fúria")
+    if (chance(w, 0.003)) die(w, u, L("death.berserk", "morreu de exaustão em fúria"))
     return
   }
   if (u.mood_state === "strange") return
   if (u.mood <= 12 && chance(w, 0.01)) tantrum(w, u)
-  if (u.mood <= 3 && chance(w, 0.002)) { u.mood_state = "melancholy"; announce(w, u.name + " afundou na melancolia.", 2); dropJob(w, u) }
+  if (u.mood <= 3 && chance(w, 0.002)) { u.mood_state = "melancholy"; announce(w, LF("msg.melancholy", "{0} afundou na melancolia.", u.name), 2); dropJob(w, u) }
 }
 function tantrum(w, u) {
   u.mood += 15
@@ -1823,22 +1829,22 @@ function tantrum(w, u) {
   for (var k = 0; k < w.units.length; k++) { var o = w.units[k]; if (o !== u && o.k === "dwarf" && dist(o.i, u.i) <= 2) { victim = o; break } }
   if (victim && chance(w, 0.5)) {
     victim.hp -= 2; thought(w, victim, "foi agredido por " + u.name.split(" ")[0], -8)
-    announce(w, u.name + " teve um acesso de fúria e agrediu " + victim.name + "!", 2)
-    if (victim.hp <= 0) die(w, victim, "foi morto por " + u.name + " num acesso de fúria")
+    announce(w, LF("msg.tantrum.hit", "{0} teve um acesso de fúria e agrediu {1}!", u.name, victim.name), 2)
+    if (victim.hp <= 0) die(w, victim, LF("death.tantrum", "foi morto por {0} num acesso de fúria", u.name))
   } else if (targets.length > 0) {
     var c2 = pick(w, targets); var nm = BUILD_INFO[w.build[c2]].name
     removeBuilding(w, c2, false)
-    announce(w, u.name + " teve um acesso de fúria e destruiu uma " + nm + "!", 2)
-  } else announce(w, u.name + " teve um acesso de fúria!", 2)
+    announce(w, LF("msg.tantrum.broke", "{0} teve um acesso de fúria e destruiu uma {1}!", u.name, nm), 2)
+  } else announce(w, LF("msg.tantrum", "{0} teve um acesso de fúria!", u.name), 2)
   // witnesses
-  for (var k2 = 0; k2 < w.units.length; k2++) { var o2 = w.units[k2]; if (o2 !== u && o2.k === "dwarf" && dist(o2.i, u.i) <= 6) thought(w, o2, "presenciou um acesso de fúria", -3) }
+  for (var k2 = 0; k2 < w.units.length; k2++) { var o2 = w.units[k2]; if (o2 !== u && o2.k === "dwarf" && dist(o2.i, u.i) <= 6) thought(w, o2, L("th.witnessed", "presenciou um acesso de fúria"), -3) }
 }
 
 // ---- death ------------------------------------------------------------------
 function die(w, u, how) {
   if (u.k === "dwarf") {
-    announce(w, u.name + " " + how + ".", 2)
-    legend(w, u.name + ", " + skillTitle(u) + ", " + how + ".")
+    announce(w, LF("msg.died", "{0} {1}.", u.name, how), 2)
+    legend(w, LF("lg.died", "{0}, {1}, {2}.", u.name, skillTitle(u), how))
     w.dead.push({ name: u.name, t: w.tick, how: how })
     if (w.dead.length > 200) w.dead.splice(0, w.dead.length - 200)
     w.stats.deaths++
@@ -1851,8 +1857,8 @@ function die(w, u, how) {
     for (var k = 0; k < w.units.length; k++) {
       var o = w.units[k]
       if (o === u || o.k !== "dwarf") continue
-      if (rest) thought(w, o, "perdeu " + u.name.split(" ")[0] + ", mas terá sepultura", o.trait === "melancólico" ? -9 : -5)
-      else thought(w, o, "perdeu " + u.name.split(" ")[0], o.trait === "melancólico" ? -12 : -7)
+      if (rest) thought(w, o, LF("th.lost.grave", "perdeu {0}, mas terá sepultura", u.name.split(" ")[0]), o.trait === "melancólico" ? -9 : -5)
+      else thought(w, o, LF("th.lost", "perdeu {0}", u.name.split(" ")[0]), o.trait === "melancólico" ? -12 : -7)
     }
     if (w.tile[u.i] === T_OPEN) {
       addItem(w, "remains", u.i)
@@ -1890,9 +1896,9 @@ function attack(w, a, b) {
     if (b.k === "goblin" && b.hp <= 0) w.stats.goblinsKilled = (w.stats.goblinsKilled || 0) + 1
     if (a.k === "dwarf") gainSkill(w, a, "fight", 1)
     if (b.hp <= 0) {
-      if (a.k === "dwarf") { a.kills++; thought(w, a, "matou um " + (b.k === "goblin" ? "goblin" : b.k === "wolf" ? "lobo" : "inimigo") + " em combate", 6) }
-      if (b.k === "dwarf") die(w, b, "foi morto por " + (a.k === "goblin" ? "um goblin" : a.k === "wolf" ? "um lobo" : a.name || a.k))
-      else { announce(w, (b.k === "goblin" ? "Um goblin" : b.k === "wolf" ? "Um lobo" : "Um " + b.k) + " foi morto" + (a.k === "dwarf" ? " por " + a.name : "") + ".", 1); removeUnit(w, b) }
+      if (a.k === "dwarf") { a.kills++; thought(w, a, LF("th.killed", "matou {0} em combate", b.k === "goblin" ? L("foe.goblin", "um goblin") : b.k === "wolf" ? L("foe.wolf", "um lobo") : L("foe.enemy", "um inimigo")), 6) }
+      if (b.k === "dwarf") die(w, b, LF("death.killedby", "foi morto por {0}", a.k === "goblin" ? L("foe.goblin", "um goblin") : a.k === "wolf" ? L("foe.wolf", "um lobo") : (a.name || a.k)))
+      else { announce(w, LF("msg.foe.killed", "{0} foi morto{1}.", b.k === "goblin" ? L("foe.goblin.cap", "Um goblin") : b.k === "wolf" ? L("foe.wolf.cap", "Um lobo") : LF("foe.other.cap", "Um {0}", b.k), a.k === "dwarf" ? LF("msg.foe.killed.by", " por {0}", a.name) : ""), 1); removeUnit(w, b) }
     } else if (tookHit) wearOut(w, b, "armor")
     if (a.k === "dwarf" && a.weapon) wearOut(w, a, "weapon")
   }
@@ -1964,7 +1970,7 @@ function actKobold(w, u) {
   // sneak to the nearest stockpiled item, grab it, run
   if (u.carry) { leaveMap(w, u); return }
   var seen = nearestUnit(w, u.i, function (o) { return o.k === "dwarf" }, 3)
-  if (seen && !u.spotted) { u.spotted = true; announce(w, "Um kobold ladrão foi visto por " + seen.name + "!", 1); leaveMap(w, u); return }
+  if (seen && !u.spotted) { u.spotted = true; announce(w, LF("msg.kobold.seen", "Um kobold ladrão foi visto por {0}!", seen.name), 1); leaveMap(w, u); return }
   if (u.spotted) { leaveMap(w, u); return }
   if (!u.path) {
     var best = null, bd = 1e9
@@ -1974,7 +1980,7 @@ function actKobold(w, u) {
   }
   if (step(w, u) === 1) {
     var it2 = itemById(w, u.target)
-    if (it2 && it2.i === u.i && !it2.by) { pickUp(w, u, it2); announce(w, "Um kobold roubou " + ITEM_NAME[it2.t] + "!", 1) }
+    if (it2 && it2.i === u.i && !it2.by) { pickUp(w, u, it2); announce(w, LF("msg.kobold.stole", "Um kobold roubou {0}!", itemName(it2.t)), 1) }
     u.path = null
   }
 }
@@ -1993,7 +1999,7 @@ function actMerchant(w, u) {
 // ---- events -----------------------------------------------------------------
 function seasonStart(w, d) {
   var name = d.seasonName
-  announce(w, "Chegou " + (name === "verão" || name === "outono" || name === "inverno" ? "o " : "a ") + name + ".", 0)
+  announce(w, LF("season.came", "Chegou {0}.", (name === "primavera" ? "a " : "o ") + seasonName(name)), 0)
   w.weather = name === "inverno" ? 2 : 0
   if (w.fallen) return
   // migrants
@@ -2006,14 +2012,14 @@ function seasonStart(w, d) {
       if (n > 0) {
         for (var k = 0; k < n; k++) addDwarf(w, nearFree(w, sp, 2))
         w.stats.migrants += n
-        announce(w, n === 1 ? "Um migrante chegou." : n + " migrantes chegaram.", 1)
-        legend(w, plural(n, "migrante", "migrantes") + " " + inSeason(name) + " do ano " + d.year + ".")
+        announce(w, n === 1 ? L("msg.migrant.one", "Um migrante chegou.") : LF("msg.migrant.many", "{0} migrantes chegaram.", n), 1)
+        legend(w, LF("lg.migrants", "{0} {1} do ano {2}.", LP(n, "n.migrant.one", "n.migrant.many", "migrante", "migrantes"), seasonIn(name), d.year))
       }
-    } else if (p >= w.popCap && chance(w, 0.5)) announce(w, "Migrantes deram meia-volta: a fortaleza está cheia.", 0)
+    } else if (p >= w.popCap && chance(w, 0.5)) announce(w, L("msg.migrant.turned", "Migrantes deram meia-volta: a fortaleza está cheia."), 0)
   }
   // wolves in winter
   if (!w.peaceful && name === "inverno" && w.tick > YEAR / 2 && chance(w, 0.35)) {
-    var ws = edgeSurface(w); if (ws >= 0) { var nw = 1; for (var q = 0; q < nw; q++) addUnit(w, "wolf", nearFree(w, ws, 1)); announce(w, "Lobos rondam a superfície.", 1) }
+    var ws = edgeSurface(w); if (ws >= 0) { var nw = 1; for (var q = 0; q < nw; q++) addUnit(w, "wolf", nearFree(w, ws, 1)); announce(w, L("msg.wolves", "Lobos rondam a superfície."), 1) }
   }
 }
 // The best fighters form the militia: a third of the hold, never fewer than
@@ -2080,7 +2086,7 @@ function prospect(w) {
         var sx = ox < vx ? 1 : -1, sy = oy < vy ? 1 : -1, px, py
         for (px = ox; px !== vx; px += sx) { var ti = idx(px, oy, vz); if (canDesignate(w, ti, "dig")) designate(w, ti, "dig") }
         for (py = oy; py !== vy; py += sy) { var tj = idx(vx, py, vz); if (canDesignate(w, tj, "dig")) designate(w, tj, "dig") }
-        if (seam.length >= 4) announce(w, "Prospecção: um veio de " + plural(seam.length, "célula", "células") + " foi marcado para escavação.", 0)
+        if (seam.length >= 4) announce(w, LF("msg.prospect", "Prospecção: um veio de {0} foi marcado para escavação.", LP(seam.length, "n.cell.one", "n.cell.many", "célula", "células")), 0)
       }
     }
   }
@@ -2092,7 +2098,7 @@ function prospect(w) {
       for (var ty = 0; ty < H; ty++) for (var tx = 0; tx < W; tx++) { var si = surfaceIdx(w, tx, ty); if (w.tile[si] === T_TREE) trees.push([Math.abs(tx - gx) + Math.abs(ty - gy), si]) }
       trees.sort(function (a, b) { return a[0] - b[0] })
       for (var k = 0; k < Math.min(6, trees.length); k++) designate(w, trees[k][1], "chop")
-      if (trees.length) announce(w, "Lenhadores: " + Math.min(6, trees.length) + " árvores marcadas perto do portão.", 0)
+      if (trees.length) announce(w, LF("msg.woodcutters", "Lenhadores: {0} árvores marcadas perto do portão.", Math.min(6, trees.length)), 0)
     }
   }
 }
@@ -2120,7 +2126,7 @@ function spoilFood(w) {
   }
   if (lost) {
     w.stats.spoiled += lost
-    if (lost >= 3) announce(w, plural(lost, "item de comida estragou", "itens de comida estragaram") + " na despensa.", 0)
+    if (lost >= 3) announce(w, LF("msg.spoiled", "{0} na despensa.", LP(lost, "n.spoiled.one", "n.spoiled.many", "item de comida estragou", "itens de comida estragaram")), 0)
   }
 }
 // Tools, weapons and armor wear out with use and finally break. Without this
@@ -2139,9 +2145,9 @@ function wearOut(w, u, slot) {
   else if (slot === "armor") u.armor = false
   else u.tool = ""
   w.stats.broken++
-  var what = slot === "armor" ? "a armadura" : slot === "weapon" ? "a arma" : slot === "pick" ? "a picareta" : "o machado"
-  thought(w, u, "quebrou " + what, -2)
-  announce(w, u.name + " quebrou " + what + ".", 0)
+  var what = slot === "armor" ? L("broke.armor", "a armadura") : slot === "weapon" ? L("broke.weapon", "a arma") : slot === "pick" ? L("broke.pick", "a picareta") : L("broke.axe", "o machado")
+  thought(w, u, LF("th.broke", "quebrou {0}", what), -2)
+  announce(w, LF("msg.broke", "{0} quebrou {1}.", u.name, what), 0)
 }
 
 // The last dwarf is dead. Losing is fun, but the world should stop pretending
@@ -2149,8 +2155,8 @@ function wearOut(w, u, slot) {
 function checkFall(w) {
   if (w.fallen || w.tick < 10 || pop(w) > 0) return
   w.fallen = true
-  announce(w, w.name + " caiu. Não resta nenhum anão.", 2)
-  legend(w, w.name + " caiu no ano " + date(w).year + ". " + plural(w.stats.deaths, "anão perdido", "anões perdidos") + ".")
+  announce(w, LF("msg.fallen", "{0} caiu. Não resta nenhum anão.", w.name), 2)
+  legend(w, LF("lg.fallen", "{0} caiu no ano {1}. {2}.", w.name, date(w).year, LP(w.stats.deaths, "n.lost.one", "n.lost.many", "anão perdido", "anões perdidos")))
 }
 function dayStart(w, d) {
   rosterMilitia(w)
@@ -2171,7 +2177,7 @@ function dayStart(w, d) {
     if (sp >= 0) {
       w.caravan = { stage: "arrive", spot: w.depot, arrived: 0, days: 0, n: 3 }
       for (var k = 0; k < 3; k++) { var m = addUnit(w, "merchant", nearFree(w, sp, 1)); m.wait = 0 }
-      announce(w, "Uma caravana das Montanhas-Lar chegou!", 1)
+      announce(w, L("msg.caravan", "Uma caravana das Montanhas-Lar chegou!"), 1)
       w.stats.caravans++
     }
   }
@@ -2201,8 +2207,8 @@ function spawnRaid(w, d, wave) {
   for (var g = 0; g < n; g++) { var gob = addUnit(w, "goblin", nearFree(w, gs, 2)); if (wave >= eliteFrom && g % 3 === 0) { gob.elite = true; gob.hp = 9; gob.maxhp = 9 } }
   w.raid = { since: w.tick, n: n, wave: wave, lost: 0 }
   w.stats.raids++
-  announce(w, (wave > 0 ? "Onda " + wave + ": " : "Uma emboscada! ") + "Goblins! " + n + " invasores na superfície!" + (wave >= eliteFrom ? " Há veteranos entre eles." : ""), 2)
-  legend(w, (wave > 0 ? "Onda goblin " + wave : "Emboscada goblin") + " (" + n + ") no ano " + d.year + ".")
+  announce(w, LF("msg.raid", "{0}Goblins! {1} invasores na superfície!{2}", wave > 0 ? LF("msg.raid.wave", "Onda {0}: ", wave) : L("msg.raid.ambush", "Uma emboscada! "), n, wave >= eliteFrom ? L("msg.raid.elite", " Há veteranos entre eles.") : ""), 2)
+  legend(w, LF("lg.raid", "{0} ({1}) no ano {2}.", wave > 0 ? LF("lg.raid.wave", "Onda goblin {0}", wave) : L("lg.raid.ambush", "Emboscada goblin"), n, d.year))
   var ds = dwarves(w); for (var q = 0; q < ds.length; q++) grabWeapon(w, ds[q])
   if (w.scenario) { w.scenario.wave = wave + 1; w.scenario.nextRaid = w.tick + w.scenario.raidEvery }
   return true
@@ -2210,8 +2216,8 @@ function spawnRaid(w, d, wave) {
 function caravanDay(w) {
   var c = w.caravan
   var merchants = w.units.filter(function (u) { return u.k === "merchant" })
-  if (merchants.length === 0) { announce(w, "Os mercadores se foram.", 0); w.caravan = null; return }
-  if (c.stage === "arrive" && c.arrived >= merchants.length) { c.stage = "trade"; announce(w, "Os mercadores montaram acampamento junto ao depósito.", 0) }
+  if (merchants.length === 0) { announce(w, L("msg.merchants.gone", "Os mercadores se foram."), 0); w.caravan = null; return }
+  if (c.stage === "arrive" && c.arrived >= merchants.length) { c.stage = "trade"; announce(w, L("msg.merchants.camp", "Os mercadores montaram acampamento junto ao depósito."), 0) }
   if (c.stage === "trade") {
     c.days++
     // they buy crafts, gems and ore; they sell food, drink and logs
@@ -2224,11 +2230,11 @@ function caravanDay(w) {
     }
     var give = ["food", "booze", "log"]
     for (var q = 0; q < worth * 2; q++) { addItem(w, pick(w, give), nearFree(w, c.spot, 2)); sold++ }
-    if (bought > 0) announce(w, "Comércio: os mercadores levaram " + bought + " bens e deixaram " + sold + " suprimentos.", 1)
-    else if (c.days === 1) announce(w, "Os mercadores não encontraram nada que valesse a pena comprar.", 0)
-    if (c.days >= 4) { c.stage = "leave"; announce(w, "Os mercadores partiram.", 0) }
+    if (bought > 0) announce(w, LF("msg.trade", "Comércio: os mercadores levaram {0} bens e deixaram {1} suprimentos.", bought, sold), 1)
+    else if (c.days === 1) announce(w, L("msg.trade.nothing", "Os mercadores não encontraram nada que valesse a pena comprar."), 0)
+    if (c.days >= 4) { c.stage = "leave"; announce(w, L("msg.merchants.left", "Os mercadores partiram."), 0) }
   }
-  if (w.raid && c.stage !== "leave") { c.stage = "leave"; announce(w, "Os mercadores fogem da emboscada!", 1) }
+  if (w.raid && c.stage !== "leave") { c.stage = "leave"; announce(w, L("msg.merchants.flee", "Os mercadores fogem da emboscada!"), 1) }
 }
 function raidTick(w) {
   if (!w.raid) return
@@ -2237,8 +2243,8 @@ function raidTick(w) {
   var n = 0; for (var k = 0; k < w.units.length; k++) if (w.units[k].k === "goblin") n++
   if (n === 0) {
     w.stats.repelled = (w.stats.repelled || 0) + 1
-    announce(w, (w.raid.wave ? "Onda " + w.raid.wave + " repelida. " : "A emboscada terminou. ") + w.name + " resiste" + (w.raid.lost ? ", com " + plural(w.raid.lost, "baixa", "baixas") + "." : " sem baixas."), 1)
-    legend(w, (w.raid.wave ? "Onda " + w.raid.wave : "Emboscada") + " repelida" + (w.raid.lost ? " (" + plural(w.raid.lost, "anão perdido", "anões perdidos") + ")." : " sem baixas."))
+    announce(w, LF("msg.repelled", "{0}{1} resiste{2}", w.raid.wave ? LF("msg.repelled.wave", "Onda {0} repelida. ", w.raid.wave) : L("msg.repelled.ambush", "A emboscada terminou. "), w.name, w.raid.lost ? LF("msg.repelled.losses", ", com {0}.", LP(w.raid.lost, "n.loss.one", "n.loss.many", "baixa", "baixas")) : L("msg.repelled.none", " sem baixas.")), 1)
+    legend(w, LF("lg.repelled", "{0} repelida{1}", w.raid.wave ? LF("lg.wave", "Onda {0}", w.raid.wave) : L("lg.ambush", "Emboscada"), w.raid.lost ? LF("lg.repelled.losses", " ({0}).", LP(w.raid.lost, "n.lost.one", "n.lost.many", "anão perdido", "anões perdidos")) : L("msg.repelled.none", " sem baixas.")))
     w.raid = null
     var ds = dwarves(w); for (var q = 0; q < ds.length; q++) thought(w, ds[q], "sobreviveu a uma emboscada", 2)
   }
@@ -2276,8 +2282,8 @@ function tick(w) {
     else if (u.k === "merchant") actMerchant(w, u)
     // liquids
     var t = w.tile[u.i]
-    if (t === T_MAGMA) { if (u.k === "dwarf") die(w, u, "queimou até a morte no magma"); else removeUnit(w, u) }
-    else if (t === T_WATER) { u.drown = (u.drown || 0) + 1; if (u.drown > 6) { if (u.k === "dwarf") die(w, u, "afogou-se"); else removeUnit(w, u) } else { var esc = neighbors(w, u.i, u, nb); if (esc > 0) u.i = nb[0] } }
+    if (t === T_MAGMA) { if (u.k === "dwarf") die(w, u, L("death.magma", "queimou até a morte no magma")); else removeUnit(w, u) }
+    else if (t === T_WATER) { u.drown = (u.drown || 0) + 1; if (u.drown > 6) { if (u.k === "dwarf") die(w, u, L("death.drowned", "afogou-se")); else removeUnit(w, u) } else { var esc = neighbors(w, u.i, u, nb); if (esc > 0) u.i = nb[0] } }
     else u.drown = 0
   }
   checkFall(w)
@@ -2287,19 +2293,19 @@ function actDwarf(w, u) {
   u.cool--
   var g = u.trait === "guloso" ? 1.3 : 1
   u.hunger += 0.22 * g; u.thirst += 0.33; u.sleep += (u.job && u.job.k === "sleep") ? 0 : 0.7
-  if (u.hunger > 140 && w.tick % 12 === 0) { u.hp -= 1; if (u.hp <= 0) { die(w, u, "morreu de fome"); return } }
-  if (u.thirst > 140 && w.tick % 12 === 0) { u.hp -= 1; if (u.hp <= 0) { die(w, u, "morreu de sede"); return } }
+  if (u.hunger > 140 && w.tick % 12 === 0) { u.hp -= 1; if (u.hp <= 0) { die(w, u, L("death.starved", "morreu de fome")); return } }
+  if (u.thirst > 140 && w.tick % 12 === 0) { u.hp -= 1; if (u.hp <= 0) { die(w, u, L("death.thirst", "morreu de sede")); return } }
   if (u.hp < u.maxhp && w.tick % 40 === 0 && u.hunger < 80) u.hp++
   moodTick(w, u)
   if (w.units.indexOf(u) < 0) return
   if (u.mood_state === "berserk") {
-    if (u.hp <= 0) { die(w, u, "foi abatido em fúria pelos companheiros"); return }
+    if (u.hp <= 0) { die(w, u, L("death.putdown", "foi abatido em fúria pelos companheiros")); return }
     var v = nearestUnit(w, u.i, function (o) { return o !== u && o.k === "dwarf" }, 1e9)
     if (v) { if (adjacent(u.i, v.i) || v.i === u.i) { if (u.cool <= 0) { attack(w, u, v); u.cool = 3 } } else if (!u.path || w.tick % 10 === 0) go(w, u, function (c) { return adjacent(c, v.i) }, v.i, 600); step(w, u) }
     return
   }
   if (u.mood_state === "melancholy") {
-    if (u.mood >= 45) { u.mood_state = ""; announce(w, u.name + " saiu da melancolia.", 1) }
+    if (u.mood >= 45) { u.mood_state = ""; announce(w, LF("msg.melancholy.out", "{0} saiu da melancolia.", u.name), 1) }
     else if (u.job) { work(w, u); return }
     else if ((u.thirst > 95 || u.hunger > 95 || u.sleep > 110) && needJob(w, u)) return
     else { if (chance(w, 0.1)) { var n = neighbors(w, u.i, u, nb); if (n > 0) u.i = nb[ri(w, n)] } return }
@@ -2316,7 +2322,7 @@ function actDwarf(w, u) {
   if (u.job && u.job.k === "fight") dropJob(w, u)
   if (u.job && u.job.k === "arm") {
     if (u.path) { if (step(w, u) < 0) dropJob(w, u); return }
-    var wi = itemById(w, u.job.item); if (wi && wi.i === u.i) { removeItem(w, wi.id); u.weapon = true; thought(w, u, "pegou em armas", 1) }
+    var wi = itemById(w, u.job.item); if (wi && wi.i === u.i) { removeItem(w, wi.id); u.weapon = true; thought(w, u, L("th.armed", "pegou em armas"), 1) }
     dropJob(w, u); return
   }
   if (u.job) { work(w, u); return }
@@ -2485,8 +2491,8 @@ function scenario(w, n, opts) {
   w.liquidBudget = { water: 60, magma: 30 }
   w.dirty = true; w.wealth = computeWealth(w)
   w.log = []; w.legends = []
-  announce(w, (w.preset || "Cenário") + ": " + w.name + " já está escavada e guarnecida por " + n + " anões (" + militia + " na milícia)." + (w.scenario ? " A primeira onda goblin vem em " + Math.round(w.scenario.nextRaid / DAY) + " dias." : " Não há inimigos neste vale."), 1)
-  legend(w, (w.preset || "Cenário") + ": fundada com " + n + " anões.")
+  announce(w, LF("msg.scenario", "{0}: {1} já está escavada e guarnecida por {2} anões ({3} na milícia).{4}", w.preset || L("preset.scenario", "Cenário"), w.name, n, militia, w.scenario ? LF("msg.scenario.raid", " A primeira onda goblin vem em {0} dias.", Math.round(w.scenario.nextRaid / DAY)) : L("msg.scenario.peace", " Não há inimigos neste vale.")), 1)
+  legend(w, LF("lg.scenario", "{0}: fundada com {1} anões.", w.preset || L("preset.scenario", "Cenário"), n))
   return w
 }
 function newScenario(seed, n, opts) { var w = newWorld(seed); return scenario(w, n, opts) }
