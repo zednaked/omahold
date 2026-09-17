@@ -447,6 +447,8 @@ Item {
       var lt = Sim.cellLight(w, i)
       out.push({ t: root.tf("p.light", Math.round(lt * 100), lt < 0.3 ? root.t("p.light.dark") : ""), c: lt < 0.3 ? "muted" : "" })
       if (w.lockdown) out.push({ t: root.t("p.locked"), c: "warn" })
+      var dd = Sim.digDepth(w)
+      if (dd < Sim.iz(w.depot)) out.push({ t: root.tf("p.deepest", dd, w.stirred ? root.tf("p.stirred", w.stirred) : ""), c: w.stirred ? "warn" : "muted", wrap: true })
       if (w.siege) out.push({ t: root.tf("p.siege", Math.max(1, Math.round((w.tick - w.siege) / Sim.DAY))), c: "urgent", wrap: true })
       if (w.baron) {
         var bu = Sim.unitById(w, w.baron)
@@ -533,7 +535,7 @@ Item {
         if (++legN % 3 === 0) { out.push({ t: legRow, c: "", wrap: true }); legRow = "" }
       }
       if (legRow) out.push({ t: legRow, c: "", wrap: true })
-      out.push({ t: "  ☺ " + root.t("h.leg.dwarf") + "   g " + root.t("unit.goblin") + "   w " + root.t("unit.wolf") + "   d " + root.t("unit.deer") + "   k " + root.t("unit.kobold"), c: "", wrap: true })
+      out.push({ t: "  ☺ " + root.t("h.leg.dwarf") + "   g " + root.t("unit.goblin") + "   w " + root.t("unit.wolf") + "   d " + root.t("unit.deer") + "   k " + root.t("unit.kobold") + "   c " + root.t("h.leg.deep") + "   S " + root.t("h.leg.sentinel"), c: "", wrap: true })
       out.push({ t: root.t("h.leg.note"), c: "muted", wrap: true })
       out.push({ t: "", c: "" })
       out.push({ t: root.t("h.tail"), c: "muted", wrap: true })
@@ -681,6 +683,13 @@ Item {
                 // parser stops at the semicolon after the closing brace
                 tip: root.t("tip.pop")
                 text: { World.rev; var s = World.summary || {}; return "☺ " + (s.pop || 0) + (s.militia ? " · ⚔ " + s.militia : "") }
+              }
+              Chip {
+                visible: !!(World.w && Sim.digDepth(World.w) < Sim.iz(World.w.depot))
+                tip: root.t("tip.deep")
+                fg: World.w && World.w.stirred ? Color.urgent : Color.popups.text
+                strong: !!(World.w && World.w.stirred)
+                text: { World.rev; var w = World.w; if (!w) return ""; return root.tf("chip.deep", Sim.digDepth(w)) + (w.stirred ? " !" : "") }
               }
               Chip {
                 tip: root.t("tip.wealth")
@@ -879,11 +888,11 @@ Item {
                 for (var u = 0; u < w.units.length; u++) {
                   var un = w.units[u], udk = Sim.depthBelow(w, un.i, z)
                   if (udk < 0) continue
-                  var col = un.k === "dwarf" ? (un.mood_state === "berserk" ? p.urgent : un.mood_state ? p.kobold : p.dwarf) : un.k === "goblin" ? p.goblin : un.k === "wolf" ? p.wolf : un.k === "deer" ? p.deer : un.k === "kobold" ? p.kobold : p.merchant
+                  var col = un.k === "dwarf" ? (un.mood_state === "berserk" ? p.urgent : un.mood_state ? p.kobold : p.dwarf) : un.k === "goblin" ? p.goblin : un.k === "wolf" ? p.wolf : un.k === "deer" ? p.deer : un.k === "kobold" ? p.kobold : un.k === "crawler" ? p.crawler : un.k === "sentinel" ? p.sentinel : p.merchant
                   if (un.id === World.selectedId) { ctx.fillStyle = p.select; ctx.fillRect(Sim.ix(un.i) * c, Sim.iy(un.i) * c, c, c); col = p.dwarfSel }
                   if (udk) col = Pal.dimmed(col, p.bgRgb, p.dim[udk])
                   else if (un.id !== World.selectedId) { var ub = bright(un.i, Sim.outdoor(w, un.i)); if (ub < 0.98) col = Pal.dimmed(col, p.bgRgb, Math.max(0.5, ub)) }
-                  var gl = un.k === "dwarf" ? "☺" : un.k === "goblin" ? "g" : un.k === "wolf" ? "w" : un.k === "deer" ? "d" : un.k === "kobold" ? "k" : "☻"
+                  var gl = un.k === "dwarf" ? "☺" : un.k === "goblin" ? "g" : un.k === "wolf" ? "w" : un.k === "deer" ? "d" : un.k === "kobold" ? "k" : un.k === "crawler" ? "c" : un.k === "sentinel" ? "S" : "☻"
                   ctx.fillStyle = col; ctx.fillText(gl, Sim.ix(un.i) * c + half, Sim.iy(un.i) * c + half + 1)
                 }
                 // pass 4: weather over outdoor cells (light itself is baked into the fills)

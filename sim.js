@@ -145,7 +145,7 @@ var SKILL_NAME = { mine: "mineração", wood: "lenha", farm: "lavoura", build: "
 // zeroed on load instead of showing "undefined" in the chronicle
 var STAT_KEYS = ["dug", "chopped", "built", "brewed", "crafted", "migrants", "deaths", "artifacts", "raids", "caravans",
                  "cooked", "smelted", "forged", "cut", "jewels", "repelled", "goblinsKilled", "spoiled", "broken", "botched", "buried",
-                 "demandsMet", "demandsFailed"]
+                 "demandsMet", "demandsFailed", "stirred"]
 function newStats() { var o = {}; for (var k = 0; k < STAT_KEYS.length; k++) o[STAT_KEYS[k]] = 0; return o }
 
 var TRAITS = ["teimoso", "alegre", "melancólico", "guloso", "valente", "preguiçoso", "curioso", "rabugento"]
@@ -223,7 +223,7 @@ function newWorld(seed) {
     ground: new Uint8Array(N),
     items: [], units: [], nextId: 1,
     log: [], legends: [], artifacts: [], dead: [],
-    name: "", wealth: 0, alerts: 0, popCap: 20, graveyard: -1, done: {}, legendary: 0, siege: 0, pressure: 0, baron: 0, demand: null, demandSince: 0, siegeSince: 0,
+    name: "", wealth: 0, alerts: 0, popCap: 20, graveyard: -1, done: {}, legendary: 0, siege: 0, pressure: 0, woke: {}, stirred: 0, tomb: 0, baron: 0, demand: null, demandSince: 0, siegeSince: 0,
     liquidBudget: { water: 60, magma: 30 },
     caravan: null, raid: null, lockdown: false, depot: -1,
     weather: 0,   // 0 clear, 1 rain, 2 snow
@@ -407,7 +407,7 @@ function addItem(w, type, i, grade) {
   w.items.push(it); return it
 }
 function addUnit(w, kind, i) {
-  var hp = { dwarf: 12, goblin: 5, deer: 5, wolf: 5, kobold: 4, merchant: 10 }[kind] || 6
+  var hp = { dwarf: 12, goblin: 5, deer: 5, wolf: 5, kobold: 4, merchant: 10, crawler: 7, sentinel: 16 }[kind] || 6
   var u = { id: w.nextId++, k: kind, i: i, hp: hp, maxhp: hp, path: null, pi: 0, job: null, born: w.tick, cool: 0, wait: 0 }
   w.units.push(u); return u
 }
@@ -1041,11 +1041,18 @@ function findDesignation(w, u) {
 
 function finishDig(w, u, i, stair) {
   var t = w.tile[i]
+  var zBefore = digDepth(w)
   if (t === T_STONE) addItem(w, "stone", i)
   else if (t === T_ORE) addItem(w, "ore", i, oreGrade(iz(i)))
   else if (t === T_GEM) { addItem(w, "gem", i); thought(w, u, L("th.gem", "encontrou uma gema"), 4) }
   if (t !== T_OPEN) w.floor[i] = t === T_SOIL ? F_SOIL : F_STONE
   w.tile[i] = T_OPEN
+  // greed has a price now: opening floor on a level nobody had reached may
+  // wake what has been asleep down there since before the hold
+  var zNow = iz(i)
+  w.deepest = Math.min(zBefore, zNow)
+  if (zNow < zBefore) maybeWake(w, zNow)
+  if (zNow <= 1) maybeTomb(w, u, i)
   if (stair) {
     w.build[i] = B_STAIR
     var above = i + N
@@ -1941,25 +1948,35 @@ function removeUnit(w, u) {
 }
 
 // ---- combat -----------------------------------------------------------------
-function hostile(u) { return u.k === "goblin" || u.k === "wolf" || (u.k === "dwarf" && u.mood_state === "berserk") }
+function hostile(u) { return u.k === "goblin" || u.k === "wolf" || u.k === "crawler" || u.k === "sentinel" || (u.k === "dwarf" && u.mood_state === "berserk") }
 function nearestUnit(w, from, pred, maxd) {
   var best = null, bd = maxd || 1e9
   for (var k = 0; k < w.units.length; k++) { var o = w.units[k]; if (!pred(o)) continue; var d = dist(o.i, from); if (d < bd) { bd = d; best = o } }
   return best
 }
+// One name for whatever is doing the killing, so a new creature does not have
+// to be threaded through three separate ternaries.
+function foeName(u, cap) {
+  var k = u.k
+  if (k === "dwarf") return u.name || k
+  var key = "foe." + k + (cap ? ".cap" : "")
+  var fall = { goblin: "um goblin", wolf: "um lobo", crawler: "um rastejante", sentinel: "uma sentinela das profundezas" }[k]
+  if (!fall) return cap ? LF("foe.other.cap", "Um {0}", k) : L("foe.enemy", "um inimigo")
+  return L(key, cap ? fall.charAt(0).toUpperCase() + fall.slice(1) : fall)
+}
 function attack(w, a, b) {
-  var as = a.k === "dwarf" ? a.skills.fight + (a.weapon ? 3 + ((a.weaponQ || 1) - 1) : 0) + (a.trait === "valente" ? 1 : 0) : (a.k === "goblin" ? 1 + (a.elite ? 2 : 0) : a.k === "wolf" ? 2 : 1)
+  var as = a.k === "dwarf" ? a.skills.fight + (a.weapon ? 3 + ((a.weaponQ || 1) - 1) : 0) + (a.trait === "valente" ? 1 : 0) : (a.k === "goblin" ? 1 + (a.elite ? 2 : 0) : a.k === "wolf" ? 2 : a.k === "crawler" ? 2 : a.k === "sentinel" ? 7 : 1)
   var ds = b.k === "dwarf" ? b.skills.fight + (b.weapon ? 1 : 0) + (b.armor ? 1 : 0) : 2
   if (chance(w, Math.max(0.15, Math.min(0.9, 0.5 + 0.06 * (as - ds))))) {
-    var dmg = 1 + ri(w, 3) + (a.weapon ? (a.weaponQ || 1) : 0) + (a.elite ? 1 : 0), tookHit = false
+    var dmg = 1 + ri(w, 3) + (a.weapon ? (a.weaponQ || 1) : 0) + (a.elite ? 1 : 0) + (a.k === "sentinel" ? 2 : 0), tookHit = false
     if (b.k === "dwarf" && b.armor) { dmg = Math.max(0, dmg - (b.armorQ || 1) - (chance(w, 0.4) ? 1 : 0)); tookHit = true }
     b.hp -= dmg
-    if (b.k === "goblin" && b.hp <= 0) w.stats.goblinsKilled = (w.stats.goblinsKilled || 0) + 1
+    if ((b.k === "goblin" || b.k === "crawler" || b.k === "sentinel") && b.hp <= 0) w.stats.goblinsKilled = (w.stats.goblinsKilled || 0) + 1
     if (a.k === "dwarf") gainSkill(w, a, "fight", 1)
     if (b.hp <= 0) {
-      if (a.k === "dwarf") { a.kills++; thought(w, a, LF("th.killed", "matou {0} em combate", b.k === "goblin" ? L("foe.goblin", "um goblin") : b.k === "wolf" ? L("foe.wolf", "um lobo") : L("foe.enemy", "um inimigo")), 6) }
-      if (b.k === "dwarf") die(w, b, LF("death.killedby", "foi morto por {0}", a.k === "goblin" ? L("foe.goblin", "um goblin") : a.k === "wolf" ? L("foe.wolf", "um lobo") : (a.name || a.k)))
-      else { announce(w, LF("msg.foe.killed", "{0} foi morto{1}.", b.k === "goblin" ? L("foe.goblin.cap", "Um goblin") : b.k === "wolf" ? L("foe.wolf.cap", "Um lobo") : LF("foe.other.cap", "Um {0}", b.k), a.k === "dwarf" ? LF("msg.foe.killed.by", " por {0}", a.name) : ""), 1); removeUnit(w, b) }
+      if (a.k === "dwarf") { a.kills++; thought(w, a, LF("th.killed", "matou {0} em combate", foeName(b)), 6) }
+      if (b.k === "dwarf") die(w, b, LF("death.killedby", "foi morto por {0}", foeName(a)))
+      else { announce(w, LF("msg.foe.killed", "{0} foi morto{1}.", foeName(b, true), a.k === "dwarf" ? LF("msg.foe.killed.by", " por {0}", a.name) : ""), 1); removeUnit(w, b) }
     } else if (tookHit) wearOut(w, b, "armor")
     if (a.k === "dwarf" && a.weapon) wearOut(w, a, "weapon")
   }
@@ -1992,8 +2009,11 @@ function grabWeapon(w, u) {
 // ---- other units ------------------------------------------------------------
 function actHostile(w, u) {
   u.cool--
+  // what came up from the deep has nowhere to go home to, so it does not give
+  // up and walk off the edge the way a raiding party does
+  var fromBelow = u.k === "crawler" || u.k === "sentinel"
   var target = nearestUnit(w, u.i, function (o) { return o.k === "dwarf" || o.k === "merchant" }, 1e9)
-  if (!target) { leaveMap(w, u); return }
+  if (!target) { if (!fromBelow) leaveMap(w, u); return }
   if (adjacent(u.i, target.i) || u.i === target.i) { if (u.cool <= 0) { attack(w, u, target); u.cool = 2 } return }
   if (!u.path || (w.tick + u.id) % 15 === 0) {
     // straight for the nearest dwarf; failing that, for the gate (the wagon
@@ -2002,7 +2022,7 @@ function actHostile(w, u) {
         && !(u.i !== w.depot && dist(u.i, w.depot) > 1 && go(w, u, function (c) { return c === w.depot || adjacent(c, w.depot) }, w.depot, 4000))) {
       // can't reach anyone: mill around; give up after a while
       u.wait++
-      if (u.wait > DAY * SIEGE_DAYS) { leaveMap(w, u); return }
+      if (!fromBelow && u.wait > DAY * SIEGE_DAYS) { leaveMap(w, u); return }
       var x = ix(u.i) + ri(w, 5) - 2, y = iy(u.i) + ri(w, 5) - 2
       if (inb(x, y, iz(u.i)) && passableFor(w, idx(x, y, iz(u.i)), u)) go(w, u, function (c) { return c === idx(x, y, iz(u.i)) }, idx(x, y, iz(u.i)), 200)
       return
@@ -2217,6 +2237,101 @@ function wearOut(w, u, slot) {
 
 // The last dwarf is dead. Losing is fun, but the world should stop pretending
 // there is a fortress here: no more waves, caravans, thieves or migrants.
+// ---- what sleeps below ------------------------------------------------------
+// Digging down only ever paid: copper became iron became steel, the gems got
+// better, and the magma milestone waited at the bottom. The only thing that
+// could go wrong was a dwarf walking into the magma, so the deepest level a
+// hold had reached said nothing about its risk — greed had no price.
+//
+// Now it does. Every level opened at or below the third has a chance of waking
+// something asleep since before the hold, and the chance grows with the depth.
+// What wakes comes up from that level, not from the gate, so locked doors and
+// a militia posted at the entrance buy nothing: the hold is breached from
+// underneath.
+//
+// Two things sleep down there. The caverns hold a lost race — crawlers, which
+// come in numbers and are not individually dangerous. The last level before
+// the magma holds a sentinel, one of them, which is.
+var WAKE_FROM = 3          // this level and below can stir
+function wakeChance(z) { return z <= 0 ? 0.85 : z === 1 ? 0.5 : z === 2 ? 0.25 : 0.1 }
+// How deep the hold has *dug*, which is not the same as how deep open floor
+// goes: the caverns on level 1 are generated open, so counting floor made
+// every world start already at its deepest and nothing could ever wake. What
+// matters is the level a dwarf's pick reached.
+function digDepth(w) { return typeof w.deepest === "number" ? w.deepest : iz(w.depot) }
+// The deepest rock sometimes gives up a tomb: an artifact older than the hold,
+// buried with whoever it belonged to. It is the best thing depth can pay — and
+// it never comes alone, because something was keeping it.
+function maybeTomb(w, u, i) {
+  var z = iz(i)
+  if (w.tomb || z > 1 || !chance(w, 0.02)) return
+  // `Math.max(1, …)`, because this doubles as the "already found" guard and a
+  // tick of 0 is falsy: the tomb would be findable again forever
+  w.tomb = Math.max(1, w.tick)
+  var nm = artifactName(w, "gem").split("|")
+  w.artifacts.push({ name: nm[0], title: nm[1], desc: nm[2], maker: L("king.maker", "um rei perdido"), t: w.tick })
+  w.stats.artifacts++
+  addItem(w, "artifact", i)
+  announce(w, LF("msg.tomb", "Uma tumba! {0}, '{1}', jazia aqui com um rei esquecido.", nm[0], nm[1]), 2)
+  legend(w, LF("lg.tomb", "A tumba de um rei perdido foi aberta no ano {0}: {1}, '{2}'.", date(w).year, nm[0], nm[1]))
+  thought(w, u, L("th.tomb", "abriu a tumba de um rei perdido"), 8)
+  if (!w.peaceful) {
+    var g = deepSpot(w, z)
+    if (g >= 0) {
+      var guard = addUnit(w, "sentinel", g)
+      guard.elite = true
+      announce(w, L("msg.tomb.guard", "O que guardava a tumba não gostou."), 2)
+      if (!w.raid) { w.raid = { since: w.tick, n: 1, wave: 0, lost: 0, deep: true }; w.stats.raids++ }
+    }
+  }
+}
+function maybeWake(w, z) {
+  if (w.peaceful || z > WAKE_FROM) return
+  if (!w.woke) w.woke = {}
+  if (w.woke[z]) return
+  w.woke[z] = w.tick
+  if (!chance(w, wakeChance(z))) {
+    announce(w, LF("msg.deep.quiet", "Nível {0} aberto. O silêncio aqui embaixo é diferente.", z), 1)
+    return
+  }
+  w.stirred = (w.stirred || 0) + 1
+  w.stats.stirred = (w.stats.stirred || 0) + 1
+  announce(w, z <= 0 ? L("msg.deep.magma", "Algo se move no calor. A fortaleza cavou fundo demais.")
+                     : LF("msg.deep.wake", "Algo desperta no nível {0}, adormecido desde antes desta fortaleza.", z), 2)
+  legend(w, LF("lg.deep.wake", "Algo despertou no nível {0}, no ano {1}.", z, date(w).year))
+  spawnDeep(w, z)
+}
+// What comes up, sized by the depth it woke at and by how much has already
+// been stirred: a hold that keeps digging keeps paying.
+function spawnDeep(w, z) {
+  var spot = deepSpot(w, z)
+  if (spot < 0) return false
+  var extra = Math.min(3, (w.stirred || 1) - 1)
+  if (z <= 0) {
+    var s1 = addUnit(w, "sentinel", spot)
+    s1.elite = true
+    for (var e = 0; e < extra; e++) { var sp2 = deepSpot(w, z); if (sp2 >= 0) addUnit(w, "crawler", sp2) }
+    announce(w, L("msg.deep.sentinel", "Uma sentinela das profundezas sobe pela escavação."), 2)
+  } else {
+    var n = 2 + ri(w, 3) + extra
+    for (var k = 0; k < n; k++) { var sp = deepSpot(w, z); if (sp >= 0) addUnit(w, "crawler", sp) }
+    announce(w, LF("msg.deep.crawlers", "{0} rastejantes saem das galerias.", n), 2)
+  }
+  // a raid like any other, so raidTick reports it when it is over — but marked
+  // `deep`, because it did not come through any door
+  w.raid = { since: w.tick, n: 1, wave: 0, lost: 0, deep: true }
+  w.stats.raids++
+  return true
+}
+function deepSpot(w, z) {
+  for (var t = 0; t < 400; t++) {
+    var i = idx(ri(w, W), ri(w, H), z)
+    if (passable(w, i)) return i
+  }
+  for (var j = z * N; j < (z + 1) * N; j++) if (passable(w, j)) return j
+  return -1
+}
+
 // ---- the baron and their demands -------------------------------------------
 // The hold had no source of pressure that came from inside it. Goblins arrive
 // on a schedule, hunger is arithmetic, and neither asks the player for
@@ -2889,6 +3004,9 @@ function deserialize(json) {
   if (typeof w.siegeSince !== "number") w.siegeSince = 0
   if (typeof w.baron !== "number") w.baron = 0
   if (typeof w.pressure !== "number") w.pressure = 0
+  if (!w.woke) w.woke = {}
+  if (typeof w.stirred !== "number") w.stirred = 0
+  if (typeof w.tomb !== "number") w.tomb = 0
   if (typeof w.demandSince !== "number") w.demandSince = 0
   if (w.demand === undefined) w.demand = null
   // units carrying items keep their claims; jobs are dropped so no stale paths survive
@@ -2910,7 +3028,7 @@ function deserialize(json) {
 function newWorldEmpty() {
   return { v: 1, seed: 0, rs: 0, tick: 0, tile: new Uint8Array(NN), floor: new Uint8Array(NN), build: new Uint8Array(NN), desig: new Uint8Array(NN),
     dbuild: new Uint8Array(NN), grow: new Uint8Array(NN), ground: new Uint8Array(N), items: [], units: [], nextId: 1, log: [], legends: [], artifacts: [],
-    dead: [], orders: [], graveyard: -1, done: {}, legendary: 0, siege: 0, pressure: 0, baron: 0, demand: null, demandSince: 0, siegeSince: 0, name: "", wealth: 0, alerts: 0, popCap: 20, liquidBudget: { water: 60, magma: 30 }, caravan: null, raid: null, lockdown: false, depot: -1,
+    dead: [], orders: [], graveyard: -1, done: {}, legendary: 0, siege: 0, pressure: 0, woke: {}, stirred: 0, tomb: 0, baron: 0, demand: null, demandSince: 0, siegeSince: 0, name: "", wealth: 0, alerts: 0, popCap: 20, liquidBudget: { water: 60, magma: 30 }, caravan: null, raid: null, lockdown: false, depot: -1,
     weather: 0, stats: newStats(), fallen: false, claim: null, unreach: {}, lastMoodTick: 0 }
 }
 function rle(a) {

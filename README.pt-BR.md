@@ -142,6 +142,43 @@ fortaleza não tiver nenhum canto quieto e alcançável — tudo ocupado, ou o
 único espaço isolado sem escada — os mortos ficam no chão e isso aparece no
 humor de todos. As Lendas contam quantos foram sepultados.
 
+## O que dorme lá embaixo
+
+Cavar fundo só dava lucro. Cobre virava ferro virava aço, as gemas melhoravam,
+e o marco do magma esperava no fim; o pior que podia acontecer era um anão
+entrar no magma. O nível mais fundo que uma fortaleza tinha alcançado não dizia
+nada sobre o risco dela — a ganância não tinha preço.
+
+Agora cada nível que as suas picaretas abrem no terceiro ou abaixo pode
+despertar algo que dorme desde antes da fortaleza, e a chance cresce com a
+profundidade:
+
+| nível | chance de despertar | o que há lá | 
+|---|---|---|
+| 3 | 10% | cobre, e quase certamente nada mais |
+| 2 | 25% | ferro |
+| 1 | 50% | as cavernas, e uma **raça perdida** — rastejantes, que vêm em número |
+| 0 | 85% | aço, e uma **sentinela das profundezas**, da qual uma basta |
+
+**O que desperta sobe daquele nível, não do portão.** Portas trancadas e uma
+milícia postada na entrada não compram nada contra isso: a fortaleza é
+arrombada por baixo. E o que subiu das profundezas não tem casa para onde
+voltar, então não desiste nem vai embora pela borda como faz um grupo de
+saque.
+
+Cada novo despertar manda mais que o anterior, porque uma fortaleza que
+continua cavando continua pagando.
+
+A rocha mais funda às vezes entrega uma **tumba**: um artefato mais antigo que
+a fortaleza, com o nome do rei perdido que foi enterrado com ele — a melhor
+coisa que a profundidade pode pagar. E nunca vem sozinha, porque algo a estava
+guardando.
+
+Medido: uma fortaleza que fica no nível da mina não paga nada, e uma que cava
+até o magma perdeu duas fortalezas em cinco. A pílula `⚷` no cabeçalho mostra
+até onde as picaretas chegaram, e fica vermelha quando algo está acordado lá
+embaixo.
+
 ## O barão
 
 Uma fortaleza que vale 4000 atrai um nobre. É um dos seus próprios anões,

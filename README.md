@@ -147,6 +147,39 @@ if the hold has no quiet reachable corner — everything occupied, or the only
 isolated space with no stairs — the dead stay on the floor and it shows in
 everyone's mood. The Legends page counts how many were buried.
 
+## What sleeps below
+
+Digging down used to only ever pay. Copper became iron became steel, the gems
+got better, and the magma milestone waited at the bottom; the worst that could
+happen was a dwarf walking into the magma. The deepest level a hold had reached
+said nothing about its risk — greed had no price.
+
+Now every level your picks open at or below the third can wake something that
+has been asleep since before the hold, and the chance grows with the depth:
+
+| level | chance something stirs | what is down there |
+|---|---|---|
+| 3 | 10% | copper, and almost certainly nothing else |
+| 2 | 25% | iron |
+| 1 | 50% | the caverns, and a **lost race** — crawlers, which come in numbers |
+| 0 | 85% | steel, and a **sentinel of the deep**, of which one is enough |
+
+**What wakes comes up from that level, not from the gate.** Locked doors and a
+militia posted at the entrance buy nothing against it: the hold is breached
+from underneath. And what came up from the deep has nowhere to go home to, so
+it does not give up and walk off the edge the way a raiding party does.
+
+Each new waking sends more than the last, because a hold that keeps digging
+keeps paying.
+
+The deepest rock sometimes gives up a **tomb**: an artifact older than the
+hold, named after the lost king buried with it — the best thing depth can pay.
+It never comes alone, because something was keeping it.
+
+Measured: a hold that stays at its mine level pays nothing, and one that digs
+to the magma lost two fortresses in five. The `⚷` chip in the header shows how
+deep the picks have gone, and turns red once something is awake down there.
+
 ## The baron
 
 A hold worth 4000 draws a noble. It is one of your own dwarves, promoted — the
