@@ -1,326 +1,372 @@
 # Omahold
 
-**Uma fortaleza anã miniatura que mora dentro do omarchy-shell.** · by ZeD
+**A miniature dwarven hold that lives inside omarchy-shell.** · by ZeD
 
-![O painel do Omahold: mapa de um nível, barra lateral e crônica](preview.png)
+*[Leia em português](README.pt-BR.md)*
 
-Um plugin do Omarchy: um mundo de 48×30 células com 8 níveis de profundidade
-(z-levels), sete anões com fome, sede, sono, humor e ofícios, escavação,
-lavoura, cervejaria, artesanato, humores estranhos e artefatos, migrantes,
-caravanas, emboscadas de goblins, lobos no inverno, kobolds ladrões,
-inundações e magma. Tudo desenhado com as cores do tema ativo — trocar o
-tema veste a fortaleza de outro clima.
+![The Omahold panel: one level of the map, the sidebar and the chronicle](preview.png)
 
-Enquanto você trabalha, o mundo anda devagar (um dia de fortaleza a cada
-poucos minutos). Quando você abre o painel, corre a quatro ticks por segundo.
-Nada é desenhado sem uma janela visível, e um tick custa uma fração de
-milissegundo num MacBook de 2014.
+An Omarchy plugin: a world of 48×30 cells with 8 levels of depth (z-levels),
+seven dwarves with hunger, thirst, sleep, mood and trades, digging, farming,
+brewing, crafting, strange moods and artifacts, migrants, caravans, goblin
+ambushes, wolves in winter, kobold thieves, floods and magma. All of it drawn
+in the colors of the active theme — changing the theme dresses the hold in
+another climate.
+
+While you work the world ticks slowly (a day of fortress time every few
+minutes). When you open the panel it runs at four ticks a second. Nothing is
+drawn without a visible surface, and one tick costs a fraction of a
+millisecond on a 2014 MacBook.
 
 ```
 omarchy plugin add https://github.com/zednaked/omahold.git --enable
-# ou, à mão:
+# or, by hand:
 cp -r . ~/.config/omarchy/plugins/zed.omahold && omarchy-shell shell rescanPlugins && omarchy plugin enable zed.omahold
 ```
 
-**Para remover:**
+**To remove:**
 
 ```
 omarchy plugin disable zed.omahold
 omarchy plugin remove zed.omahold
-# ou, à mão:
+# or, by hand:
 rm -rf ~/.config/omarchy/plugins/zed.omahold
-# a fortaleza salva fica fora da pasta do plugin; para levá-la também:
+# the saved hold lives outside the plugin folder; to take that too:
 rm -rf ~/.local/state/omarchy/omahold
 ```
 
-O plugin não escreve em `shell.json` nem em nenhuma configuração sua — quem o
-coloca na barra é o `omarchy plugin enable` ou a sua mão.
+The plugin does not write to `shell.json` or to any configuration of yours —
+what puts it on the bar is `omarchy plugin enable`, or your own hand.
 
-**Dependências:** QML puro, sem binário e sem rede, mais `python3` — usado só
-para o acesso ao disco (`save.py`), pelas razões de segurança explicadas em
-[Onde a fortaleza é gravada](#onde-a-fortaleza-é-gravada). Os próprios scripts
-do Omarchy já usam `python3`, então isto não acrescenta nada à máquina.
+**Dependencies:** pure QML, no binary and no network, plus `python3` — used
+only for disk access (`save.py`), for the security reasons explained in
+[Where the hold is written](#where-the-hold-is-written). Omarchy's own scripts
+already use `python3`, so this adds nothing to the machine.
 
-## Três superfícies
+**Language:** English and Portuguese, in `≡ menu → Options → Language`. The
+first load follows the system's `LANG`; after that your choice is remembered.
 
-| Onde | O quê |
+## Three surfaces
+
+| Where | What |
 |---|---|
-| **Barra** | `☺ 7` — população. Um ponto acende quando algo aconteceu desde a última olhada (caravana, morte, artefato). Clique abre o mundo; botão direito liga a janelinha de canto; roda muda o nível dela. |
-| **Janelinha de canto** (`m` ou botão direito na barra) | Uma vista viva de 240×150 px no canto inferior direito, por cima das janelas, sem roubar foco. Para ficar de olho enquanto faz outra coisa. Clique nela abre o painel. |
-| **Painel** (`omarchy-shell omahold toggle`, ou clique na barra) | Mapa de um nível, barra lateral, anúncios e as teclas para dar ordens. |
+| **The bar** | `☺ 7` — population. A dot lights up when something has happened since you last looked (a caravan, a death, an artifact). Click opens the world; right click toggles the corner window; the wheel changes its level. |
+| **Corner window** (`m`, or right click on the bar) | A live 240×150 px view in the bottom-right corner, above your windows, without stealing focus. For keeping an eye on it while you do something else. Clicking it opens the panel. |
+| **The panel** (`omarchy-shell omahold toggle`, or click the bar) | One level of the map, a sidebar, announcements, and the keys to give orders. |
 
-Sugestão de atalho no `~/.config/hypr/bindings.lua`:
+A suggested binding for `~/.config/hypr/bindings.lua`:
 
 ```lua
 o.bind("SUPER SHIFT", "F", "omarchy-shell omahold toggle", "Omahold")
 ```
 
-## Menu, predefinições e slots
+## Menu, presets and slots
 
-`Esc` (com nada para cancelar) ou o botão **≡ menu** abre o menu; `Esc` nele
-fecha o painel.
+`Esc` (with nothing to cancel) or the **≡ menu** button opens the menu; `Esc`
+in it closes the panel.
 
-- **Novo jogo**: Embarque clássico (7 anões, do zero), Fortaleza pronta (12,
-  ondas a cada 15 dias), Guarnição (10, seis na milícia, ondas cedo e
-  frequentes), Vale tranquilo (fortaleza pronta, sem inimigos), Cerco (8,
-  ondas grandes desde o dia 2). **Personalizado** escolhe predefinição, número
-  de anões (4–24) e semente numérica.
-- **Salvar / Carregar**: cinco slots com nome, predefinição, data do jogo,
-  população e quando foi gravado; `x` duas vezes limpa um slot para reuso. O
-  autosave (`world.json`) continua independente dos slots.
-- **Ver / inspecionar** (`v` no menu; `o` no jogo alterna): Normal, **Luz**
-  (mapa de calor da iluminação), **Humor** (halo por anão), **Acesso** (o que
-  se alcança a pé desde o portão ou de onde os anões estão; vermelho = isolado).
-  É o mesmo campo que decide quais designações saem em vermelho no mapa. "Pular para uma hora do
-  dia" mostra noite e tochas sem esperar.
-- **Opções** (persistem em `options.json`): ritmo com o painel fechado
-  (congelado, 1 tick a cada 4 s / 2 s / 1 s, 4 por segundo), velocidade com o
-  painel aberto, blocos ou glifos, janelinha de canto, teto de população,
-  inimigos ligados ou não, ondas goblin calmas / normais / brutais.
+- **New game**: Classic embark (7 dwarves, from nothing), Ready hold (12,
+  waves every 15 days), Garrison (10, six in the militia, waves early and
+  often), Quiet valley (a ready hold, no enemies), Siege (8, big waves from
+  day 2). **Custom** picks the preset, the number of dwarves (4–24) and a
+  numeric seed.
+- **Save / Load**: five slots with the name, preset, in-game date, population
+  and when it was written; `x` twice clears a slot for reuse. The autosave
+  (`world.json`) stays independent of the slots.
+- **View / inspect** (`v` in the menu; `o` in game cycles): Normal, **Light**
+  (a heat map of the lighting), **Mood** (a halo per dwarf), **Access** (what
+  can be walked to from the gate or from where the dwarves are; red = cut
+  off). It is the same field that decides which designations come out red on
+  the map. "Jump to an hour of the day" shows night and torches without
+  waiting.
+- **Options** (kept in `options.json`): pace with the panel closed (frozen, 1
+  tick every 4 s / 2 s / 1 s, 4 per second), speed with the panel open, blocks
+  or glyphs, the corner window, the population cap, enemies on or off, goblin
+  waves calm / normal / brutal, and the language.
 
-IPC equivalente: `omarchy-shell omahold preset <classic|ready|garrison|peaceful|siege>`,
+The same over IPC: `omarchy-shell omahold preset <classic|ready|garrison|peaceful|siege>`,
 `saveSlot <n>`, `loadSlot <n>`, `slots`, `presets`.
 
-## Ordens de oficina (`w`)
+## Workshop orders (`w`)
 
-O que sai de uma oficina vem de uma fila, e a fila tem dois donos.
+What comes out of a workshop comes off a queue, and the queue has two owners.
 
-**A fortaleza escreve a sua.** Quatro vezes por dia ela olha o que tem e anota
-o que falta: cerveja se a adega está baixa, refeições se há comida crua
-sobrando, barras se há minério, uma picareta se um mineiro está sem, armadura
-para quem entrou na milícia. Se existe destilaria e existe comida, alguém
-fermenta — sem você mandar. É a autonomia mínima: havendo infraestrutura e
-material, eles produzem.
+**The hold writes its own.** Every morning it looks at what it has and notes
+what is missing: ale if the cellar is low, meals if there is raw food to
+spare, bars if there is ore, a pick if a miner has none, armor for whoever
+just joined the militia. If there is a still and there is food, somebody brews
+— without being told. That is the minimum autonomy: given the infrastructure
+and the material, they produce.
 
-**Você escreve a sua** no menu (`≡ menu → Ordens`, ou `w` para ver a fila).
-Suas ordens têm precedência sobre as da fortaleza — mas precedência não é
-obediência. Ninguém larga o que está fazendo:
+**You write yours** in the menu (`≡ menu → Orders`, or `w` to see the queue).
+Your orders take precedence over the hold's — but precedence is not obedience.
+Nobody drops what they are doing:
 
-- **Necessidade vence ordem.** Fome, sede e sono vêm antes de qualquer fila. A
-  ordem espera o anão acordar.
-- **Subsistência vence gosto.** Com a despensa vazia ou a adega seca, ninguém
-  lapida gema — nem o joalheiro que adora lapidar, nem porque você pediu.
-- **Inclinação escolhe quem faz.** Cada anão tem um ofício que prefere e um que
-  detesta (a ficha dele, na página Anões, mostra os dois). Entre duas ordens
-  que ele poderia pegar, vai na que gosta. Medido: 12,6% do trabalho no ofício
-  preferido contra 7,5% no detestado — a aversão pesa mais que a preferência,
-  porque forçar a preferência custou 28% da produção da fortaleza quando foi
-  testado.
-- **Eles erram.** Perícia, humor, fome e gosto decidem: um aprendiz estraga uma
-  peça em cada dez, um mestre quase nunca. Trabalho estragado consome o
-  material e não rende nada. Três seguidos e o anão **larga aquele ofício por
-  um dia** — a ficha dele diz isso. Ninguém estraga a última cerveja da
-  fortaleza: quem mexe na reserva tem cuidado redobrado.
+- **Need beats order.** Hunger, thirst and sleep come before any queue. The
+  order waits for the dwarf to wake up.
+- **Subsistence beats taste.** With an empty larder or a dry cellar nobody
+  cuts gems — not the jeweler who loves cutting them, and not because you
+  asked.
+- **Inclination picks who does it.** Every dwarf has a trade they prefer and
+  one they cannot stand (their sheet, on the Dwarves page, shows both).
+  Between two orders they could take, they reach for the one they like.
+  Measured: 12.6% of their work in the trade they love against 7.5% in the one
+  they hate — the aversion weighs more than the preference, because forcing
+  the preference cost 28% of the hold's output when it was tried.
+- **They get it wrong.** Skill, mood, hunger and taste decide: an apprentice
+  ruins one piece in ten, a master almost never. Ruined work eats the material
+  and yields nothing. Three in a row and the dwarf **walks away from that
+  trade for a day** — their sheet says so. Nobody ruins the hold's last ale:
+  whoever handles the reserve is twice as careful.
 
-As Lendas contam quantas tarefas foram estragadas. A curva é visível: numa
-fortaleza nova são umas 140 no primeiro ano e 50 no quarto, conforme a perícia
-sobe — e volta a subir quando chega uma leva de migrantes sem ofício.
+The Legends page counts how many jobs were ruined. The curve is visible: in a
+new hold it is about 140 in the first year and 50 in the fourth, as skill goes
+up — and it climbs again when a batch of migrants arrives with no trade.
 
-## Os mortos
+## The dead
 
-Quem cai fica onde caiu, e todo anão que passa por perto sente. Eles resolvem
-isso sozinhos: escolhem um **cemitério** — um canto que dá para alcançar a pé,
-longe das camas, das mesas e das oficinas, porque é isso que faz de um lugar
-um lugar quieto — e passam a carregar os companheiros para lá. Cada enterro
-deixa um `†` no mapa.
+Whoever falls stays where they fell, and every dwarf who walks past feels it.
+They sort this out themselves: they choose a **graveyard** — a corner they can
+walk to, away from the beds, the tables and the workshops, because that is
+what makes a place a quiet one — and start carrying their companions there.
+Each burial leaves a `†` on the map.
 
-- Passar pelos restos de alguém sem sepultura: **−4** de humor (−6 para um
-  melancólico).
-- Sepultar um companheiro como se deve: **+3** para quem carrega.
-- Com cemitério aberto, a perda pesa menos em todo mundo: **−5** em vez de
-  **−7**, porque sabem onde aquele vai ficar.
+- Walking past the remains of someone with no grave: **−4** mood (−6 for a
+  melancholic).
+- Burying a companion as one should: **+3** for whoever carries them.
+- With a graveyard open the loss weighs less on everyone: **−5** instead of
+  **−7**, because they know where that one is going.
 
-Ninguém escolhe o lugar por você, e você não precisa designar nada. Mas se a
-fortaleza não tiver nenhum canto quieto e alcançável — tudo ocupado, ou o
-único espaço isolado sem escada — os mortos ficam no chão e isso aparece no
-humor de todos. As Lendas contam quantos foram sepultados.
+Nobody picks the place for you, and you do not have to designate anything. But
+if the hold has no quiet reachable corner — everything occupied, or the only
+isolated space with no stairs — the dead stay on the floor and it shows in
+everyone's mood. The Legends page counts how many were buried.
 
-## Como se joga
+## How it is played
 
-É Dwarf Fortress em miniatura: você não controla anões, você **designa** o que
-quer feito e eles decidem quem faz.
+It is Dwarf Fortress in miniature: you do not control dwarves, you
+**designate** what you want done and they decide who does it.
 
-1. Marque uma **escada** (`s`) no acampamento: no chão, isso já marca a descida (a célula e a rocha embaixo). Para ir mais fundo, desça (`>`) e aperte `s` de novo sobre a escada. Uma escada marcada na rocha é cavada de qualquer chão que exista acima dela.
-2. **Cave** (`d`) um salão: Enter marca um canto, Enter de novo aplica; ou arraste com o mouse.
-3. **Construa** (`b`): camas (`b b`), mesas (`b t`), uma destilaria (`b d`), uma oficina (`b o`), um estoque (`b e`). Camas e mesas consomem toras (corte árvores com `c`); destilaria e oficina consomem pedra (sai da escavação).
-4. **Plante** (`b f`) em terra, grama ou musgo de caverna. Piso de pedra não serve. Quando houver minério, uma **fundição** (`b u`) e uma **forja** (`b j`) transformam-no em picaretas, machados, armas e armaduras; **tochas** (`b l`) iluminam os salões; um **campo de treino** (`b r`) faz a milícia treinar.
-5. Designações **em vermelho** não têm caminho até elas por enquanto (falta escada ou acesso pelo mesmo nível); a página Local explica. Elas são tentadas de novo sozinhas.
-6. Olhe. Anões comem, bebem cerveja de cogumelo (ou água, e reclamam), dormem em cama ou no chão, conversam à mesa, ficam tristes quando alguém morre. Humor baixo demais vira acesso de fúria; fúria assistida piora o humor dos outros. É assim que uma fortaleza cai.
+1. Mark **stairs** (`s`) at the wagon: on a floor, that already marks the
+   descent (the cell and the rock below it). To go deeper, go down (`>`) and
+   press `s` again over the stairs. Stairs marked in rock are dug from any
+   floor that exists above them.
+2. **Dig** (`d`) a hall: Enter marks a corner, Enter again applies; or drag
+   with the mouse.
+3. **Build** (`b`): beds (`b b`), tables (`b t`), a still (`b d`), a workshop
+   (`b o`), a stockpile (`b e`). Beds and tables consume logs (fell trees with
+   `c`); the still and the workshop consume stone (which comes from digging).
+4. **Plant** (`b f`) on soil, grass or cave moss. A stone floor will not do.
+   Once there is ore, a **smelter** (`b u`) and a **forge** (`b j`) turn it
+   into picks, axes, weapons and armor; **torches** (`b l`) light the halls; a
+   **drill yard** (`b r`) gives the militia somewhere to train.
+5. Designations **in red** have no path to them for now (missing stairs, or
+   access on the same level); the Here page explains. They are retried on
+   their own.
+6. Watch. Dwarves eat, drink mushroom ale (or water, and complain), sleep in a
+   bed or on the floor, talk at the tables, grieve when someone dies. A mood
+   low enough becomes a tantrum; a tantrum witnessed lowers everyone else's
+   mood. That is how a hold falls.
 
-Cuidados: cavar embaixo do riacho **inunda**; cavar até o nível 0 encontra
-**magma**; as cavernas (nível 1) têm musgo e cogumelos gigantes, e água.
+Take care: digging under the stream **floods**; digging to level 0 finds
+**magma**; the caverns (level 1) have moss, giant mushrooms and water.
 
-Dicas de tecla ficam no rodapé; a ferramenta ativa aparece numa pílula sobre o
-mapa e os avisos num toast central.
+Key hints live in the footer; the active tool shows in a pill over the map and
+warnings in a toast at the center.
 
-### Teclas
+### Keys
 
 | | |
 |---|---|
-| setas / `hjkl` | mover cursor (`Shift`: 5 células) |
-| `<` `>` `,` `.` PgUp/PgDn, roda | subir / descer um nível |
-| `Enter` | marcar canto; de novo aplica. Em modo olhar: seleciona o que está sob o cursor |
-| mouse | arrastar aplica a ferramenta; botão direito seleciona |
-| `d` `s` `c` | cavar, escada (no chão: cava a descida; sobre uma escada: continua para baixo), cortar |
-| `b` + letra | construir: `b` cama `t` mesa `f` plantação `e` estoque `p` porta `w` muro `l` tocha `o` oficina `d` destilaria `c` cozinha `u` fundição `j` forja `g` joalheria `r` campo de treino `s` estátua |
-| `x` `r` | cancelar designação, remover construção |
-| `]` `[` `f` | próximo/anterior anão; seguir o selecionado |
-| `Espaço` `+` `-` | pausa; velocidade 1×/2×/4× |
-| `L` | trancar portas: goblins, lobos e kobolds não passam |
-| `g` | blocos ↔ glifos (o visual clássico) |
-| `m` | janelinha de canto |
-| `Tab` `u` `i` `w` `y` `?` | páginas: Anões, Local, **Ordens**, Lendas, Ajuda |
-| `Home` | voltar ao acampamento |
-| `n` | menu Novo jogo |
-| `Shift+S` | menu Salvar |
-| `Esc` | sair da ferramenta / menu |
+| arrows / `hjkl` | move the cursor (`Shift`: 5 cells) |
+| `<` `>` `,` `.` PgUp/PgDn, wheel | up / down one level |
+| `Enter` | mark a corner; again applies. In look mode: selects what is under the cursor |
+| mouse | drag applies the tool; right click selects |
+| `d` `s` `c` | dig, stairs (on a floor: digs the descent; over stairs: keeps going down), chop |
+| `b` + letter | build: `b` bed `t` table `f` plot `e` stockpile `p` door `w` wall `l` torch `o` workshop `d` still `c` kitchen `u` smelter `j` forge `g` jeweler `r` drill yard `s` statue |
+| `x` `r` | cancel a designation, remove a building |
+| `]` `[` `f` | next/previous dwarf; follow the selected one |
+| `Space` `+` `-` | pause; speed 1×/2×/4× |
+| `L` | lock the doors: goblins, wolves and kobolds cannot pass |
+| `g` | blocks ↔ glyphs (the classic look) |
+| `m` | corner window |
+| `Tab` `u` `i` `w` `y` `?` | pages: Dwarves, Here, **Orders**, Legends, Help |
+| `Home` | back to the wagon |
+| `n` | New game menu |
+| `Shift+S` | Save menu |
+| `Esc` | leave the tool / menu |
 
-## Cenário de teste
+## The showcase scenario
 
-`omarchy-shell omahold scenario 12` (ou **Novo jogo → Fortaleza pronta** no
-menu, `n`) troca o mundo por uma fortaleza pronta, feita para assistir a todos
-os loops rodarem e para medir quanto ela aguenta:
+`omarchy-shell omahold scenario 12` (or **New game → Ready hold** in the menu,
+`n`) swaps the world for a finished hold, built to watch every loop run and to
+measure how much it can take:
 
-| Nível | O que tem |
+| Level | What is there |
 |---|---|
-| superfície | portão murado com uma porta ao sul da escada |
-| −1 | 12 plantações, despensa com 40 comidas, 12 refeições e 40 bebidas, tochas |
-| −2 | refeitório com 12 mesas, cozinha, duas destilarias, estátuas, tochas |
-| −3 | dormitório (camas para todos e mais quatro), fundição, forja, duas oficinas, dois campos de treino, estoque com toras, pedra, minério, barras e equipamento sobressalente |
-| minas | galerias e todos os veios ao alcance já designados, com túneis de acesso |
+| surface | a walled gate with a door south of the stairs |
+| −1 | 12 plots, a larder with 40 food, 12 meals and 40 drinks, torches |
+| −2 | a dining hall with 12 tables, a kitchen, two stills, statues, torches |
+| −3 | a dormitory (beds for everyone and four more), a smelter, a forge, two workshops, two drill yards, a stockpile with logs, stone, ore, bars and spare gear |
+| mines | galleries with every vein in reach already designated, with access tunnels |
 
-Os anões chegam com ofícios: mineradores com picareta, lenhadores com machado,
-fazendeiros, cervejeiro, ferreiro, pedreiro. Um terço forma a **milícia**, já
-com arma e armadura, e treina no campo quando não há mais nada a fazer.
+The dwarves arrive with trades: miners with picks, woodcutters with axes,
+farmers, a brewer, a smith, a mason. A third of them form the **militia**,
+already armed and armored, and drill in the yard when there is nothing else to
+do.
 
-O loop completo: lavoura → comida → refeição (cozinha) e cerveja (destilaria);
-árvore → tora → cama/mesa/porta/tocha; escavação → pedra → construções e
-artesanato; minério → **fundição** → barra → **forja** → picareta, machado,
-arma, armadura (por necessidade: primeiro quem não tem); gema bruta (minerada
-de `☼` na rocha) → **joalheria** → gema lapidada → joia, os bens mais valiosos
-para a caravana. **Luz** é simulada por
-célula: o sol nasce e se põe (dias longos no verão, curtos no inverno, mais
-fraco na chuva), cada tocha **tremula** e lança luz quente que decai com a
-distância e **não atravessa rocha nem muro** (nem passa por quinas), e o magma
-brilha em vermelho. Só a face da parede que encosta em chão aberto recebe luz;
-rocha e muro são desenhados como alvenaria com um fio claro na aresta voltada
-para o chão, então o contorno das salas fica nítido e é óbvio onde é sólido.
-A superfície escurece à noite até um luar azulado, com amanhecer e entardecer
-tingidos; o subsolo fica em penumbra onde não há tocha. Dormir e comer no
-escuro vale menos; a página Local mostra a luz em % no cursor. Quando o minério acaba, a fortaleza
-prospecta o veio mais próximo sozinha — o veio inteiro, com um túnel de acesso
-— e quando faltam toras, marca árvores.
+The full loop: fields → food → a meal (kitchen) and ale (still); tree → log →
+bed/table/door/torch; digging → stone → buildings and crafts; ore →
+**smelter** → bar → **forge** → pick, axe, weapon, armor (by need: whoever has
+none first); rough gem (mined from `☼` in the rock) → **jeweler** → cut gem →
+jewel, the most valuable goods for the caravan. **Light** is simulated per
+cell: the sun rises and sets (long days in summer, short in winter, weaker in
+the rain), each torch **flickers** and throws warm light that fades with
+distance and **does not cross rock or wall** (nor turn a corner), and magma
+glows red. Only the face of a wall that touches open floor takes light; rock
+and wall are drawn as masonry with a bright line on the edge facing the floor,
+so the outline of a room is crisp and it is obvious where the solid is. The
+surface darkens at night to a bluish moonlight, with tinted dawn and dusk; the
+underground stays dim where there is no torch. Sleeping and eating in the dark
+are worth less; the Here page shows light as a percentage at the cursor. When
+the ore runs out the hold prospects the nearest vein on its own — the whole
+vein, with an access tunnel — and when logs run low it marks trees.
 
-Nada disso se acumula para sempre: a despensa guarda umas dez comidas por anão
-e o que passa daí **apodrece** (refeição preparada não, e é por isso que a
-cozinha vale a pedra que custa), e **picareta, machado, arma e armadura se
-gastam** até quebrar. Uma picareta quebrada é motivo para voltar à mina, e é o
-que mantém a fundição e a forja acesas no terceiro ano em vez de deixá-las
-ornamentais. As Lendas contam quanto estragou e quanto quebrou.
+None of it piles up forever: the larder holds about ten food per dwarf and
+what goes beyond that **rots** (a prepared meal does not, which is why the
+kitchen is worth the stone it costs), and **pick, axe, weapon and armor wear
+out** until they break. A broken pick is a reason to go back to the mine, and
+it is what keeps the smelter and the forge lit in the third year instead of
+leaving them ornamental. The Legends page counts what spoiled and what broke.
 
-A **primeira onda goblin chega em seis dias** e depois a cada quinze, cada uma
-maior (4, 5, 6, 7… até nove, veteranos a partir da quinta). O placar fica nas
-Lendas: ondas, repelidas, goblins mortos, anões perdidos. Equipamento de quem
-cai fica no chão para o próximo. Em dois anos de teste sem intervenção, em oito
-sementes (`node test/scenario.js <semente> 2`), 12 anões repelem as 11 ondas,
-perdem uns 9 e terminam com uns 16 — os migrantes repõem mais do que os goblins
-levam. Trancar as portas (`L`) muda tudo: goblins não passam e vão embora.
+The **first goblin wave arrives in six days** and then every fifteen, each one
+larger (4, 5, 6, 7… up to nine, veterans from the fifth). The scoreboard is on
+the Legends page: waves, repelled, goblins killed, dwarves lost. The gear of
+whoever falls stays on the floor for the next one. Over two years of testing
+with no intervention, across eight seeds (`node test/scenario.js <seed> 2`),
+12 dwarves repel the 11 waves, lose about 9 and end with about 16 — migrants
+replace more than the goblins take. Locking the doors (`L`) changes
+everything: goblins cannot pass and go home.
 
-Se ainda assim o último anão morrer, a fortaleza **cai**: o painel marca `caiu`,
-as Lendas registram o fim e o mundo para de gerar ondas, caravanas e migrantes.
-Perder é divertido, mas uma ruína não fica anunciando vitórias.
+If the last dwarf dies anyway, the hold **falls**: the panel marks it, the
+Legends page records the end, and the world stops sending waves, caravans and
+migrants. Losing is fun, but a ruin should not keep announcing victories.
 
-`omarchy-shell omahold raid` traz uma onda agora.
+`omarchy-shell omahold raid` brings a wave now.
 
 ## IPC
 
 ```
 omarchy-shell omahold toggle|open|close|peek|pause|save|status
 omarchy-shell omahold speed 1|2|4
-omarchy-shell omahold scenario 12         # fortaleza pronta com N anões e ondas goblin
-omarchy-shell omahold raid                # uma onda agora
-omarchy-shell omahold hour 22             # pula para uma hora do dia (0-24)
+omarchy-shell omahold scenario 12         # a ready hold with N dwarves and goblin waves
+omarchy-shell omahold raid                # a wave now
+omarchy-shell omahold hour 22             # jump to an hour of the day (0-24)
 omarchy-shell omahold view light          # normal | light | mood | access
-omarchy-shell omahold background 2000      # ms por tick com o painel fechado; 0 congela
-omarchy-shell omahold newWorld "" # ou uma semente numérica
+omarchy-shell omahold background 2000     # ms per tick with the panel closed; 0 freezes
+omarchy-shell omahold newWorld ""         # or a numeric seed
 ```
 
-Opções inline na entrada do widget em `~/.config/omarchy/shell.json`:
+Inline options on the widget entry in `~/.config/omarchy/shell.json`:
 `{ "id": "zed.omahold", "backgroundMs": 2000, "popCap": 20, "peek": false }`.
 
-## Onde a fortaleza é gravada
+## Where the hold is written
 
-O mundo fica em `~/.local/state/omarchy/omahold/world.json`, salvo a cada 90 s
-e ao fechar o painel; sobrevive a reinícios do shell. Os cinco slots, o índice
-deles e as opções ficam no mesmo diretório, em modo 700, e cada arquivo em 600.
+The world lives in `~/.local/state/omarchy/omahold/world.json`, saved every
+90 s and when the panel closes; it survives shell restarts. The five slots,
+their index and the options sit in the same directory, mode 700, each file
+600.
 
-Tudo isso passa por um único lugar: `save.py`, sempre chamado como
-`/usr/bin/python3 -I save.py <modo> <caminhos relativos ao $HOME>`, com
-ambiente fechado e sem bit de execução. Antes eram três caminhos diferentes —
-`sh -c 'cat …'` para ler, `FileView` para gravar e `rm -f` para limpar um slot
-— e nenhum deles conseguia checar o arquivo e depois tocar naquele mesmo
-arquivo. É o que a revisão de segurança do marketplace barrou duas vezes no
-[omarchy-ganja](https://github.com/zednaked/omarchy-ganja): em shell cada
-comando resolve o caminho de novo, então checar e usar são duas resoluções e o
-que foi checado pode ser trocado no meio.
+All of it goes through one place: `save.py`, always invoked as
+`/usr/bin/python3 -I save.py <mode> <paths relative to $HOME>`, with a closed
+environment and no execute bit. It used to be three different ways in —
+`sh -c 'cat …'` to read, `FileView` to write and `rm -f` to clear a slot — and
+none of them could check the file it was about to touch and then touch that
+same file. That is what the marketplace security review blocked
+[omarchy-ganja](https://github.com/zednaked/omarchy-ganja) for twice: in shell
+every command resolves the path again, so a check and a use are two
+resolutions and what was checked can be exchanged in between.
 
-O helper desce do `$HOME` componente por componente com `openat` +
-`O_NOFOLLOW`, valida cada diretório no próprio descritor, e mantém esse
-descritor pela leitura, pela gravação, pelo `fsync` e pelo `renameat`. Recusa
-o que não for arquivo regular seu com um único link, tem teto de 1 MiB e prazo
-de cinco segundos, e só consegue nomear os sete arquivos do próprio plugin.
-`python3 test/hostile.py` roda os casos hostis num `$HOME` temporário — FIFO,
-symlink no meio do caminho, hardlink, save de 2 MiB, temporário plantado,
-nome fora da lista: 40 verificações.
+The helper descends from `$HOME` component by component with `openat` +
+`O_NOFOLLOW`, validates each directory on the descriptor itself, and holds
+that descriptor through the read, the write, the `fsync` and the `renameat`.
+It refuses anything that is not a regular file of yours with a single link,
+caps at 1 MiB with a five-second deadline, and can only ever name the plugin's
+own seven files. `python3 test/hostile.py` runs the hostile cases in a
+throwaway `$HOME` — FIFO, symlink mid-path, hardlink, a 2 MiB save, a planted
+temporary, a name outside the list: 40 checks.
 
-## O que está simulado, e o que não está
+## What is simulated, and what is not
 
-**Está**: cadeia minério → barra → ferramentas/armas/armadura, cozinha, tochas e luz, milícia automática com treino, armadura no combate, cenário-vitrine com ondas; fila de ordens que a fortaleza escreve sozinha e o jogador complementa; anões com inclinação e aversão por ofício, que erram o trabalho, se frustram e largam a bancada por um dia; cemitério escolhido pelos próprios anões, enterro dos mortos e o peso de deixá-los sem sepultura; economia com dreno — comida crua estraga no que passa da capacidade da despensa (refeições preparadas conservam) e picareta, machado, arma e armadura se gastam com o uso até quebrar, então a mina e a forja têm por que continuar depois do primeiro ano; relevo com encostas (rampas implícitas), solo/rocha/minério/gemas,
-riacho, cavernas, mar de magma; A* em 3D com escadas e encostas; sete
-necessidades e ofícios; designações de cavar/escada/cortar/construir; lavoura
-com crescimento, destilaria, oficina (artesanato e armas de minério),
-estoques e transporte; camas reivindicadas, refeições à mesa; pensamentos
-com peso e humor com deriva, fúria, melancolia (e recuperação), fúria
-assassina; humores estranhos com reivindicação de oficina, exigência de
-material e artefato nomeado; migrantes por riqueza e teto de população;
-caravana no outono que compra artesanato/gemas e deixa suprimentos;
-emboscadas escaladas pela riqueza; lobos no inverno; kobolds; combate com
-habilidade e armas; portas trancáveis; líquidos que avançam por brechas com
-orçamento finito; dia e noite, chuva e neve; crônica e memorial.
+**It is**: the ore → bar → tools/weapons/armor chain, cooking, torches and
+light, an automatic militia with drills, armor in combat, the showcase
+scenario with waves; an economy with drains — raw food rots past the larder's
+capacity (prepared meals keep) and pick, axe, weapon and armor wear out with
+use until they break, so the mine and the forge have a reason to keep running
+after the first year; an order queue the hold writes itself and the player
+adds to; dwarves with an inclination and an aversion per trade, who ruin work,
+get frustrated and walk away from the bench for a day; a graveyard the dwarves
+choose themselves, burial of the dead and the weight of leaving them unburied;
+terrain with slopes (implicit ramps), soil/rock/ore/gems, a stream, caverns, a
+magma sea; A* in 3D with stairs and slopes; seven needs and trades;
+designations for digging, stairs, chopping and building; farming with growth,
+a still, a workshop (crafts and weapons from ore), stockpiles and hauling;
+claimed beds, meals at a table; thoughts with weight and mood with drift,
+tantrums, melancholy (and recovery), murderous rage; strange moods that claim
+a workshop, demand a material and produce a named artifact; migrants by wealth
+and a population cap; an autumn caravan that buys crafts and gems and leaves
+supplies; ambushes scaled by wealth; wolves in winter; kobolds; combat with
+skill and weapons; lockable doors; liquids that advance through gaps on a
+finite budget; day and night, rain and snow; a chronicle and a memorial.
 
-**Não está** (de propósito, pela escala): hidráulica de verdade (níveis de
-água/pressão), desabamentos, temperatura, comércio
-com negociação, nobres, animais domésticos, sítios externos, e a tela de
-ofícios do DF — ninguém é designado padeiro: cada anão tem um ofício que
-prefere e um que detesta, e se arranja. Cada anão é um
-único glifo e não tem membros — a ferida é só um número.
+**It is not** (on purpose, at this scale): real hydraulics (water levels and
+pressure), cave-ins, temperature, trading with haggling, nobles, domestic
+animals, external sites, and Dwarf Fortress's labor screen — nobody is
+assigned to be a baker: each dwarf has a trade they prefer and one they cannot
+stand, and they sort themselves out. Each dwarf is a single glyph with no
+limbs — a wound is just a number.
 
-## Referências
+## References
 
-Este é um "DF-like" no sentido de [Dwarf Fortress](https://en.wikipedia.org/wiki/Dwarf_Fortress):
-mundo em fatias verticais, ordens indiretas, personagens com histórias
-emergentes e a regra de que perder é divertido. Coisas parecidas em escala
-menor e que serviram de comparação: [DeepForge](https://minitech.itch.io/deep-forge)
-(colônia ASCII com sete anões), [Albert's ASCII Dwarfs Simulation](https://albertfreeman.itch.io/alberts-dwarfs-simulation)
-(só simulação, sem jogo), [Undholm](https://store.steampowered.com/app/982060/Undholm/).
-A ideia de um mundo que corre no canto da tela enquanto você trabalha vem de
-[Taskbar Colony](https://store.steampowered.com/app/5056060) e
-[Desktop Colony](https://store.steampowered.com/app/3825610); a de um plugin
-que vive no fundo do shell, do [Omalava](https://github.com/) e do
-[Omaland](https://github.com/bobby-nicholas/omaland) para omarchy-shell.
-O [catálogo de plugins do Omarchy](https://plugins.omarchy.org/) não tinha
-nenhum jogo ou simulação quando este foi escrito.
+This is a "DF-like" in the sense of
+[Dwarf Fortress](https://en.wikipedia.org/wiki/Dwarf_Fortress): a world in
+vertical slices, indirect orders, characters with emergent stories, and the
+rule that losing is fun. Similar things at a smaller scale that served as
+comparison: [DeepForge](https://minitech.itch.io/deep-forge) (an ASCII colony
+with seven dwarves), [Albert's ASCII Dwarfs Simulation](https://albertfreeman.itch.io/alberts-dwarfs-simulation)
+(simulation only, no game), [Undholm](https://store.steampowered.com/app/982060/Undholm/).
+The idea of a world running in the corner of the screen while you work comes
+from [Taskbar Colony](https://store.steampowered.com/app/5056060) and
+[Desktop Colony](https://store.steampowered.com/app/3825610); the idea of a
+plugin that lives at the bottom of the shell, from Omalava and
+[Omaland](https://github.com/bobby-nicholas/omaland) for omarchy-shell. The
+[Omarchy plugin catalog](https://plugins.omarchy.org/) had no game or
+simulation when this was written.
 
-## Desenvolvimento
+## Development
 
-`sim.js` é JavaScript puro, sem QML: `node test/run.js [semente] [anos]`
-joga uma fortaleza roteirizada e imprime a crônica, as estatísticas e mapas
-ASCII de três níveis. `node test/scenario.js [semente] [anos] [anões]` roda a
-fortaleza pronta e imprime o placar das ondas — é com ele que se afere o
-balanceamento acima. `test/debug.js` e `test/debug2.js` rastreiam caminhos
-e transições de trabalho — foi assim que se descobriu que os anões morriam
-de sede porque `step()` confundia "ainda andando" com "bloqueado".
+```
+make test      everything below
+make sim       the simulation, headless
+make i18n      both languages, the fallback, and key parity
+make hostile   what save.py refuses, in a throwaway $HOME
+make validate  omarchy plugin validate .
+```
 
-Arquivos: `manifest.json` · `World.qml` (singleton: relógio, salvamento,
-paleta) · `sim.js` (o mundo) · `palette.js` (tema → cores do mapa) ·
-`Fort.qml` (painel) · `Service.qml` (janelinha de canto) · `BarWidget.qml`.
+`sim.js` is plain JavaScript, no QML: `node test/run.js [seed] [years]` plays a
+scripted hold and prints the chronicle, the statistics and ASCII maps of three
+levels. `node test/scenario.js [seed] [years] [dwarves]` runs the ready hold
+and prints the wave scoreboard — it is what the balance figures above are
+measured with. `test/debug.js` and `test/debug2.js` trace paths and job
+transitions — that is how it was found that dwarves were dying of thirst
+because `step()` confused "still walking" with "blocked".
+
+Measure across twelve seeds or more, never one: any new `chance()` shifts how
+the RNG is consumed and changes the whole trajectory, so a single seed will
+tell you a mechanism did something when it did nothing at all.
+
+Files: `manifest.json` · `World.qml` (singleton: the clock, saving, the
+palette, the language) · `sim.js` (the world) · `I18n.js` (every word, in both
+languages) · `save.py` (the only thing that touches the disk) · `palette.js`
+(theme → map colors) · `Fort.qml` (the panel) · `Service.qml` (the corner
+window) · `BarWidget.qml`.
