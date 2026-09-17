@@ -592,6 +592,18 @@ nenhum jogo ou simulação quando este foi escrito.
 
 ## Desenvolvimento
 
+```
+make test      tudo abaixo
+make sim       a simulação, sem shell
+make i18n      os dois idiomas, o fallback e a paridade de chaves
+make deep      a relíquia da tumba e a corte das profundezas
+make halls     a lareira, o cristal, a mesa de jogo e as armadilhas
+make presets   cada predefinição construída, conferida e jogada um ano
+make surfaces  o que o painel e a janelinha têm de concordar
+make hostile   o que o save.py recusa, num $HOME descartável
+make validate  omarchy plugin validate .
+```
+
 `sim.js` é JavaScript puro, sem QML: `node test/run.js [semente] [anos]`
 joga uma fortaleza roteirizada e imprime a crônica, as estatísticas e mapas
 ASCII de três níveis. `node test/scenario.js [semente] [anos] [anões]` roda a
@@ -599,7 +611,11 @@ fortaleza pronta e imprime o placar das ondas — é com ele que se afere o
 balanceamento acima. `test/relic.js` e `test/court.js` dirigem as duas coisas no fundo do mundo que
 uma partida normal quase nunca alcança — uma tumba é uma chance de 2% por
 célula cavada no nível 1 — e verificam a cadeia inteira de cada uma.
-`test/debug.js` e `test/debug2.js` rastreiam caminhos
+`test/presets.js` constrói cada predefinição e a confere contra o que a
+descrição promete; `test/surfaces.js` lê a fonte e cobra das superfícies o que
+elas têm de concordar (honrar a névoa, testá-la na célula desenhada, desenhar
+todo prédio que existe) — foi ele que achou os túmulos que a janelinha nunca
+desenhou. `test/debug.js` e `test/debug2.js` rastreiam caminhos
 e transições de trabalho — foi assim que se descobriu que os anões morriam
 de sede porque `step()` confundia "ainda andando" com "bloqueado".
 
