@@ -159,6 +159,37 @@ Parentes, amigos, rivais e o que ele empunha aparecem na página do próprio
 anão, e a crônica registra o dia em que dois deles ficaram inseparáveis, o dia
 em que dois romperam, e cada perda que caiu em alguém.
 
+## Salões que valem arrumar
+
+Uma tocha ilumina quatro células e é só isso que ela faz, então um salão estava
+aceso ou não estava, e não havia nada para arrumar. Quatro coisas carregam um
+efeito, e as quatro estão na fortaleza pronta como demonstração:
+
+| `tecla` | | custo | o que faz |
+|---|---|---|---|
+| `h` | **lareira** `Ψ` | uma tora | ilumina um salão inteiro, tremulando; feridas fecham **duas vezes mais rápido** a até três células; os anões derivam para ela quando ociosos, e mais ainda à noite |
+| `y` | **coluna de cristal** `¥` | uma gema lapidada | o mesmo alcance, sem tremulação — e vale 90 na riqueza da fortaleza. Ficar perto dela é **+5** de humor, a melhor coisa de se olhar no jogo |
+| `m` | **mesa de jogo** `Ж` | uma tora | dois anões jogam: **+4** de humor cada e um vínculo que cresce quatro vezes mais rápido que num corredor. Um jogo em oito acaba mal e começa uma rivalidade |
+| `x` | **armadilha** `^` | uma barra de metal | 3–6 de dano em qualquer hostil que pisar nela, **três cargas**, e então se desmonta. Anões passam por cima em segurança |
+
+Uma lareira ou uma coluna alcança **mais que o dobro de uma tocha** (16,5
+contra 6,0 de luz somada no nível), então três delas acendem o que uma dúzia de
+tochas acendia.
+
+As armadilhas são a primeira defesa que você constrói em vez de guarnecer — um
+corredor de estacas é um custo recorrente de verdade em metal, em vez de um
+muro permanente, e é a resposta para uma milícia de quatro contra uma onda de
+nove.
+
+Medido em dezesseis fortalezas: **humor 55 → 74**, população 12,1 → 15,6, e
+nenhuma fortaleza perdida onde antes se perdia uma. O tick custa cerca de 6%
+mais por anão.
+
+A única coisa que precisou de calibragem: **um jogo dura doze ticks, não vinte
+e quatro.** Um anão na mesa não procura trabalho até o jogo acabar, e com vinte
+e quatro a fortaleza caiu para 10,9 anões e perdeu uma fortaleza. Ócio gasto um
+com o outro é de graça; ócio que ignora a despensa não é.
+
 ## Os mortos
 
 Quem cai fica onde caiu, e todo anão que passa por perto sente. Eles resolvem

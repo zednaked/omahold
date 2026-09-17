@@ -80,6 +80,9 @@ function build(theme) {
     item: css(mix(fg, bg, 0.25)), itemLog: css(yellow), itemStone: css(gray), itemOre: css(byellow), itemGem: css(bmag), itemFood: css(bgreen), itemBooze: css(byellow), itemCraft: css(cyan), itemWeapon: css(bwhite), itemArtifact: css(accent), itemRemains: css(gray),
     bKitchen: css(byellow), bSmelter: css(bred), bForge: css(bwhite), bTorch: css(byellow), bTraining: css(mix(fg, bg, 0.35)),
     itemBar: css(byellow), itemTool: css(bcyan), itemArmor: css(bwhite), itemMeal: css(bgreen), itemCutGem: css(mix(bmag, bwhite, 0.35)), itemJewel: css(mix(accent, bwhite, 0.5)), bJeweler: css(bmag),
+    // the four a hold builds for itself: fire, cut crystal, a game table and
+    // spikes under the floor
+    bHearth: css(bred), bCrystal: css(bcyan), bGames: css(byellow), bTrap: css(red),
     bStair: css(mix(fg, bg, 0.2)), bBed: css(magenta), bTable: css(yellow), bFarm: ground(green, 0.6), bFarmRipe: css(bgreen), bStill: css(byellow), bWorkshop: css(cyan), bWall: ground(gray, 0.15), bWallGlyph: css(mix(fg, bg, 0.3)), bDoor: css(yellow), bStock: css(mix(fg, bg, 0.75)), bStatue: css(bwhite),
     desig: css(accent, 0.28), desigGlyph: css(accent), desigBad: css(red, 0.35), desigBadGlyph: css(bred), cursor: css(accent), select: css(accent, 0.18),
     night: css(mix(bg, blue, 0.15), 0.62), rain: css(bblue, 0.5), snowGlyph: css(bwhite, 0.7),

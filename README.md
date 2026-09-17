@@ -163,6 +163,36 @@ Kin, friends, rivals and what they are carrying show on a dwarf's own page, and
 the chronicle records the day two of them became inseparable, the day two of
 them fell out, and every loss that landed on someone.
 
+## Halls worth arranging
+
+A torch lights four cells and that is all it does, so a hall was either lit or
+it was not, and there was nothing to arrange. Four things carry an effect
+instead, and all four are in the ready hold as a demonstration:
+
+| `key` | | cost | what it does |
+|---|---|---|---|
+| `h` | **hearth** `Ψ` | a log | lights a whole hall, wavering; wounds mend **twice as fast** within three cells; dwarves drift to it when idle, and hardest at night |
+| `y` | **crystal column** `¥` | a cut gem | the same reach, without the flicker — and worth 90 to the hold's wealth. Standing near it is **+5** mood, the best thing to look at in the game |
+| `m` | **game table** `Ж` | a log | two dwarves play: **+4** mood each and a tie that grows four times faster than a corridor. One game in eight ends badly and starts a rivalry |
+| `x` | **spike trap** `^` | a bar of metal | 3–6 damage to any hostile that steps on it, **three charges**, then it comes apart. Dwarves walk over it safely |
+
+A hearth or a column reaches **more than twice as far as a torch** (16.5
+against 6.0 of summed light on the level), so three of them light what a dozen
+torches did.
+
+The traps are the first defence you build rather than man — a corridor of
+spikes is a real, recurring cost in metal rather than a permanent wall, which
+is the answer to a militia of four against a wave of nine.
+
+Measured over sixteen fortresses: **mood 55 → 74**, population 12.1 → 15.6, and
+no fortress lost where one was lost before. A tick costs about 6% more per
+dwarf.
+
+The one thing that had to be tuned: **a game lasts twelve ticks, not
+twenty-four.** A dwarf at the table does not look for work until the game is
+over, and at twenty-four the hold dropped to 10.9 dwarves and lost a fortress.
+Idleness spent on each other is free; idleness that ignores the larder is not.
+
 ## The dead
 
 Whoever falls stays where they fell, and every dwarf who walks past feels it.
@@ -584,6 +614,7 @@ make test      everything below
 make sim       the simulation, headless
 make i18n      both languages, the fallback, and key parity
 make deep      the relic from the tomb and the court of the deep
+make halls     the hearth, the crystal column, the game table and the traps
 make hostile   what save.py refuses, in a throwaway $HOME
 make validate  omarchy plugin validate .
 ```

@@ -67,9 +67,10 @@ Item {
 
   // ---- tools ------------------------------------------------------------------
   readonly property var buildKeys: ({ b: Sim.B_BED, t: Sim.B_TABLE, f: Sim.B_FARM, w: Sim.B_WALL, p: Sim.B_DOOR, e: Sim.B_STOCK, o: Sim.B_WORKSHOP, d: Sim.B_STILL, s: Sim.B_STATUE,
-                                      c: Sim.B_KITCHEN, u: Sim.B_SMELTER, j: Sim.B_FORGE, l: Sim.B_TORCH, r: Sim.B_TRAINING, g: Sim.B_JEWELER })
-  readonly property var buildOrder: ["b", "t", "f", "e", "p", "w", "l", "o", "d", "c", "u", "j", "g", "r", "s"]
-  readonly property var buildGlyph: ({ 1: "X", 2: "θ", 3: "Π", 4: "≡", 5: "¶", 6: "⌂", 7: "O", 8: "+", 9: "=", 10: "Ω", 11: "π", 12: "∆", 13: "‡", 14: "¡", 15: "Ξ", 16: "◊", 17: "†" })
+                                      c: Sim.B_KITCHEN, u: Sim.B_SMELTER, j: Sim.B_FORGE, l: Sim.B_TORCH, r: Sim.B_TRAINING, g: Sim.B_JEWELER,
+                                      h: Sim.B_HEARTH, y: Sim.B_CRYSTAL, m: Sim.B_GAMES, x: Sim.B_TRAP })
+  readonly property var buildOrder: ["b", "t", "f", "e", "p", "w", "l", "h", "y", "m", "x", "o", "d", "c", "u", "j", "g", "r", "s"]
+  readonly property var buildGlyph: ({ 1: "X", 2: "θ", 3: "Π", 4: "≡", 5: "¶", 6: "⌂", 7: "O", 8: "+", 9: "=", 10: "Ω", 11: "π", 12: "∆", 13: "‡", 14: "¡", 15: "Ξ", 16: "◊", 17: "†", 18: "Ψ", 19: "¥", 20: "Ж", 21: "^" })
   // a list, not a binding: it has to be rebuilt when the language changes
   function viewModeList() {
     return [["normal", root.t("view.normal"), root.t("m.view.normal")],
@@ -552,7 +553,7 @@ Item {
       out.push({ t: "", c: "" })
       out.push({ t: root.t("h.legend"), c: "accent" })
       var legRow = "", legN = 0
-      for (var bq = 1; bq <= 17; bq++) {
+      for (var bq = 1; bq <= 21; bq++) {
         var bg = root.buildGlyph[bq]
         if (!bg) continue
         legRow += "  " + bg + " " + Sim.buildName(bq)
@@ -803,10 +804,10 @@ Item {
                 ctx.font = fpx + "px '" + root.mono + "'"
                 ctx.textAlign = "center"; ctx.textBaseline = "middle"
                 var sun = Sim.sunLevel(w), snow = w.weather === 2, rain = w.weather === 1
-                var RL = Sim.renderLight(w, w.tick), torchLight = RL.torch, fireLight = RL.fire
+                var RL = Sim.renderLight(w, w.tick), torchLight = RL.torch, fireLight = RL.fire, beaconLight = RL.beacon
                 var half = c / 2
                 var mode = World.viewMode
-                function bright(i, isOut) { var L = isOut ? Math.max(sun, torchLight[i], fireLight[i]) : Math.max(torchLight[i], fireLight[i]); return isOut ? 0.22 + 0.78 * L : 0.36 + 0.64 * L }
+                function bright(i, isOut) { var L = isOut ? Math.max(sun, torchLight[i], fireLight[i], beaconLight[i]) : Math.max(torchLight[i], fireLight[i], beaconLight[i]); return isOut ? 0.22 + 0.78 * L : 0.36 + 0.64 * L }
                 // pass 1: terrain
                 var fog = World.fog
                 for (var y = 0; y < HH; y++) for (var x = 0; x < WW; x++) {
@@ -884,18 +885,22 @@ Item {
                       case Sim.B_TORCH: glyph = "¡"; gcol = p.bTorch; break
                       case Sim.B_TRAINING: glyph = "Ξ"; gcol = p.bTraining; break
                       case Sim.B_JEWELER: glyph = "◊"; gcol = p.bJeweler; break
+                      case Sim.B_HEARTH: glyph = "Ψ"; gcol = p.bHearth; break
+                      case Sim.B_CRYSTAL: glyph = "¥"; gcol = p.bCrystal; break
+                      case Sim.B_GAMES: glyph = "Ж"; gcol = p.bGames; break
+                      case Sim.B_TRAP: glyph = "^"; gcol = p.bTrap; break
                     }
                   } else fill = p.bg
                   // lighting: sun on what lies under the sky, torches and magma anywhere,
                   // shadow behind rock; rock faces catch the light too
-                  if (k === 0 && b !== Sim.B_TORCH && t !== Sim.T_MAGMA) {
-                    var isOut = z >= w.ground[y * WW + x], tl = torchLight[i], fl = fireLight[i]
+                  if (k === 0 && b !== Sim.B_TORCH && b !== Sim.B_HEARTH && t !== Sim.T_MAGMA) {
+                    var isOut = z >= w.ground[y * WW + x], tl = Math.max(torchLight[i], beaconLight[i]), fl = fireLight[i]
                     var L = isOut ? Math.max(sun, tl, fl) : Math.max(tl, fl)
                     var solidCell = t !== Sim.T_OPEN || b === Sim.B_WALL
                     if (fill && fill !== p.bg) fill = Pal.lit(fill, p, L, tl, fl, sun, isOut, solidCell)
                     if (gcol) gcol = Pal.lit(gcol, p, Math.max(0.3, L), tl, fl, sun, isOut, solidCell)
-                  } else if (k === 0 && b === Sim.B_TORCH) {
-                    // the flame itself breathes
+                  } else if (k === 0 && (b === Sim.B_TORCH || b === Sim.B_HEARTH)) {
+                    // the flame itself breathes, on the torch and in the hearth
                     var fk = Sim.flickerAt(w, i, w.tick)
                     gcol = Pal.lit(gcol, p, 1, fk, 0, sun, false)
                   }
@@ -905,7 +910,7 @@ Item {
                   // lip on any side that faces open ground. Floor stays smooth, so you can
                   // tell at a glance where something can be built and where it is rock.
                   if (k === 0 && !glyphs && fill && fill !== p.bg && (t === Sim.T_SOIL || t === Sim.T_STONE || t === Sim.T_ORE || t === Sim.T_GEM || b === Sim.B_WALL)) {
-                    var eL = (z >= w.ground[y * WW + x]) ? Math.max(sun, torchLight[i], fireLight[i]) : Math.max(torchLight[i], fireLight[i])
+                    var eL = (z >= w.ground[y * WW + x]) ? Math.max(sun, torchLight[i], fireLight[i], beaconLight[i]) : Math.max(torchLight[i], fireLight[i], beaconLight[i])
                     var eg = Pal.edges(fill, p, eL)
                     ctx.fillStyle = eg.seam
                     ctx.fillRect(x * c, y * c, c, 1); ctx.fillRect(x * c, y * c, 1, c)

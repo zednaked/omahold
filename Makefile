@@ -5,10 +5,11 @@
 #   make i18n      both languages, the fallback, and key parity
 #   make hostile   what save.py refuses, in a throwaway $HOME
 #   make deep      the relic from the tomb and the court of the deep
+#   make halls     the hearth, the crystal, the game table and the traps
 
-.PHONY: test sim i18n hostile deep validate
+.PHONY: test sim i18n hostile deep halls validate
 
-test: sim i18n deep hostile
+test: sim i18n deep halls hostile
 
 sim:
 	@echo "== simulation =="
@@ -23,6 +24,10 @@ deep:
 	@echo "== the deep =="
 	@node test/relic.js | tail -1
 	@node test/court.js | tail -1
+
+halls:
+	@echo "== halls =="
+	@node test/halls.js | tail -1
 
 hostile:
 	@echo "== save.py =="

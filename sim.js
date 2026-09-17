@@ -34,8 +34,9 @@ var F_NONE = 0, F_SOIL = 1, F_STONE = 2, F_GRASS = 3, F_MOSS = 4
 var B_NONE = 0, B_STAIR = 1, B_BED = 2, B_TABLE = 3, B_FARM = 4, B_STILL = 5,
     B_WORKSHOP = 6, B_WALL = 7, B_DOOR = 8, B_STOCK = 9, B_STATUE = 10,
     B_KITCHEN = 11, B_SMELTER = 12, B_FORGE = 13, B_TORCH = 14, B_TRAINING = 15, B_JEWELER = 16,
-    B_GRAVE = 17
+    B_GRAVE = 17, B_HEARTH = 18, B_CRYSTAL = 19, B_GAMES = 20, B_TRAP = 21
 var TORCH_RADIUS = 4.5   // cells; light fades linearly to nothing at this distance
+var BEACON_RADIUS = 7    // a hearth or a crystal column lights a whole hall
 
 // ---- designations -----------------------------------------------------------
 var DG_NONE = 0, DG_DIG = 1, DG_STAIR = 2, DG_CHOP = 3, DG_BUILD = 4
@@ -47,7 +48,8 @@ BUILD_KEY[1] = "stair"; BUILD_KEY[2] = "bed"; BUILD_KEY[3] = "table"; BUILD_KEY[
 BUILD_KEY[5] = "still"; BUILD_KEY[6] = "workshop"; BUILD_KEY[7] = "wall"; BUILD_KEY[8] = "door"
 BUILD_KEY[9] = "stock"; BUILD_KEY[10] = "statue"; BUILD_KEY[11] = "kitchen"; BUILD_KEY[12] = "smelter"
 BUILD_KEY[13] = "forge"; BUILD_KEY[14] = "torch"; BUILD_KEY[15] = "training"; BUILD_KEY[16] = "jeweler"
-BUILD_KEY[17] = "grave"
+BUILD_KEY[17] = "grave"; BUILD_KEY[18] = "hearth"; BUILD_KEY[19] = "crystal"
+BUILD_KEY[20] = "games"; BUILD_KEY[21] = "trap"
 
 var BUILD_INFO = {}
 BUILD_INFO[B_BED]      = { name: "cama",       mat: "log",   value: 10, work: 18 }
@@ -68,6 +70,14 @@ BUILD_INFO[B_TRAINING] = { name: "campo de treino", mat: "stone", value: 15, wor
 BUILD_INFO[B_JEWELER]  = { name: "joalheria",  mat: "stone", value: 40, work: 34 }
 // Not built to order: a grave appears where someone was buried.
 BUILD_INFO[B_GRAVE]    = { name: "túmulo",     mat: "",      value: 8,  work: 0 }
+// Four things a hold builds for its own sake rather than to produce anything.
+// A torch lights four cells and that is all it does; these carry an effect,
+// which is what makes a hall worth arranging instead of merely lit.
+BUILD_INFO[B_HEARTH]   = { name: "lareira",    mat: "log",    value: 25, work: 24 }
+BUILD_INFO[B_CRYSTAL]  = { name: "coluna de cristal", mat: "cutgem", value: 90, work: 30 }
+BUILD_INFO[B_GAMES]    = { name: "mesa de jogo", mat: "log",  value: 18, work: 20 }
+BUILD_INFO[B_TRAP]     = { name: "armadilha",  mat: "bar",    value: 20, work: 20 }
+var TRAP_CHARGES = 3     // spikes bend; three foes and the thing is scrap
 
 var ITEM_VALUE = { log: 2, stone: 1, ore: 8, gem: 30, food: 2, booze: 3, craft: 12, weapon: 25, artifact: 400, remains: 0,
                    bar: 15, pick: 30, axe: 28, armor: 40, meal: 5, cutgem: 70, jewel: 130 }
@@ -655,7 +665,8 @@ function removeBuilding(w, i, byPlayer) {
 function cache(w) {
   if (w.cache && !w.dirty) return w.cache
   var c = { stills: [], shops: [], farms: [], beds: [], stocks: [], tables: [], statues: [], shrubs: [], water: [], desigs: [],
-            kitchens: [], smelters: [], forges: [], torches: [], trainings: [], jewelers: [], graves: [] }
+            kitchens: [], smelters: [], forges: [], torches: [], trainings: [], jewelers: [], graves: [],
+            hearths: [], crystals: [], games: [], traps: [], beacons: [] }
   var minG = 255, maxG = 0
   for (var gq = 0; gq < N; gq++) { var gv = w.ground[gq]; if (gv < minG) minG = gv; if (gv > maxG) maxG = gv }
   c.minGround = minG; c.maxGround = maxG
@@ -666,6 +677,9 @@ function cache(w) {
       else if (b === B_BED) c.beds.push(i); else if (b === B_STOCK) c.stocks.push(i); else if (b === B_TABLE) c.tables.push(i)
       else if (b === B_STATUE) c.statues.push(i); else if (b === B_KITCHEN) c.kitchens.push(i); else if (b === B_SMELTER) c.smelters.push(i)
       else if (b === B_FORGE) c.forges.push(i); else if (b === B_TORCH) c.torches.push(i); else if (b === B_TRAINING) c.trainings.push(i)
+      else if (b === B_HEARTH) { c.hearths.push(i); c.beacons.push(i) }
+      else if (b === B_CRYSTAL) { c.crystals.push(i); c.beacons.push(i) }
+      else if (b === B_GAMES) c.games.push(i); else if (b === B_TRAP) c.traps.push(i)
       else if (b === B_JEWELER) c.jewelers.push(i)
       else if (b === B_GRAVE) c.graves.push(i)
     }
@@ -684,8 +698,12 @@ function cache(w) {
     if ((fx > 0 && w.tile[fi - 1] === T_OPEN) || (fx < W - 1 && w.tile[fi + 1] === T_OPEN) || (fy > 0 && w.tile[fi - W] === T_OPEN) || (fy < H - 1 && w.tile[fi + W] === T_OPEN)) fires.push(fi)
   }
   c.fires = fires
-  c.light = lightField(w, c.torches, fires, null)
+  c.light = lightField(w, c.torches, fires.concat(c.beacons), null)
   c.fire = lightField(w, fires, [], null, 3, 0.9)
+  // Beacons are one field rather than two, because the only difference between
+  // a hearth and a crystal column is whether the light wavers — and that is a
+  // question the flicker function can answer per source.
+  c.beacon = lightField(w, c.beacons, [], null, BEACON_RADIUS, 1)
   w.cache = c; w.dirty = false
   return c
 }
@@ -773,14 +791,16 @@ function flickerAt(w, ti, tick) {
 // result is memoized per (world, tick, cache generation) and written into two
 // buffers that outlive the frame. `cache(w)` returns a fresh object whenever the
 // map changed, which is exactly when the field has to be redrawn.
-var rlTorch = null, rlFire = null
-var rlMemo = { w: null, tick: -1, gen: null, torch: null, fire: null }
+var rlTorch = null, rlFire = null, rlBeacon = null
+var rlMemo = { w: null, tick: -1, gen: null, torch: null, fire: null, beacon: null }
 function renderLight(w, tick) {
   var c = cache(w)
   if (rlMemo.w === w && rlMemo.tick === tick && rlMemo.gen === c) return rlMemo
-  if (!rlTorch) { rlTorch = new Float32Array(NN); rlFire = new Float32Array(NN) }
+  if (!rlTorch) { rlTorch = new Float32Array(NN); rlFire = new Float32Array(NN); rlBeacon = new Float32Array(NN) }
   rlMemo.torch = lightField(w, c.torches, [], function (ti) { return flickerAt(w, ti, tick) }, 0, 0, rlTorch)
   rlMemo.fire = lightField(w, c.fires, [], function (ti) { return 0.8 + 0.2 * ((hash(ti * 17 + tick) & 255) / 255) }, 3, 0.9, rlFire)
+  // a hearth wavers like the fire it is; cut crystal does not
+  rlMemo.beacon = lightField(w, c.beacons, [], function (ti) { return w.build[ti] === B_HEARTH ? flickerAt(w, ti, tick) : 1 }, BEACON_RADIUS, 1, rlBeacon)
   rlMemo.w = w; rlMemo.tick = tick; rlMemo.gen = c
   return rlMemo
 }
@@ -822,7 +842,7 @@ function sunLevel(w) {
 function outdoor(w, i) { return iz(i) >= w.ground[i % N] }
 // Light reaching a cell, 0..1: sun if it is under the sky, torches anywhere.
 function cellLight(w, i, sun) {
-  var c = cache(w), t = Math.max(c.light[i], c.fire[i])
+  var c = cache(w), t = Math.max(c.light[i], c.fire[i], c.beacon[i])
   if (outdoor(w, i)) { if (sun === undefined) sun = sunLevel(w); return Math.max(sun, t) }
   return t
 }
@@ -1223,6 +1243,22 @@ function nearBuilding(w, c, b, r) {
   }
   return false
 }
+// The same question asked of the cache instead of the map. `nearBuilding`
+// walks (2r+1)² cells whether or not the building exists anywhere, which is
+// fine under a `chance()` and ruinous once something asks it every tick for
+// every dwarf: the hearth's mending bonus alone took the tick from 102 µs to
+// 171. A hold has a handful of hearths and two game tables, so scanning the
+// list is a handful of comparisons and usually none at all.
+function nearAny(w, list, c, r) {
+  if (!list.length) return false
+  var x = ix(c), y = iy(c), z = iz(c)
+  for (var k = 0; k < list.length; k++) {
+    var j = list[k]
+    if (iz(j) !== z) continue
+    if (Math.abs(ix(j) - x) <= r && Math.abs(iy(j) - y) <= r) return true
+  }
+  return false
+}
 
 // ---- the dead ---------------------------------------------------------------
 // Remains left lying where someone fell weigh on everyone who walks past. The
@@ -1363,11 +1399,27 @@ function socialTick(w) {
       if (dd < nd) { nd = dd; near = o }
     }
     if (!near) continue
-    var hall = nearBuilding(w, u.i, B_TABLE, 2)
-    shiftBond(w, u, near, hall ? 2 : 1)
-    if (hall && bondTotal(u, near.id) >= BOND_FRIEND && chance(w, 0.06))
+    // Where they are standing decides how fast this goes: a game table is the
+    // fastest, then a hearth, then the meeting hall, then a corridor.
+    var cc = cache(w)
+    var rate = nearAny(w, cc.games, u.i, 1) ? 4 : nearAny(w, cc.hearths, u.i, 2) ? 3 : nearAny(w, cc.tables, u.i, 2) ? 2 : 1
+    shiftBond(w, u, near, rate)
+    if (rate >= 2 && bondTotal(u, near.id) >= BOND_FRIEND && chance(w, 0.06))
       thought(w, u, LF("th.withfriend", "bebeu a noite toda com {0}", first(near.name)), 3)
   }
+}
+// A game of something, at a table built for it. This is the only job in the
+// hold whose whole output is a tie between two dwarves — which is why it is
+// the last branch tried: nobody plays while there is work, and an idle hold
+// with a game table turns its idleness into friendships instead of wandering.
+function branchPlay(w, u) {
+  var gs = cache(w).games
+  if (!gs.length || u.mood >= 92 || w.hostiles > 0) return false
+  var g = nearestOf(gs, u.i)
+  if (g < 0 || dist(g, u.i) > 30) return false
+  if (!go(w, u, function (q) { return q === g || adjacent(q, g) }, g, 600)) return false
+  setJob(w, u, { k: "play", i: g, prog: 0 })
+  return true
 }
 // Standing at the grave. The one job in the hold that nobody ordered and that
 // produces nothing — which is the point: grief is work, and it is the
@@ -1652,7 +1704,8 @@ var BRANCHES = [
   { cat: "",      fn: takeOrder },   // orders carry their own kind; takeOrder sorts them
   { cat: "farm",  fn: branchGather },
   { cat: "fight", fn: branchTrain },
-  { cat: "haul",  fn: branchHaul }
+  { cat: "haul",  fn: branchHaul },
+  { cat: "",      fn: branchPlay }   // last: only ever instead of idling
 ]
 function economyJob(w, u) {
   if (gearJob(w, u)) return true
@@ -1679,6 +1732,8 @@ function idle(w, u) {
   u.wait = 3 + ri(w, 8)
   var target = -1
   if (chance(w, 0.35)) { var t = findBuilding(w, B_TABLE, u.i); if (t >= 0 && dist(t, u.i) < 25) target = t }
+  // a fire pulls harder than a table, and at night hardest of all
+  if (target < 0 && chance(w, isNight(w) ? 0.5 : 0.3)) { var hh = findBuilding(w, B_HEARTH, u.i); if (hh >= 0 && dist(hh, u.i) < 25) target = hh }
   if (target < 0) {
     var x = ix(u.i) + ri(w, 7) - 3, y = iy(u.i) + ri(w, 7) - 3
     if (inb(x, y, iz(u.i))) target = idx(x, y, iz(u.i))
@@ -1689,6 +1744,8 @@ function idle(w, u) {
     for (var k = 0; k < w.units.length; k++) { var o = w.units[k]; if (o !== u && o.k === "dwarf" && dist(o.i, u.i) <= 2) { thought(w, u, LF("th.talked", "conversou com {0}", o.name.split(" ")[0]), 2); break } }
   }
   if (nearBuilding(w, u.i, B_STATUE, 2) && chance(w, 0.05)) thought(w, u, L("th.statue", "admirou uma bela estátua"), 3)
+  if (nearAny(w, cache(w).crystals, u.i, 3) && chance(w, 0.05)) thought(w, u, L("th.crystal", "ficou olhando a luz dentro do cristal"), 5)
+  if (nearAny(w, cache(w).hearths, u.i, 2) && chance(w, 0.06)) thought(w, u, L("th.hearth", "esquentou-se junto ao fogo"), 3)
   if (nearBuilding(w, u.i, B_GRAVE, 2) && chance(w, 0.06)) thought(w, u, L("th.grave", "prestou respeito aos mortos da fortaleza"), 2)
 }
 
@@ -1737,6 +1794,7 @@ function work(w, u) {
       if (j.prog >= info.work) {
         if (info.mat) consumeCarried(w, u)
         w.build[j.i] = j.bt; w.desig[j.i] = DG_NONE; w.dbuild[j.i] = 0; w.grow[j.i] = 0; w.dirty = true
+        if (j.bt === B_TRAP) armTrap(w, j.i)
         w.stats.built++; gainSkill(w, u, "build", 1)
         if (j.bt === B_STOCK || j.bt === B_FARM) {} else thought(w, u, LF("th.built", "construiu {0}", buildName(j.bt)), 1)
         if (j.bt === B_WALL && u.i === j.i) u.i = nearestPassable(w, u.i)
@@ -1866,6 +1924,36 @@ function work(w, u) {
         dropJob(w, u)
       }
       return
+    case "play":
+      j.prog++
+      // Twelve ticks, not twenty-four. A dwarf at the table does not re-check
+      // for work until the game is over, so a long game makes them deaf to a
+      // new order: at 24 the hold went from 12.1 dwarves to 10.9 and lost one
+      // fortress in sixteen, and at 12 it goes to 15.6 with none lost and the
+      // mood up from 55 to 74. Idleness spent on each other is free; idleness
+      // that ignores the larder is not.
+      if (j.prog < 12) return
+      // Whoever else is at the table. Alone it is patience with a set of dice
+      // and worth very little; the point is the person across it.
+      var mate = null
+      for (var pq = 0; pq < w.units.length; pq++) {
+        var po = w.units[pq]
+        if (po === u || po.k !== "dwarf" || dist(po.i, u.i) > 2) continue
+        mate = po; break
+      }
+      if (!mate) { thought(w, u, L("th.played.alone", "passou um tempo com os dados"), 2); dropJob(w, u); return }
+      // Losing badly to somebody is one of the two ways a rivalry starts. The
+      // other is a fist in a tantrum, and this one is cheaper for everyone.
+      if (chance(w, 0.12)) {
+        thought(w, u, LF("th.played.lost", "perdeu feio para {0} e não achou graça", first(mate.name)), -2)
+        thought(w, mate, LF("th.played.won", "ganhou de {0} sem piedade", first(u.name)), 4)
+        shiftBond(w, u, mate, -6)
+      } else {
+        thought(w, u, LF("th.played", "jogou com {0}", first(mate.name)), 4)
+        thought(w, mate, LF("th.played", "jogou com {0}", first(u.name)), 4)
+        shiftBond(w, u, mate, 8)
+      }
+      dropJob(w, u); return
     case "mourn":
       j.prog++
       if (j.prog >= 20) {
@@ -2022,6 +2110,39 @@ function strangeMoodWork(w, u) {
       dropJob(w, u)
     }
   }
+}
+
+// ---- traps ------------------------------------------------------------------
+// The one defence the player builds rather than mans. Spikes under the floor,
+// a bar of metal each: they fire on whatever hostile steps on them and bend
+// doing it, so three foes is the life of one trap. That makes a corridor of
+// traps a real cost rather than a permanent wall, and it is the answer to a
+// hold whose militia is four dwarves against a wave of nine.
+//
+// Charges live in `w.grow`, which is per-cell, already saved, and only ever
+// read for farms — so a trap needs no new array.
+function trapCharges(w, i) { return w.build[i] === B_TRAP ? w.grow[i] : 0 }
+function armTrap(w, i) { if (w.build[i] === B_TRAP) { w.grow[i] = TRAP_CHARGES; w.dirty = true } }
+function trapFires(w, u) {
+  var i = u.i
+  if (w.build[i] !== B_TRAP) return false
+  // A trap built before charges existed, or one loaded from an old save, gets
+  // a full set the first time something walks onto it.
+  if (!w.grow[i]) w.grow[i] = TRAP_CHARGES
+  var dmg = 3 + ri(w, 4)
+  u.hp -= dmg
+  w.grow[i]--
+  w.stats.trapped = (w.stats.trapped || 0) + 1
+  if (u.hp <= 0) {
+    announce(w, LF("msg.trap.killed", "{0} morreu numa armadilha.", foeName(u, true)), 1)
+    w.stats.goblinsKilled = (w.stats.goblinsKilled || 0) + 1
+    removeUnit(w, u)
+  } else announce(w, LF("msg.trap.hit", "Uma armadilha acertou {0}.", foeName(u)), 0)
+  if (w.grow[i] <= 0) {
+    removeBuilding(w, i, false)
+    announce(w, L("msg.trap.spent", "Uma armadilha se desmontou depois do terceiro golpe."), 0)
+  }
+  return true
 }
 
 // ---- moods & tantrums -------------------------------------------------------
@@ -3161,6 +3282,7 @@ function tick(w) {
     else if (u.k === "kobold") actKobold(w, u)
     else if (u.k === "merchant") actMerchant(w, u)
     else if (u.k === "envoy") actEnvoy(w, u)
+    if (w.build[u.i] === B_TRAP && hostile(u)) { if (trapFires(w, u) && w.units.indexOf(u) < 0) continue }
     // liquids
     var t = w.tile[u.i]
     if (t === T_MAGMA) { if (u.k === "dwarf") die(w, u, L("death.magma", "queimou até a morte no magma")); else removeUnit(w, u) }
@@ -3176,7 +3298,9 @@ function actDwarf(w, u) {
   u.hunger += 0.22 * g; u.thirst += 0.33; u.sleep += (u.job && u.job.k === "sleep") ? 0 : 0.7
   if (u.hunger > 140 && w.tick % 12 === 0) { u.hp -= 1; if (u.hp <= 0) { die(w, u, L("death.starved", "morreu de fome")); return } }
   if (u.thirst > 140 && w.tick % 12 === 0) { u.hp -= 1; if (u.hp <= 0) { die(w, u, L("death.thirst", "morreu de sede")); return } }
-  if (u.hp < u.maxhp && w.tick % 40 === 0 && u.hunger < 80) u.hp++
+  // Mending happens twice as fast beside a fire, which is the one thing in the
+  // hold that helps a wounded dwarf without anybody working on it.
+  if (u.hp < u.maxhp && u.hunger < 80 && w.tick % (nearAny(w, cache(w).hearths, u.i, 3) ? 20 : 40) === 0) u.hp++
   moodTick(w, u)
   if (w.units.indexOf(u) < 0) return
   if (u.mood_state === "berserk") {
@@ -3295,13 +3419,24 @@ function scenario(w, n, opts) {
   var stock1 = []
   for (dy = -3; dy <= 3; dy++) for (dx = 2; dx <= 6; dx++) if (dy !== 0) { var s1 = place(w, cx, cy, z1, dx, dy, B_STOCK); if (s1 >= 0) stock1.push(s1) }
   place(w, cx, cy, z1, -4, 0, B_TORCH); place(w, cx, cy, z1, 4, 0, B_TORCH); place(w, cx, cy, z1, -1, 0, B_TORCH); place(w, cx, cy, z1, 1, 0, B_TORCH)
+  // spikes in the entrance corridor, where everything that comes through the
+  // gate has to walk: three foes each and then they are scrap
+  place(w, cx, cy, z1, 0, -3, B_TRAP); place(w, cx, cy, z1, 0, -2, B_TRAP)
+  armTrap(w, idx(cx, cy - 3, z1)); armTrap(w, idx(cx, cy - 2, z1))
   // level 2: dining hall, kitchen, still, statue
   carveRect(w, cx, cy, z2, -8, -4, 8, 4)
   var tx = [-6, -4, -2, 2, 4, 6]
   for (k = 0; k < tx.length; k++) { place(w, cx, cy, z2, tx[k], -2, B_TABLE); place(w, cx, cy, z2, tx[k], 2, B_TABLE) }
   place(w, cx, cy, z2, -7, -4, B_KITCHEN); place(w, cx, cy, z2, -5, -4, B_STILL); place(w, cx, cy, z2, 7, -4, B_STILL)
   place(w, cx, cy, z2, 0, -4, B_STATUE); place(w, cx, cy, z2, 0, 4, B_STATUE)
-  place(w, cx, cy, z2, -7, 0, B_TORCH); place(w, cx, cy, z2, -3, 0, B_TORCH); place(w, cx, cy, z2, 3, 0, B_TORCH); place(w, cx, cy, z2, 7, 0, B_TORCH)
+  // A hall the hold arranged rather than merely dug: the fire in the middle of
+  // it, a game table on each side of the fire, and a crystal column paid for
+  // out of the jeweler's work. The ready hold is also the demonstration of
+  // what can be built, so everything with an effect is in it somewhere.
+  place(w, cx, cy, z2, 0, -2, B_HEARTH)     // (0,0) is the staircase on every level
+  place(w, cx, cy, z2, -1, 2, B_GAMES); place(w, cx, cy, z2, 1, 2, B_GAMES)
+  place(w, cx, cy, z2, 8, 4, B_CRYSTAL)
+  place(w, cx, cy, z2, -7, 0, B_TORCH); place(w, cx, cy, z2, 7, 0, B_TORCH)
   place(w, cx, cy, z2, -7, 4, B_TORCH); place(w, cx, cy, z2, 7, 4, B_TORCH)
   // level 3: dormitory west, industry east, training yard, stockpile for ore and bars
   carveRect(w, cx, cy, z3, -8, -4, 8, 4)
@@ -3478,7 +3613,7 @@ var JOB_PT = { dig: "cavando", digstair: "cavando escada", chop: "cortando", bui
   brew: "fermentando", craft: "criando", haul: "carregando", eat: "comendo", forage: "coletando", drink: "bebendo", drinkwater: "bebendo água",
   sleep: "dormindo", fight: "lutando", arm: "pegando arma", mood: "humor estranho", flee: "fugindo", idle: "ocioso",
   equip: "equipando", train: "treinando", cook: "cozinhando", smelt: "fundindo", forge: "forjando", cut: "lapidando", setgem: "fazendo joia",
-  bury: "sepultando os mortos", mourn: "velando os mortos" }
+  bury: "sepultando os mortos", mourn: "velando os mortos", play: "jogando" }
 function jobName(u) {
   if (!u.job) return u.mood_state === "melancholy" ? L("mood.melancholy", "melancólico") : u.mood_state === "berserk" ? L("mood.berserk", "furioso") : L("job.idle", "ocioso")
   var j = u.job, key = j.k === "dig" && j.stair ? "digstair" : j.k
