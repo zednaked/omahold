@@ -1000,7 +1000,11 @@ Item {
                   spacing: Style.space(8)
                   opacity: 0.45 + 0.14 * index
                   Text { width: Style.space(52); font.family: root.mono; font.pixelSize: Style.font.caption; color: Util.alpha(Color.popups.text, 0.6); text: { var d = Sim.date({ tick: modelData.t }); return d.seasonName.substr(0, 3) + " d" + d.day } }
-                  Text { width: foot.width - Style.space(60); elide: Text.ElideRight; font.family: root.mono; font.pixelSize: Style.font.bodySmall; color: modelData.l === 2 ? Color.urgent : modelData.l === 1 ? Color.accent : Color.popups.text; text: modelData.m }
+                  // The announcements are the stories: a caravan arriving, an
+                  // artifact being named, a wave repelled. Eliding them cut off
+                  // the end, which is the part worth reading. The Row grows in
+                  // height and the Column above accommodates it.
+                  Text { width: foot.width - Style.space(60); wrapMode: Text.Wrap; font.family: root.mono; font.pixelSize: Style.font.bodySmall; color: modelData.l === 2 ? Color.urgent : modelData.l === 1 ? Color.accent : Color.popups.text; text: modelData.m }
                 }
               }
             }
@@ -1023,11 +1027,13 @@ Item {
           Rectangle {
             visible: root.status !== "" && !root.menuOpen
             anchors { horizontalCenter: mapFrame.horizontalCenter; bottom: mapFrame.bottom; bottomMargin: Style.space(12) }
-            width: toastText.implicitWidth + Style.space(28); height: toastText.implicitHeight + Style.space(14)
+            width: toastText.width + Style.space(28); height: toastText.implicitHeight + Style.space(14)
             radius: height / 2
             color: Util.alpha(Color.popups.background, 0.92)
             border.width: 1; border.color: Util.alpha(Color.accent, 0.5)
-            Text { id: toastText; anchors.centerIn: parent; font.family: root.mono; font.pixelSize: Style.font.bodySmall; color: Color.popups.text; text: root.status; width: Math.min(implicitWidth, mapFrame.width - Style.space(60)); elide: Text.ElideRight }
+            // wrap, not elide: these are the key hints, and eliding cut them at
+            // the end - which is the half that says what to press
+            Text { id: toastText; anchors.centerIn: parent; font.family: root.mono; font.pixelSize: Style.font.bodySmall; color: Color.popups.text; text: root.status; width: Math.min(implicitWidth, mapFrame.width - Style.space(60)); wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter }
           }
           Rectangle {
             visible: root.status === "" && !root.menuOpen
@@ -1088,7 +1094,10 @@ Item {
                       // title
                       Text { id: mTitle; visible: modelData.kind === "title"; font.family: root.mono; font.pixelSize: Style.font.heading; font.bold: true; color: Color.popups.text; text: modelData.t || "" }
                       Text { id: mSub; visible: modelData.kind === "title" && !!modelData.sub; anchors.top: mTitle.bottom; anchors.topMargin: 4; width: parent.width; wrapMode: Text.Wrap; font.family: root.mono; font.pixelSize: Style.font.caption; color: Util.alpha(Color.popups.text, 0.55); text: modelData.sub || "" }
-                      Text { id: mNote; visible: modelData.kind === "note"; font.family: root.mono; font.pixelSize: Style.font.bodySmall; color: Util.alpha(Color.popups.text, 0.55); text: modelData.t || "" }
+                      // width and wrap, or a long note runs off the menu: the
+                      // longest string in the game is one of these, and English
+                      // makes it 30% longer than the Portuguese it was sized for
+                      Text { id: mNote; visible: modelData.kind === "note"; width: parent.width - Style.space(24); wrapMode: Text.Wrap; font.family: root.mono; font.pixelSize: Style.font.bodySmall; color: Util.alpha(Color.popups.text, 0.55); text: modelData.t || "" }
                       // item
                       Rectangle {
                         visible: parent.isItem
@@ -1106,7 +1115,8 @@ Item {
                         color: parent.current ? Color.accent : (modelData.empty ? Util.alpha(Color.popups.text, 0.5) : Color.popups.text)
                         text: modelData.t || ""
                         width: parent.width - Style.space(24) - (mKey.visible ? mKey.width + Style.space(8) : 0) - (mHint.visible ? mHint.implicitWidth + Style.space(8) : 0)
-                        elide: Text.ElideRight
+                        wrapMode: modelData.wrap ? Text.Wrap : Text.NoWrap
+                        elide: modelData.wrap ? Text.ElideNone : Text.ElideRight
                       }
                       Text {
                         id: mHintWrap

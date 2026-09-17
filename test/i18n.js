@@ -54,5 +54,17 @@ const missing_pt = en_keys.filter(k => !(k in I18n.STRINGS.pt))
 const missing_en = pt_keys.filter(k => !(k in I18n.STRINGS.en))
 ok(missing_pt.length === 0, "faltam no pt: " + missing_pt.join(", "))
 ok(missing_en.length === 0, "faltam no en: " + missing_en.join(", "))
+// 5. strings longas: só sobrevivem em linhas com wrap, e o painel corta o resto
+// com "..." justamente no fim, que é a metade que interessa. Isto não falha —
+// avisa, para quem acrescentar uma string conferir onde ela é desenhada.
+const WIDE = 62
+const rendered = s => String(s).replace(/\{\d\}/g, "      ").length
+const wide = en_keys.filter(k => rendered(I18n.STRINGS.en[k]) > WIDE || rendered(I18n.STRINGS.pt[k]) > WIDE)
+if (wide.length) {
+  console.log(`\n${wide.length} strings passam de ${WIDE} colunas — precisam de linha com wrap:`)
+  for (const k of wide.slice(0, 6)) console.log(`  ${String(rendered(I18n.STRINGS.en[k])).padStart(3)} col  ${k}`)
+  if (wide.length > 6) console.log(`  … e mais ${wide.length - 6}`)
+}
+
 console.log(`\n${en_keys.length} chaves em cada idioma · ${fails} falha(s)`)
 process.exit(fails ? 1 : 0)
