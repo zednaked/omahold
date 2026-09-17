@@ -272,6 +272,40 @@ lado dos estoques, escavada e cheia, com o poço puxando de um lado e a comporta
 segurando o outro. O que significa que a alavanca, numa fortaleza recém-criada,
 inunda o próprio salão. É um aviso justo sobre para que serve a alavanca.
 
+## Artefatos são sobre alguma coisa
+
+Um artefato era um nome e uma frase de uma tabela — *"traz a imagem de queijo"*
+— charmoso uma vez, e depois claramente desligado da fortaleza de onde saiu. O
+único objeto lendário que uma fortaleza faria não dizia nada sobre ela.
+
+Um humor estranho agora **parte de algo que aconteceu**, e a coisa que eles
+fazem registra isso. Os próprios mortos pesam mais, porque é o que o anão está
+remoendo; depois os vivos por quem ele sente algo; depois o que a fortaleza
+passou — uma onda que quebrou no portão, um cerco, a tumba, a relíquia, um
+pacto ou uma dívida com as profundezas, o barão, as caravanas, os túmulos, o
+magma, e o artefato que alguém fez antes deste. A fundação está sempre
+disponível, então nunca falta o que gravar.
+
+Metade das vezes o título leva o sobrenome de quem ele retrata, e a cena diz o
+que ele mostra:
+
+```
+"Coroa de idsenursen"  — retrata idsenursen, feito antes dele nesta mesma fortaleza
+"Raiz de Rochavelha"   — traz a imagem de Udib e de quem o fez, lado a lado. É uma despedida
+"Lua da Tempestade"    — retrata o nível 2 e a coisa que acordou nele
+```
+
+A inspiração é decidida quando o humor bate, não quando o trabalho acaba, então
+o objeto é sobre o que o tomou mesmo que a fortaleza já tenha seguido adiante.
+Fica gravada no artefato e sobrevive ao save, e os artefatos de um anão
+aparecem por nome na página Vidas dele — a crônica registra que um artefato foi
+feito, mas não que foi este anão que o fez.
+
+Toda fortaleza pronta começa com uma **herança**, feita sobre o que aquela
+predefinição é: a fundação na maioria, um parente numa fortaleza de famílias, as
+profundezas numa que já cavou até lá. O embarque clássico começa sem história
+nenhuma, que é o sentido de um embarque clássico.
+
 ## Vidas
 
 A página Lendas tem tudo o que aconteceu, em ordem. Isso é um registro, não uma
@@ -692,6 +726,7 @@ make halls     a lareira, o cristal, a mesa de jogo e as armadilhas
 make presets   cada predefinição construída, conferida e jogada um ano
 make surfaces  o que o painel e a janelinha têm de concordar
 make lives     a crônica lida como a biografia de um anão
+make artifacts sobre o que é um humor estranho, e o que ele grava no objeto
 make hostile   o que o save.py recusa, num $HOME descartável
 make validate  omarchy plugin validate .
 ```

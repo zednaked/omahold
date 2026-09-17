@@ -272,6 +272,42 @@ stores, cut and filled, with the well drawing from one side and the gate
 holding the other. Which means the lever in a fresh fortress floods its own
 hall. That is a fair warning about what the lever is for.
 
+## Artifacts are about something
+
+An artifact was a name and a sentence from a table — *"it bears an image of
+cheese"* — charming once, and then plainly disconnected from the fortress it
+came out of. The one legendary object a hold would ever make said nothing about
+the hold.
+
+A strange mood now **starts from something that happened**, and the thing they
+make records it. Their own dead weigh most, because that is what the dwarf has
+been turning over; then the living they have feelings about; then what the hold
+as a whole has been through — a wave that broke on the gate, a siege, the tomb,
+the relic, a pact or a grudge with the deep, the baron, the caravans, the
+graves, the magma, and the artifact somebody made before this one. The founding
+is always available, so there is never nothing to carve.
+
+Half the time the title takes the house name of whoever it is about, and the
+scene says what it shows:
+
+```
+"the Crown of idsenursen"  — it depicts idsenursen, made before it in this same fortress
+"the Root of Stoneold"     — it bears an image of Udib and of the maker, side by side. It is a farewell
+"the Moon of Storms"       — it depicts level 2 and the thing that woke in it
+```
+
+The inspiration is decided when the mood strikes, not when the work finishes,
+so the object is about the thing that set them off even if the fortress has
+moved on by the time it is done. It is kept on the artifact and survives the
+save, and a dwarf's own artifacts are listed by name on their Lives page —
+the chronicle records that an artifact was made, but not that this is the dwarf
+who made it.
+
+Every ready hold starts with one **heirloom**, made about what that preset is
+about: the founding for most, a relative for a hold of families, the deep for
+one that has already dug to it. A classic embark starts with no history, which
+is the point of a classic embark.
+
 ## Lives
 
 The Legends page has everything that ever happened, in order. That is a record,
@@ -719,6 +755,7 @@ make halls     the hearth, the crystal column, the game table and the traps
 make presets   every preset built, checked against its blurb and played a year
 make surfaces  what the panel and the corner window have to agree on
 make lives     the chronicle read back as one dwarf's biography
+make artifacts what a strange mood is about, and what it puts on the object
 make hostile   what save.py refuses, in a throwaway $HOME
 make validate  omarchy plugin validate .
 ```

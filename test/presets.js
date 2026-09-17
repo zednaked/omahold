@@ -70,6 +70,11 @@ for (const pr of S.PRESETS) {
     for (const u of ds) for (const id in (u.bonds || {})) if (u.bonds[id] >= S.BOND_FRIEND) fr++
     check(fr / 2 >= 3, label + " starts with friendships already formed (" + fr / 2 + ")")
   }
+  // the heirloom: a ready hold owns one artifact, made about something
+  if (want.scenario !== false) {
+    check(w.artifacts.length >= 1, label + " owns an heirloom")
+    if (w.artifacts.length) check(!!w.artifacts[0].about, label + "'s heirloom is about something")
+  } else check(w.artifacts.length === 0, label + " starts with no history")
   // water: the cistern, the well drawing from it and the gate holding it back
   if (want.well) {
     check(c.wells.length >= 1, label + " has a well")

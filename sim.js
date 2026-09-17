@@ -224,12 +224,20 @@ var ART_TAIL = ["Ameaça com espinhos de cobre.", "Traz a imagem de um anão e u
 function tbl(key, fallback) { return I18N && I18N.table ? I18N.table(I18N_LANG, key) : fallback }
 function dwarfName(w) { return pick(w, SYL_A) + pick(w, SYL_B) + " " + pick(w, tbl("SUR_A", SUR_A)) + pick(w, tbl("SUR_B", SUR_B)) }
 function fortName(w) { return pick(w, tbl("FORT_A", FORT_A)) + " " + pick(w, tbl("FORT_B", FORT_B)) }
-function artifactName(w, mat) {
+function artifactName(w, mat, about) {
   var mats = tbl("ART_MAT", ART_MAT), dflt = tbl("ART_MAT_DEFAULT", "de pedra")
+  // When the thing is about somebody, half the time it is named after them —
+  // "the Blade of Stoneborn" rather than "the Blade of the Seven".
+  var second = (about && about.who && about.k !== "founding" && chance(w, 0.5))
+    ? LF("art.of", "de {0}", lastName(about.who))
+    : pick(w, tbl("ART_B", ART_B))
   return pick(w, SYL_A).toLowerCase() + pick(w, SYL_B) + pick(w, SYL_A).toLowerCase() + pick(w, SYL_B) + "|"
-    + pick(w, tbl("ART_A", ART_A)) + " " + pick(w, tbl("ART_B", ART_B)) + "|"
-    + pick(w, tbl("ART_KIND", ART_KIND)) + " " + (mats[mat] || dflt) + ". " + pick(w, tbl("ART_TAIL", ART_TAIL))
+    + pick(w, tbl("ART_A", ART_A)) + " " + second + "|"
+    + pick(w, tbl("ART_KIND", ART_KIND)) + " " + (mats[mat] || dflt) + ". " + artScene(w, about)
 }
+// The house name: "Rochaviva" out of "Erok Rochaviva". A single-word name (the
+// fortress, a relic) is its own last word.
+function lastName(n) { var p = String(n || "").split(" "); return p[p.length - 1] }
 
 // ---- noise ------------------------------------------------------------------
 // Value noise: a lattice of random values and smooth interpolation between
@@ -2107,6 +2115,81 @@ function nearestPassable(w, i) {
 }
 
 // ---- strange moods ----------------------------------------------------------
+// ---- what inspires them -----------------------------------------------------
+// An artifact was a name and a sentence out of a table: "it bears an image of
+// cheese." Charming once, and then plainly disconnected from the fortress it
+// came out of — the one legendary object the hold would ever make said nothing
+// about the hold.
+//
+// A strange mood now starts from something that actually happened, and the
+// thing they make records it. Personal losses weigh most, because they are
+// what the dwarf has been thinking about; the founding is always available, so
+// there is never nothing to carve.
+function inspiration(w, u) {
+  var c = [], k, yr = date(w).year
+  // Their own dead, first and loudest. Twice in the list, because this is what
+  // a dwarf in a strange mood is actually turning over.
+  var recent = (w.dead || []).filter(function (d) { return w.tick - d.t < YEAR })
+  for (k = recent.length - 1; k >= 0 && k > recent.length - 6; k--) {
+    var dn = recent[k].name
+    c.push({ k: "lost", who: dn, year: date({ tick: recent[k].t }).year })
+    if (u.lostKin === dn) { c.push({ k: "lost_kin", who: dn }); c.push({ k: "lost_kin", who: dn }) }
+    else if (u.lostFriend === dn) { c.push({ k: "lost_friend", who: dn }); c.push({ k: "lost_friend", who: dn }) }
+  }
+  // The living they have feelings about.
+  var bm = bondMap(u)
+  for (var id in bm) {
+    var o = unitById(w, parseInt(id, 10))
+    if (!o || o.k !== "dwarf") continue
+    if (isKin(u, o.id)) c.push({ k: "kin", who: o.name })
+    else if (bm[id] >= BOND_FRIEND) c.push({ k: "friend", who: o.name })
+    else if (bm[id] <= BOND_RIVAL) c.push({ k: "rival", who: o.name })
+  }
+  for (k = 0; k < (u.kin || []).length; k++) { var ku = unitById(w, u.kin[k]); if (ku) c.push({ k: "kin", who: ku.name }) }
+  // What the hold as a whole has been through.
+  if (w.stats.raids > 0) c.push({ k: "repelled", year: yr })
+  if (w.siege || (w.stats.raids || 0) > 3) c.push({ k: "siege" })
+  if (w.tomb) c.push({ k: "tomb" })
+  if (w.relic) c.push({ k: "relic", who: w.relic.nm })
+  if (w.pact) c.push({ k: "pact" })
+  if (w.grudge) c.push({ k: "grudge" })
+  if (w.stirred) c.push({ k: "depths", year: digDepth(w) })
+  if (w.baron) { var bu = unitById(w, w.baron); if (bu) c.push({ k: "baron", who: bu.name }) }
+  if ((w.stats.caravans || 0) > 0) c.push({ k: "caravan" })
+  if ((w.done || {}).artifact && w.artifacts.length) c.push({ k: "artifact", who: w.artifacts[w.artifacts.length - 1].name })
+  if ((w.done || {}).depths) c.push({ k: "magma" })
+  if ((w.stats.buried || 0) > 0) c.push({ k: "graves" })
+  // always something: the day they got here
+  c.push({ k: "founding", who: w.name, year: 1 })
+  return pick(w, c)
+}
+// The sentence on the artifact. Kept here rather than in the name tables
+// because it is about the fortress, not about decoration.
+function artScene(w, about) {
+  if (!about) return pick(w, tbl("ART_TAIL", ART_TAIL))
+  var who = about.who || "", yr = about.year || date(w).year
+  switch (about.k) {
+    case "lost_kin": return LF("art.sc.lost_kin", "Traz a imagem de {0}, do mesmo sangue de quem o fez. {0} está caindo.", first(who))
+    case "lost_friend": return LF("art.sc.lost_friend", "Traz a imagem de {0} e de quem o fez, lado a lado. É uma despedida.", first(who))
+    case "lost": return LF("art.sc.lost", "Traz a imagem de {0}, que morreu no ano {1}.", first(who), yr)
+    case "kin": return LF("art.sc.kin", "Traz a imagem de {0}, da mesma família de quem o fez.", first(who))
+    case "friend": return LF("art.sc.friend", "Traz a imagem de {0}. As duas figuras estão rindo.", first(who))
+    case "rival": return LF("art.sc.rival", "Traz a imagem de {0}, de costas.", first(who))
+    case "repelled": return LF("art.sc.repelled", "Retrata a onda que quebrou no portão no ano {0}.", yr)
+    case "siege": return L("art.sc.siege", "Retrata portas trancadas, e o que esperava do outro lado.")
+    case "tomb": return L("art.sc.tomb", "Retrata uma tumba aberta e o rei sem nome dentro dela.")
+    case "relic": return LF("art.sc.relic", "Retrata {0} mudando de mãos nas profundezas.", who)
+    case "pact": return L("art.sc.pact", "Retrata um acordo com algo que mora abaixo da rocha.")
+    case "grudge": return L("art.sc.grudge", "Retrata o que esta fortaleza ficou devendo às profundezas.")
+    case "depths": return LF("art.sc.depths", "Retrata o nível {0} e a coisa que acordou nele.", yr)
+    case "baron": return LF("art.sc.baron", "Retrata {0} de coroa, maior do que deveria ser.", first(who))
+    case "caravan": return L("art.sc.caravan", "Retrata mercadores das Montanhas-Lar e o que eles trouxeram.")
+    case "artifact": return LF("art.sc.artifact", "Retrata {0}, feito antes dele nesta mesma fortaleza.", who)
+    case "magma": return L("art.sc.magma", "Retrata o fogo no fundo do mundo.")
+    case "graves": return L("art.sc.graves", "Retrata o canto quieto onde esta fortaleza deita os seus mortos.")
+    default: return LF("art.sc.founding", "Traz a imagem da fundação de {0}.", who || w.name)
+  }
+}
 function maybeStrangeMood(w) {
   if (w.tick - w.lastMoodTick < YEAR / 3 || w.tick < YEAR / 8) return
   if (!chance(w, 0.0025)) return
@@ -2117,6 +2200,10 @@ function maybeStrangeMood(w) {
   var mats = ["log", "stone", "gem", "ore"]
   var want = pick(w, mats)
   u.mood_state = "strange"; u.moodWant = want; u.moodSince = w.tick
+  // What they cannot stop thinking about. Decided when the mood strikes, not
+  // when the work finishes, so the thing they make is about the thing that set
+  // them off — even if the fortress has moved on by the time it is done.
+  u.moodAbout = inspiration(w, u)
   setJob(w, u, { k: "mood", i: -1, stage: "claim", want: want, prog: 0, since: w.tick })
   announce(w, LF("msg.mood.struck", "{0} foi tomado por um humor estranho!", u.name), 1)
 }
@@ -2166,9 +2253,10 @@ function strangeMoodWork(w, u) {
     j.prog++
     if (j.prog >= DAY) {
       consumeCarried(w, u)
-      var nm = artifactName(w, j.want).split("|")
+      var nm = artifactName(w, j.want, u.moodAbout).split("|")
       var art = addItem(w, "artifact", j.i); art.name = nm[0]; art.title = nm[1]; art.desc = nm[2]; art.maker = u.name
-      w.artifacts.push({ name: nm[0], title: nm[1], desc: nm[2], maker: u.name, t: w.tick })
+      w.artifacts.push({ name: nm[0], title: nm[1], desc: nm[2], maker: u.name, t: w.tick, about: u.moodAbout || null })
+      u.moodAbout = null
       w.stats.artifacts++
       u.skills.craft = Math.max(u.skills.craft, 12)
       u.mood_state = ""; thought(w, u, L("th.artifact", "criou um artefato lendário"), 25)
@@ -2305,6 +2393,8 @@ function die(w, u, how) {
       // know what that means, so it still costs something — just not grief.
       if (tie <= BOND_RIVAL) { thought(w, o, LF("th.lost.rival", "não vai chorar por {0}", first(u.name)), -1); continue }
       if (kin || tie >= BOND_FRIEND) {
+        // remembered by name, which is what a strange mood reaches for later
+        if (kin) o.lostKin = u.name; else o.lostFriend = u.name
         var deep = Math.round((kin ? 16 : 12) * (o.trait === "melancólico" ? 1.4 : 1))
         thought(w, o, kin ? LF("th.lost.kin", "perdeu {0}, do seu próprio sangue", first(u.name))
                           : LF("th.lost.friend", "perdeu {0}, o seu amigo", first(u.name)), -deep)
@@ -2863,8 +2953,9 @@ function maybeTomb(w, u, i) {
   // `Math.max(1, …)`, because this doubles as the "already found" guard and a
   // tick of 0 is falsy: the tomb would be findable again forever
   w.tomb = Math.max(1, w.tick)
-  var nm = artifactName(w, "gem").split("|")
-  w.artifacts.push({ name: nm[0], title: nm[1], desc: nm[2], maker: L("king.maker", "um rei perdido"), t: w.tick })
+  var tombAbout = { k: "tomb" }
+  var nm = artifactName(w, "gem", tombAbout).split("|")
+  w.artifacts.push({ name: nm[0], title: nm[1], desc: nm[2], maker: L("king.maker", "um rei perdido"), t: w.tick, about: tombAbout })
   w.stats.artifacts++
   addItem(w, "artifact", i)
   announce(w, LF("msg.tomb", "Uma tumba! {0}, '{1}', jazia aqui com um rei esquecido.", nm[0], nm[1]), 2)
@@ -3727,6 +3818,30 @@ function scenario(w, n, opts) {
       if (k % 4 === 0) { bondMap(a1)[b1.id] = BOND_FRIEND + 5; bondMap(b1)[a1.id] = BOND_FRIEND + 5 }
     }
   }
+  // An heirloom: one artifact the hold already owns, made about the thing the
+  // preset is about — the founding for most, a relative for a hold of
+  // families, the deep for one that has dug to it. A ready fortress with no
+  // history at all is a contradiction, and this is the fastest way to show
+  // what an artifact says about the place it came from.
+  if (opts.heirloom !== false) {
+    var hds = dwarves(w)
+    if (hds.length) {
+      var maker = hds[ri(w, hds.length)]
+      var about = opts.kin ? { k: "kin", who: (function () {
+          for (var hq = 0; hq < hds.length; hq++) if (hds[hq] !== maker) return hds[hq].name
+          return maker.name
+        })() }
+        : opts.deepShaft ? { k: "depths", year: digDepth(w) }
+        : { k: "founding", who: w.name, year: 1 }
+      var hn = artifactName(w, opts.deepShaft ? "gem" : "stone", about).split("|")
+      w.artifacts.push({ name: hn[0], title: hn[1], desc: hn[2], maker: maker.name, t: 0, about: about })
+      w.stats.artifacts++
+      var hi = stock3.length ? stock3[0] : w.depot
+      var hit = addItem(w, "artifact", hi)
+      hit.name = hn[0]; hit.title = hn[1]; hit.desc = hn[2]; hit.maker = maker.name
+      maker.made = (maker.made || 0) + 1
+    }
+  }
   // Wave sizing for the showcase hold. The old curve (step 1.5, cap 12) wiped the
   // fortress in five seeds out of eight inside two years, which is a fine Dwarf
   // Fortress ending but a poor first impression for a preset named "ready".
@@ -3949,6 +4064,7 @@ function deserialize(json) {
   if (typeof w.grudge !== "number") w.grudge = 0
   if (typeof w.gatesOpen !== "boolean") w.gatesOpen = false
   if (typeof w.militiaWant !== "number") w.militiaWant = 0
+  for (var aq = 0; aq < (w.artifacts || []).length; aq++) if (w.artifacts[aq].about === undefined) w.artifacts[aq].about = null
   if (typeof w.demandSince !== "number") w.demandSince = 0
   if (w.demand === undefined) w.demand = null
   // units carrying items keep their claims; jobs are dropped so no stale paths survive

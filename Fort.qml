@@ -567,6 +567,10 @@ Item {
           out.push({ t: root.tf("p.lives.deeds", wu.kills || 0, wu.made || 0, Math.round((w.tick - wu.born) / Sim.YEAR * 10) / 10), c: "muted", wrap: true })
           if (wu.wnm) out.push({ t: root.tf("p.bears", wu.wnm, wu.wtitle || ""), c: "accent", wrap: true })
           if ((wu.grief || 0) > 0) out.push({ t: root.t("p.grieving"), c: "warn", wrap: true })
+          // what they made, by name: the chronicle records that an artifact was
+          // made, but not that this is the dwarf who made it
+          var mine = (w.artifacts || []).filter(function (q) { return q.maker === wu.name })
+          for (k = 0; k < mine.length; k++) out.push({ t: "☼ " + mine[k].name + ", '" + mine[k].title + "' — " + mine[k].desc, c: "accent", wrap: true })
         } else {
           out.push({ t: root.tf("p.lives.died", who.how, root.fmtDate(Sim.date({ tick: who.t }))), c: "warn", wrap: true })
         }
@@ -604,7 +608,7 @@ Item {
       out.push({ t: root.t("p.resilience"), c: "accent" })
       out.push({ t: root.tf("p.res.line", st.raids, st.repelled || 0, st.goblinsKilled || 0, st.deaths, w.scenario ? root.tf("p.res.wave", w.scenario.wave) : ""), c: st.deaths > (st.goblinsKilled || 0) ? "warn" : "", wrap: true })
       out.push({ t: "", c: "" })
-      if (w.artifacts.length) { out.push({ t: root.t("p.artifacts"), c: "accent" }); for (k = w.artifacts.length - 1; k >= Math.max(0, w.artifacts.length - 4); k--) { var a = w.artifacts[k]; out.push({ t: "☼ " + a.name + ", '" + a.title + "'", c: "", wrap: true }); out.push({ t: "  " + a.desc + " — " + a.maker, c: "muted", wrap: true }) } out.push({ t: "", c: "" }) }
+      if (w.artifacts.length) { out.push({ t: root.t("p.artifacts"), c: "accent" }); for (k = w.artifacts.length - 1; k >= Math.max(0, w.artifacts.length - 4); k--) { var a = w.artifacts[k]; out.push({ t: "☼ " + a.name + ", '" + a.title + "'", c: "", wrap: true }); out.push({ t: "  " + a.desc + " — " + a.maker + ", " + root.tf("p.art.year", Sim.date({ tick: a.t }).year), c: "muted", wrap: true }) } out.push({ t: "", c: "" }) }
       if (w.dead.length) { out.push({ t: root.t("p.memorial"), c: "accent" }); for (k = w.dead.length - 1; k >= Math.max(0, w.dead.length - 5); k--) out.push({ t: "† " + w.dead[k].name + " — " + w.dead[k].how, c: "muted", wrap: true }); out.push({ t: "", c: "" }) }
       out.push({ t: root.t("p.chronicle"), c: "accent" })
       for (k = w.legends.length - 1; k >= Math.max(0, w.legends.length - 10); k--) { var d = Sim.date({ tick: w.legends[k].t }); out.push({ t: "a" + d.year + " " + d.seasonName + ": " + w.legends[k].m, c: "", wrap: true }) }
