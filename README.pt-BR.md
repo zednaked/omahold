@@ -57,6 +57,11 @@ Sugestão de atalho no `~/.config/hypr/bindings.lua`:
 o.bind("SUPER SHIFT", "F", "omarchy-shell omahold toggle", "Omahold")
 ```
 
+As pílulas do cabeçalho se explicam ao passar o mouse: o que `☺ 12 · ⚔ 4`
+conta, quanto vale o `☼`, por que `trancado` importa. E a página Ajuda (`?`)
+traz uma legenda de cada glifo que o mapa desenha — `Ω` estátua, `‡` forja,
+`†` túmulo — gerada das mesmas tabelas que o mapa usa, então não sai de data.
+
 ## Menu, predefinições e slots
 
 `Esc` (com nada para cancelar) ou o botão **≡ menu** abre o menu; `Esc` nele

@@ -60,6 +60,11 @@ A suggested binding for `~/.config/hypr/bindings.lua`:
 o.bind("SUPER SHIFT", "F", "omarchy-shell omahold toggle", "Omahold")
 ```
 
+The chips in the header explain themselves on hover: what `☺ 12 · ⚔ 4` counts,
+what `☼` is worth, why `locked` matters. And the Help page (`?`) carries a
+legend of every glyph the map draws — `Ω` a statue, `‡` a forge, `†` a grave —
+built from the same tables the map uses, so it cannot drift out of date.
+
 ## Menu, presets and slots
 
 `Esc` (with nothing to cancel) or the **≡ menu** button opens the menu; `Esc`

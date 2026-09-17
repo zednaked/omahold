@@ -355,7 +355,11 @@ Item {
 
   // ---- sidebar text -------------------------------------------------------------
   function bar(v, n) { var k = Math.max(0, Math.min(n, Math.round(v / 100 * n))); var s = ""; for (var i = 0; i < n; i++) s += i < k ? "▰" : "▱"; return s }
-  function fmtDate(d) { return d.seasonName + ", dia " + d.day + " do ano " + d.year + " · " + (Math.floor(d.hour) < 10 ? "0" : "") + Math.floor(d.hour) + "h" }
+  // What the pointer is over, if it carries an explanation. One line, under the
+  // header, on the side the chips are.
+  property string tipText: ""
+
+  function fmtDate(d) { return root.tf("date.full", Sim.seasonName(d.seasonName), d.day, d.year, (Math.floor(d.hour) < 10 ? "0" : "") + Math.floor(d.hour)) }
   // called from a Chip binding that re-evaluates every tick; the ground range is
   // fixed for the life of a world, so it rides along on the sim's cache
   function levelName(z) {
@@ -516,6 +520,22 @@ Item {
       for (k = 0; k < H.length; k++) out.push({ t: H[k][0], c: "accent", tail: H[k][1] })
       out.push({ t: "", c: "" })
       out.push({ t: root.t("h.start"), c: "muted", wrap: true })
+      // A legend, because a map of Ω, ‡ and π explains nothing on its own and
+      // there is nowhere on a 48-wide grid to write a label. Built from the
+      // same tables the map draws with, so it cannot drift out of date.
+      out.push({ t: "", c: "" })
+      out.push({ t: root.t("h.legend"), c: "accent" })
+      var legRow = "", legN = 0
+      for (var bq = 1; bq <= 17; bq++) {
+        var bg = root.buildGlyph[bq]
+        if (!bg) continue
+        legRow += "  " + bg + " " + Sim.buildName(bq)
+        if (++legN % 3 === 0) { out.push({ t: legRow, c: "", wrap: true }); legRow = "" }
+      }
+      if (legRow) out.push({ t: legRow, c: "", wrap: true })
+      out.push({ t: "  ☺ " + root.t("h.leg.dwarf") + "   g " + root.t("unit.goblin") + "   w " + root.t("unit.wolf") + "   d " + root.t("unit.deer") + "   k " + root.t("unit.kobold"), c: "", wrap: true })
+      out.push({ t: root.t("h.leg.note"), c: "muted", wrap: true })
+      out.push({ t: "", c: "" })
       out.push({ t: root.t("h.tail"), c: "muted", wrap: true })
     }
     root.lines = out
@@ -525,15 +545,26 @@ Item {
   // Small reusable bits for the chrome
   component Chip: Rectangle {
     property string text: ""
+    property string tip: ""
     property color fg: Color.popups.text
     property bool strong: false
     implicitHeight: chipText.implicitHeight + Style.space(6)
     implicitWidth: chipText.implicitWidth + Style.space(14)
     radius: height / 2
-    color: strong ? Util.alpha(fg, 0.16) : Util.alpha(Color.popups.text, 0.06)
+    color: strong ? Util.alpha(fg, 0.16) : (chipArea.containsMouse && tip ? Util.alpha(Color.popups.text, 0.12) : Util.alpha(Color.popups.text, 0.06))
     border.width: 1
     border.color: strong ? Util.alpha(fg, 0.35) : Util.alpha(Color.popups.text, 0.08)
     Text { id: chipText; anchors.centerIn: parent; font.family: root.mono; font.pixelSize: Style.font.bodySmall; color: parent.fg; text: parent.text }
+    // The tip goes to a property on the root rather than a child Rectangle,
+    // because the header's Row would clip anything taller than a chip.
+    MouseArea {
+      id: chipArea
+      anchors.fill: parent
+      hoverEnabled: !!parent.tip
+      acceptedButtons: Qt.NoButton
+      onEntered: if (parent.tip) root.tipText = parent.tip
+      onExited: if (root.tipText === parent.tip) root.tipText = ""
+    }
   }
   component KeyHint: Row {
     property string key: ""
@@ -632,37 +663,60 @@ Item {
               color: Util.alpha(Color.popups.text, 0.75)
               text: {
                 World.rev
-                if (!World.w) return World.loadError || "carregando…"
+                if (!World.w) return World.loadError || root.t("bar.loading2")
                 var d = Sim.date(World.w)
-                var wx = World.w.weather === 1 ? " · chuva" : World.w.weather === 2 ? " · neve" : ""
+                var wx = World.w.weather === 1 ? root.t("wx.rain") : World.w.weather === 2 ? root.t("wx.snow") : ""
                 var sunNow = Sim.sunLevel(World.w)
-                return root.fmtDate(d) + wx + (sunNow < 0.25 ? " · noite" : sunNow < 0.55 ? (d.hour < 12 ? " · amanhecer" : " · entardecer") : "")
+                return root.fmtDate(d) + wx + (sunNow < 0.25 ? root.t("sun.night") : sunNow < 0.55 ? root.t(d.hour < 12 ? "sun.dawn" : "sun.dusk") : "")
               }
             }
             Row {
               id: headChips
               anchors { right: parent.right; verticalCenter: parent.verticalCenter }
               spacing: Style.space(6)
-              Chip { text: "z" + root.vz + " " + root.levelName(root.vz); fg: Color.accent; strong: true }
-              Chip { text: { World.rev; var s = World.summary || {}; return "☺ " + (s.pop || 0) + (s.militia ? " · ⚔ " + s.militia : "") } }
-              Chip { text: { World.rev; var s = World.summary || {}; return "☼ " + (s.wealth || 0) } }
-              Chip { text: World.paused ? "‖ pausa" : "▶ " + World.speed + "×"; fg: World.paused ? Color.urgent : Color.popups.text; strong: World.paused }
-              Chip { visible: !!(World.w && World.w.lockdown); text: "trancado"; fg: Color.urgent; strong: true }
-              Chip { visible: !!(World.w && World.w.fallen); text: "caiu"; fg: Color.urgent; strong: true }
-              Chip { visible: World.viewMode !== "normal"; text: "ver: " + (World.viewMode === "light" ? "luz" : World.viewMode === "mood" ? "humor" : "acesso"); fg: Color.accent; strong: true }
+              Chip { text: "z" + root.vz + " " + root.levelName(root.vz); tip: root.t("tip.level"); fg: Color.accent; strong: true }
+              Chip { text: { World.rev; var s = World.summary || {}; return "☺ " + (s.pop || 0) + (s.militia ? " · ⚔ " + s.militia : "") }; tip: root.t("tip.pop") }
+              Chip { text: { World.rev; var s = World.summary || {}; return "☼ " + (s.wealth || 0) }; tip: root.t("tip.wealth") }
+              Chip { text: World.paused ? root.t("chip.paused") : "▶ " + World.speed + "×"; tip: root.t("tip.speed"); fg: World.paused ? Color.urgent : Color.popups.text; strong: World.paused }
+              Chip { visible: !!(World.w && World.w.lockdown); text: root.t("chip.locked"); tip: root.t("tip.locked"); fg: Color.urgent; strong: true }
+              Chip { visible: !!(World.w && World.w.fallen); text: root.t("chip.fallen"); tip: root.t("tip.fallen"); fg: Color.urgent; strong: true }
+              Chip { visible: World.viewMode !== "normal"; text: root.tf("chip.view", root.t("view." + World.viewMode)); tip: root.t("tip.view"); fg: Color.accent; strong: true }
               Chip {
                 visible: !!(World.w && World.w.scenario && !World.w.peaceful)
                 fg: World.w && World.w.raid ? Color.urgent : Color.popups.text
                 strong: !!(World.w && World.w.raid)
-                text: { World.rev; var w = World.w; if (!w || !w.scenario) return ""; return w.raid ? "onda " + (w.raid.wave || "") + " em curso" : "onda " + w.scenario.wave + " em " + Math.max(0, Math.ceil((w.scenario.nextRaid - w.tick) / Sim.DAY)) + "d" }
+                tip: root.t("tip.wave")
+                text: { World.rev; var w = World.w; if (!w || !w.scenario) return ""; return w.raid ? root.tf("chip.wave.now", w.raid.wave || "") : root.tf("chip.wave.in", w.scenario.wave, Math.max(0, Math.ceil((w.scenario.nextRaid - w.tick) / Sim.DAY))) }
               }
               Rectangle {
                 width: menuBtnText.implicitWidth + Style.space(16); height: Style.space(24); radius: height / 2
                 color: menuBtnArea.containsMouse ? Util.alpha(Color.accent, 0.22) : Util.alpha(Color.accent, 0.12)
                 border.width: 1; border.color: Util.alpha(Color.accent, 0.4)
-                Text { id: menuBtnText; anchors.centerIn: parent; font.family: root.mono; font.pixelSize: Style.font.bodySmall; color: Color.accent; text: "≡ menu" }
-                MouseArea { id: menuBtnArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openMenu("main") }
+                Text { id: menuBtnText; anchors.centerIn: parent; font.family: root.mono; font.pixelSize: Style.font.bodySmall; color: Color.accent; text: root.t("chip.menu") }
+                MouseArea { id: menuBtnArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openMenu("main"); onEntered: root.tipText = root.t("tip.menu"); onExited: root.tipText = "" }
               }
+            }
+          }
+
+          // ---- tooltip ----
+          // Sits between the header and the map, on the side the chips are, so
+          // it never covers what it explains.
+          Rectangle {
+            visible: root.tipText !== ""
+            z: 50
+            x: Math.max(win.pad, win.pad + win.mapW - width)
+            y: head.y + head.height + 2
+            width: tipLabel.implicitWidth + Style.space(18)
+            height: tipLabel.implicitHeight + Style.space(10)
+            radius: Style.space(6)
+            color: Util.alpha(Color.popups.background, 0.96)
+            border.width: 1; border.color: Util.alpha(Color.accent, 0.35)
+            Text {
+              id: tipLabel
+              anchors.centerIn: parent
+              font.family: root.mono; font.pixelSize: Style.font.bodySmall
+              color: Color.popups.text
+              text: root.tipText
             }
           }
 
