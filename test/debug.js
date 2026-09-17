@@ -1,0 +1,21 @@
+const fs = require("fs"), path = require("path")
+const src = fs.readFileSync(path.join(__dirname, "..", "sim.js"), "utf8").replace(".pragma library", "")
+const T = new Function(src + `; return { newWorld, tick, designate, idx, ix, iy, iz, dwarves, jobName, findPath, passable, touchesWater, freeItem, T_WATER, W, H, canDesignate, neighbors }`)()
+const seed = parseInt(process.argv[2] || "23", 10)
+const w = T.newWorld(seed)
+const cx = T.ix(w.depot), cy = T.iy(w.depot), cz = T.iz(w.depot)
+console.log("depot", cx, cy, cz, "stair ok?", T.canDesignate(w, T.idx(cx + 2, cy, cz), "stair"))
+T.designate(w, T.idx(cx + 2, cy, cz), "stair")
+const d0 = T.dwarves(w)[0]
+console.log("dwarf0 at", T.ix(d0.i), T.iy(d0.i), T.iz(d0.i), "passable there?", T.passable(w, d0.i))
+const nb = [0,0,0,0,0,0]; console.log("neighbors of dwarf0:", T.neighbors(w, d0.i, d0, nb), nb)
+const p = T.findPath(w, d0.i, c => c === T.idx(cx + 2, cy, cz), T.idx(cx + 2, cy, cz), d0)
+console.log("path to stair spot:", p && p.length)
+const pw = T.findPath(w, d0.i, c => T.touchesWater(w, c), d0.i, d0, 1500)
+console.log("path to water:", pw && pw.length)
+const b = T.freeItem(w, "booze", d0.i, d0); console.log("booze item", b && [T.ix(b.i), T.iy(b.i), T.iz(b.i)], b && T.findPath(w, d0.i, c => c === b.i, b.i, d0)?.length)
+for (let k = 0; k < 300; k++) {
+  T.tick(w)
+  if (k % 30 === 0) console.log(k, T.dwarves(w).map(u => `${u.name.split(" ")[0]}:${T.jobName(u)}${u.path ? "/p" + (u.path.length - u.pi) : ""}(${T.ix(u.i)},${T.iy(u.i)},${T.iz(u.i)}) s${u.thirst|0}`).join("  "))
+}
+console.log(w.log.map(e => e.m).join("\n"))

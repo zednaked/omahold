@@ -1,0 +1,305 @@
+pragma Singleton
+
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import qs.Commons
+import "sim.js" as Sim
+import "palette.js" as Pal
+
+// The one copy of the world, shared by the bar widget, the corner window and
+// the overlay. Owns the clock, the save file and the theme palette.
+//
+// Pacing is the whole trick for a game that lives in the shell: while nobody
+// is looking it ticks every couple of seconds (a day of fortress time every
+// few minutes, so there is something new when you come back); while the
+// overlay or the corner window is up it runs at four ticks a second, and
+// nothing is ever drawn unless a surface is visible.
+Singleton {
+  id: root
+
+  property var w: null
+  property int rev: 0                 // bumps once per tick; bindings hang off it
+  property bool ready: false
+  property string loadError: ""
+
+  property bool open: false           // the overlay
+  property bool menu: false           // the overlay's menu
+  property string viewMode: "normal"  // normal light mood access
+  property bool peek: false           // the corner window
+  property bool paused: false
+  property int speed: 1               // 1, 2, 4 while watched
+  property int backgroundMs: 2000     // tick interval while nobody watches (0 = freeze)
+  property int popCap: 20
+  property bool glyphs: false         // pure-glyph rendering instead of blocks
+  property int viewZ: 5
+  property int followId: 0
+  property int selectedId: 0
+
+  // What the bar shows; refreshed every tick, cheap
+  property int pop: 0
+  property int alerts: 0
+  property var summary: ({})
+
+  property var theme: ({})
+  property var pal: Pal.build({})
+
+  readonly property string home: Quickshell.env("HOME")
+  readonly property string stateDir: (Quickshell.env("XDG_STATE_HOME") || (home + "/.local/state")) + "/omarchy/omahold"
+  readonly property string savePath: stateDir + "/world.json"
+  readonly property string slotsPath: stateDir + "/slots.json"
+  readonly property string optionsPath: stateDir + "/options.json"
+  property var slots: ({})            // "1".."5" -> meta from Sim.slotMeta
+  property int waveMul: 1             // 0 calm (half), 1 normal, 2 brutal — see difficulty()
+  property string difficulty: "normal"
+  property bool enemies: true
+  readonly property string colorsPath: (Quickshell.env("XDG_STATE_HOME") || (home + "/.local/state")) + "/omarchy/current/theme/colors.toml"
+
+  readonly property bool watched: root.open || root.peek
+
+  signal ticked()
+  signal worldReplaced()
+
+  // ---- clock ----------------------------------------------------------------
+  Timer {
+    id: clock
+    interval: root.watched ? Math.max(60, Math.round(250 / root.speed)) : Math.max(250, root.backgroundMs)
+    running: root.ready && root.w !== null && !root.paused && (root.watched || root.backgroundMs > 0)
+    repeat: true
+    onTriggered: root.step()
+  }
+
+  function step() {
+    if (!root.w) return
+    try { Sim.tick(root.w) } catch (e) { root.loadError = "tick: " + e + " @" + e.lineNumber; root.paused = true; console.warn("omahold tick failed", e, e.lineNumber); return }
+    root.rev++
+    root.pop = Sim.pop(root.w)
+    root.alerts = root.open ? 0 : root.w.alerts
+    if (root.open) root.w.alerts = 0
+    if (root.rev % 4 === 0 || root.open) root.summary = Sim.summary(root.w)
+    if (root.followId) {
+      var u = Sim.unitById(root.w, root.followId)
+      if (u) root.viewZ = Sim.iz(u.i); else root.followId = 0
+    }
+    root.ticked()
+  }
+
+  onOpenChanged: {
+    if (root.open) { if (root.w) { root.w.alerts = 0; root.alerts = 0 } }
+    else root.save()
+  }
+
+  // ---- world lifecycle --------------------------------------------------------
+  function newWorld(seed) {
+    var s = seed === undefined || seed === null || seed === "" ? Math.floor(Math.random() * 4294967295) : (parseInt(seed, 10) >>> 0)
+    root.w = Sim.newWorld(s)
+    root.w.popCap = root.popCap
+    root.viewZ = Sim.iz(root.w.depot)
+    root.followId = 0; root.selectedId = 0
+    root.rev++
+    root.pop = Sim.pop(root.w)
+    root.summary = Sim.summary(root.w)
+    root.ready = true
+    root.worldReplaced()
+    root.save()
+  }
+
+  function newFromPreset(presetId, n, seed) {
+    var sd = seed === undefined || seed === null || seed === "" ? Math.floor(Math.random() * 4294967295) : (parseInt(seed, 10) >>> 0)
+    var count = parseInt(n, 10); if (!isFinite(count) || count <= 0) count = 0
+    root.w = Sim.newFromPreset(sd, presetId, count)
+    root.w.popCap = Math.max(root.popCap, Sim.pop(root.w) + 6)
+    root.w.waveMul = root.difficulty === "calma" ? 0.6 : root.difficulty === "brutal" ? 1.6 : 1
+    if (!root.enemies) root.w.peaceful = true
+    root.viewZ = root.w.scenario || root.w.preset === "Vale tranquilo" ? Sim.iz(root.w.depot) - 2 : Sim.iz(root.w.depot)
+    root.followId = 0; root.selectedId = 0
+    root.rev++
+    root.pop = Sim.pop(root.w)
+    root.summary = Sim.summary(root.w)
+    root.ready = true
+    root.worldReplaced()
+    root.save()
+  }
+  function newScenario(n) {
+    var count = parseInt(n, 10); if (!isFinite(count) || count <= 0) count = 12
+    root.w = Sim.newScenario(Math.floor(Math.random() * 4294967295), count)
+    root.w.popCap = Math.max(root.popCap, count + 6)
+    root.viewZ = Sim.iz(root.w.depot) - 2
+    root.followId = 0; root.selectedId = 0
+    root.rev++
+    root.pop = Sim.pop(root.w)
+    root.summary = Sim.summary(root.w)
+    root.ready = true
+    root.worldReplaced()
+    root.save()
+  }
+  function raidNow() {
+    if (!root.w || root.w.raid) return false
+    var ok = Sim.spawnRaid(root.w, Sim.date(root.w), root.w.scenario ? root.w.scenario.wave : 0)
+    root.rev++; return ok
+  }
+
+  function adopt(json) {
+    var w = null
+    try { w = Sim.deserialize(json) } catch (e) { console.warn("omahold: save unreadable", e); w = null }
+    if (!w) { root.newWorld(); return }
+    root.w = w
+    root.w.popCap = root.popCap
+    root.w.waveMul = root.difficulty === "calma" ? 0.6 : root.difficulty === "brutal" ? 1.6 : 1
+    if (!root.enemies) root.w.peaceful = true
+    root.viewZ = Sim.iz(root.w.depot)
+    root.rev++
+    root.pop = Sim.pop(root.w)
+    root.summary = Sim.summary(root.w)
+    root.ready = true
+    root.worldReplaced()
+  }
+
+  Process {
+    id: loader
+    running: true
+    command: ["sh", "-c", "mkdir -p \"" + root.stateDir + "\"; cat \"" + root.optionsPath + "\" 2>/dev/null; printf '\\036'; cat \"" + root.slotsPath + "\" 2>/dev/null; printf '\\036'; cat \"" + root.savePath + "\" 2>/dev/null"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var parts = String(text).split(String.fromCharCode(30))
+        try { if (parts[0] && parts[0].trim()) root.applyOptions(JSON.parse(parts[0])) } catch (e) { console.warn("omahold: options unreadable", e) }
+        try { if (parts[1] && parts[1].trim()) root.slots = JSON.parse(parts[1]) } catch (e2) { console.warn("omahold: slots index unreadable", e2) }
+        var t = parts[2] || ""
+        if (t.trim().length > 0) root.adopt(t)
+        else root.newWorld()
+      }
+    }
+  }
+  // one writer per file: FileView writes to a fixed path
+  FileView { id: slotsFile; path: root.slotsPath; printErrors: false; preload: false }
+  FileView { id: optionsFile; path: root.optionsPath; printErrors: false; preload: false }
+  FileView { id: slot1; path: root.stateDir + "/slot-1.json"; printErrors: false; preload: false }
+  FileView { id: slot2; path: root.stateDir + "/slot-2.json"; printErrors: false; preload: false }
+  FileView { id: slot3; path: root.stateDir + "/slot-3.json"; printErrors: false; preload: false }
+  FileView { id: slot4; path: root.stateDir + "/slot-4.json"; printErrors: false; preload: false }
+  FileView { id: slot5; path: root.stateDir + "/slot-5.json"; printErrors: false; preload: false }
+  function slotWriter(n) { return [null, slot1, slot2, slot3, slot4, slot5][n] || null }
+
+  function saveSlot(n) {
+    var f = slotWriter(n); if (!f || !root.w) return false
+    try { f.setText(Sim.serialize(root.w)) } catch (e) { console.warn("omahold: slot save failed", e); return false }
+    var meta = Sim.slotMeta(root.w)
+    var next = JSON.parse(JSON.stringify(root.slots || {})); next[String(n)] = meta
+    root.slots = next
+    try { slotsFile.setText(JSON.stringify(next)) } catch (e2) {}
+    return true
+  }
+  function clearSlot(n) {
+    var next = JSON.parse(JSON.stringify(root.slots || {})); delete next[String(n)]
+    root.slots = next
+    try { slotsFile.setText(JSON.stringify(next)) } catch (e) {}
+    Quickshell.execDetached(["rm", "-f", root.stateDir + "/slot-" + n + ".json"])
+  }
+  property int loadingSlot: 0
+  Process {
+    id: slotReader
+    command: ["sh", "-c", "cat \"" + root.stateDir + "/slot-" + root.loadingSlot + ".json\" 2>/dev/null"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: { var t = String(text); if (t.trim().length > 0) { root.adopt(t); root.save() } else console.warn("omahold: slot empty") }
+    }
+  }
+  function loadSlot(n) { if (!root.slots || !root.slots[String(n)]) return false; root.loadingSlot = n; slotReader.running = true; return true }
+
+  // ---- options -----------------------------------------------------------------
+  function applyOptions(o) {
+    if (!o) return
+    if (o.backgroundMs !== undefined) root.backgroundMs = Number(o.backgroundMs)
+    if (o.glyphs !== undefined) root.glyphs = !!o.glyphs
+    if (o.peek !== undefined) root.peek = !!o.peek
+    if (o.popCap !== undefined) { root.popCap = Number(o.popCap); if (root.w) root.w.popCap = root.popCap }
+    if (o.difficulty !== undefined) root.setDifficulty(String(o.difficulty), true)
+    if (o.enemies !== undefined) { root.enemies = !!o.enemies; if (root.w) root.w.peaceful = !root.enemies }
+    if (o.speed !== undefined) root.speed = Number(o.speed)
+  }
+  function saveOptions() {
+    var o = { backgroundMs: root.backgroundMs, glyphs: root.glyphs, peek: root.peek, popCap: root.popCap, difficulty: root.difficulty, enemies: root.enemies, speed: root.speed }
+    try { optionsFile.setText(JSON.stringify(o)) } catch (e) {}
+  }
+  function setDifficulty(d, quiet) {
+    root.difficulty = d
+    var mul = d === "calma" ? 0.6 : d === "brutal" ? 1.6 : 1
+    if (root.w) root.w.waveMul = mul
+    if (!quiet) root.saveOptions()
+  }
+  function setEnemies(on) { root.enemies = on; if (root.w) root.w.peaceful = !on; root.saveOptions() }
+  onBackgroundMsChanged: if (root.ready) root.saveOptions()
+  onGlyphsChanged: if (root.ready) root.saveOptions()
+  onPeekChanged: if (root.ready) root.saveOptions()
+  onPopCapChanged: { if (root.w) root.w.popCap = root.popCap; if (root.ready) root.saveOptions() }
+
+  FileView {
+    id: saveFile
+    path: root.savePath
+    printErrors: false
+    // never read through this one; the loader above does that once
+    preload: false
+  }
+  function save() {
+    if (!root.w) return
+    try { saveFile.setText(Sim.serialize(root.w)) } catch (e) { console.warn("omahold: save failed", e) }
+  }
+  Timer { interval: 90000; running: root.ready; repeat: true; onTriggered: root.save() }
+
+  // ---- theme -----------------------------------------------------------------
+  FileView {
+    id: colorsFile
+    path: root.colorsPath
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.applyTheme(text())
+    onFileChanged: reload()
+  }
+  // The shell singleton updates on theme switch; when it does, re-read the
+  // full 16-color file (the singleton only carries the four roles).
+  Connections {
+    target: Color
+    function onAccentChanged() { colorsFile.reload() }
+    function onBackgroundChanged() { colorsFile.reload() }
+    function onForegroundChanged() { colorsFile.reload() }
+  }
+  function applyTheme(text) {
+    var t = Pal.parseToml(text)
+    if (!t.background) t.background = Pal.hex(String(Color.background))
+    if (!t.foreground) t.foreground = Pal.hex(String(Color.foreground))
+    if (!t.accent) t.accent = Pal.hex(String(Color.accent))
+    root.theme = t
+    root.pal = Pal.build(t)
+    root.rev++
+  }
+
+  // ---- orders from the UI -----------------------------------------------------
+  function designateRect(a, b, tool, bt) { if (!root.w) return 0; var n = Sim.designateRect(root.w, a, b, tool, bt); if (n) root.rev++; return n }
+  function toggleLockdown() { if (!root.w) return; root.w.lockdown = !root.w.lockdown; Sim.announce(root.w, root.w.lockdown ? "Portas trancadas. Ninguém de fora entra." : "Portas destrancadas.", 0); root.rev++ }
+  function cycleSpeed() { root.speed = root.speed >= 4 ? 1 : root.speed * 2 }
+
+  // ---- IPC: omarchy-shell omahold <method> --------------------------------------
+  IpcHandler {
+    target: "omahold"
+    function toggle(): string { root.open = !root.open; return root.open ? "open" : "closed" }
+    function open(): string { root.open = true; return "ok" }
+    function close(): string { root.open = false; return "ok" }
+    function peek(): string { root.peek = !root.peek; return root.peek ? "peek on" : "peek off" }
+    function pause(): string { root.paused = !root.paused; return root.paused ? "paused" : "running" }
+    function status(): string { if (!root.w) return "no world"; var s = Sim.summary(root.w); s.open = root.open; s.peek = root.peek; s.paused = root.paused; s.viewZ = root.viewZ; return JSON.stringify(s) }
+    function save(): string { root.save(); return "ok" }
+    function newWorld(seed: string): string { root.newWorld(seed); return root.w ? root.w.name + " (seed " + root.w.seed + ")" : "failed" }
+    function scenario(n: string): string { root.newScenario(n); return root.w ? root.w.name + " (cenário, " + Sim.pop(root.w) + " anões)" : "failed" }
+    function hour(h: string): string { if (!root.w) return "no world"; Sim.setHour(root.w, parseFloat(h)); root.rev++; return String(Sim.sunLevel(root.w).toFixed(2)) }
+    function view(mode: string): string { root.viewMode = mode; return mode }
+    function raid(): string { return root.raidNow() ? "goblins a caminho" : "já há um ataque em curso (ou sem mundo)" }
+    function preset(id: string): string { root.newFromPreset(id, 0, ""); return root.w ? root.w.name + " · " + (root.w.preset || id) : "failed" }
+    function presets(): string { return Sim.PRESETS.map(function (p) { return p.id + ": " + p.name }).join("\n") }
+    function saveSlot(n: string): string { return root.saveSlot(parseInt(n, 10)) ? "ok" : "failed" }
+    function loadSlot(n: string): string { return root.loadSlot(parseInt(n, 10)) ? "loading" : "empty" }
+    function slots(): string { return JSON.stringify(root.slots) }
+    function speed(n: string): string { var v = parseInt(n, 10); if (v === 1 || v === 2 || v === 4) root.speed = v; return String(root.speed) }
+    function background(ms: string): string { var v = parseInt(ms, 10); if (isFinite(v) && v >= 0) root.backgroundMs = v; return String(root.backgroundMs) }
+  }
+}
