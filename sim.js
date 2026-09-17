@@ -66,6 +66,12 @@ var ITEM_NAME = { log: "tora", stone: "pedra", ore: "minério", gem: "gema", foo
 var SKILLS = ["mine", "wood", "farm", "build", "craft", "fight", "brew"]
 var SKILL_NAME = { mine: "mineração", wood: "lenha", farm: "lavoura", build: "construção", craft: "artesanato", fight: "luta", brew: "cervejaria" }
 
+// every counter the UI prints; a save from an older build gets the missing ones
+// zeroed on load instead of showing "undefined" in the chronicle
+var STAT_KEYS = ["dug", "chopped", "built", "brewed", "crafted", "migrants", "deaths", "artifacts", "raids", "caravans",
+                 "cooked", "smelted", "forged", "cut", "jewels", "repelled", "goblinsKilled"]
+function newStats() { var o = {}; for (var k = 0; k < STAT_KEYS.length; k++) o[STAT_KEYS[k]] = 0; return o }
+
 var TRAITS = ["teimoso", "alegre", "melancólico", "guloso", "valente", "preguiçoso", "curioso", "rabugento"]
 
 // ---- rng --------------------------------------------------------------------
@@ -139,9 +145,10 @@ function newWorld(seed) {
     liquidBudget: { water: 60, magma: 30 },
     caravan: null, raid: null, lockdown: false, depot: -1,
     weather: 0,   // 0 clear, 1 rain, 2 snow
-    stats: { dug: 0, chopped: 0, built: 0, brewed: 0, crafted: 0, migrants: 0, deaths: 0, artifacts: 0, raids: 0, caravans: 0 },
+    stats: newStats(),
+    fallen: false,   // the last dwarf died: the world stops sending anyone
     // scratch (not saved)
-    claim: null, unreach: {}, lastBrew: 0, lastMoodTick: 0
+    claim: null, unreach: {}, lastMoodTick: 0
   }
   w.name = fortName(w)
   generate(w)
@@ -518,6 +525,9 @@ function cache(w) {
   if (w.cache && !w.dirty) return w.cache
   var c = { stills: [], shops: [], farms: [], beds: [], stocks: [], tables: [], statues: [], shrubs: [], water: [], desigs: [],
             kitchens: [], smelters: [], forges: [], torches: [], trainings: [], jewelers: [] }
+  var minG = 255, maxG = 0
+  for (var gq = 0; gq < N; gq++) { var gv = w.ground[gq]; if (gv < minG) minG = gv; if (gv > maxG) maxG = gv }
+  c.minGround = minG; c.maxGround = maxG
   for (var i = 0; i < NN; i++) {
     var b = w.build[i]
     if (b) {
@@ -544,18 +554,42 @@ function cache(w) {
   c.fires = fires
   c.light = lightField(w, c.torches, fires, null)
   c.fire = lightField(w, fires, [], null, 3, 0.9)
-  // designations that can be worked eventually: adjacent to walkable floor, or
-  // chained to one through other designations (a dig area is dug from its
-  // edge inward; a staircase is dug down from the one above it)
-  var ok = {}, queue = [], q
+  w.cache = c; w.dirty = false
+  return c
+}
+// Everything a walking dwarf can stand on, starting from the gate and from
+// wherever everyone already is. Seeding from several places matters when a
+// dwarf ends up cut off: the cells around them still count as workable.
+//
+// Nothing in the simulation needs this - the dwarves just try to path and note
+// what failed - so it is built on demand and kept for as long as the cache
+// generation lives. A hold ticking in the background never pays for it.
+function reachField(w) {
+  var c = cache(w)
+  if (c.reach) return c.reach
+  var starts = [w.depot]
+  for (var uq = 0; uq < w.units.length; uq++) if (w.units[uq].k === "dwarf") starts.push(w.units[uq].i)
+  c.reach = reachableFrom(w, starts, null)
+  return c.reach
+}
+// Designations that can be worked eventually: adjacent to floor a dwarf can
+// actually reach, or chained to one through other designations (a dig area is
+// dug from its edge inward; a staircase is dug down from the one above it).
+// The old test only asked whether the neighbour was walkable, so a level with
+// no stair down to it looked workable and the map never went red.
+function desigOk(w) {
+  var c = cache(w)
+  if (c.desigOk) return c.desigOk
+  var reach = reachField(w), ok = {}, queue = [], q
+  function standable(ci) { return passable(w, ci) && reach[ci] }
   for (q = 0; q < c.desigs.length; q++) {
     var di = c.desigs[q], dx0 = ix(di), dy0 = iy(di), dz0 = iz(di), seed = false
-    if (passable(w, di)) seed = true
-    if (!seed && dx0 > 0 && passable(w, di - 1)) seed = true
-    if (!seed && dx0 < W - 1 && passable(w, di + 1)) seed = true
-    if (!seed && dy0 > 0 && passable(w, di - W)) seed = true
-    if (!seed && dy0 < H - 1 && passable(w, di + W)) seed = true
-    if (!seed && w.desig[di] === DG_STAIR && dz0 < D - 1 && passable(w, di + N)) seed = true
+    if (standable(di)) seed = true
+    if (!seed && dx0 > 0 && standable(di - 1)) seed = true
+    if (!seed && dx0 < W - 1 && standable(di + 1)) seed = true
+    if (!seed && dy0 > 0 && standable(di - W)) seed = true
+    if (!seed && dy0 < H - 1 && standable(di + W)) seed = true
+    if (!seed && w.desig[di] === DG_STAIR && dz0 < D - 1 && standable(di + N)) seed = true
     if (seed) { ok[di] = true; queue.push(di) }
   }
   while (queue.length) {
@@ -565,14 +599,14 @@ function cache(w) {
     for (var nq = 0; nq < nbrs.length; nq++) { var nn = nbrs[nq]; if (w.desig[nn] && !ok[nn] && (w.desig[nn] === DG_DIG || w.desig[nn] === DG_STAIR || w.desig[nn] === DG_CHOP)) { ok[nn] = true; queue.push(nn) } }
   }
   c.desigOk = ok
-  w.cache = c; w.dirty = false
-  return c
+  return ok
 }
 // Sum of light from point sources with linear falloff, eased, and shadows.
 // `flicker(i, k)` may return a per-source intensity (torches waver; the sim
 // uses 1 everywhere, the renderer animates).
-function lightField(w, sources, extra, flicker, radius, power) {
-  var light = new Float32Array(NN), RAD = radius || TORCH_RADIUS, R = Math.ceil(RAD), pw = power || 1
+function lightField(w, sources, extra, flicker, radius, power, out) {
+  var light = out || new Float32Array(NN), RAD = radius || TORCH_RADIUS, R = Math.ceil(RAD), pw = power || 1
+  if (out) out.fill(0)
   var all = extra && extra.length ? sources.concat(extra) : sources
   for (var tq = 0; tq < all.length; tq++) {
     var ti = all[tq], tx = ix(ti), ty = iy(ti), tz = iz(ti)
@@ -601,9 +635,22 @@ function flickerAt(w, ti, tick) {
   var fast = (hash(ti * 31 + tick) & 255) / 255
   return 0.72 + 0.16 * slow + 0.14 * fast
 }
+// The panel and the corner window both paint from this, several times per tick
+// (Canvas coalesces, the signals do not). Recomputing two full 11520-cell fields
+// per paint - and allocating them - was pure waste on an old laptop, so the
+// result is memoized per (world, tick, cache generation) and written into two
+// buffers that outlive the frame. `cache(w)` returns a fresh object whenever the
+// map changed, which is exactly when the field has to be redrawn.
+var rlTorch = null, rlFire = null
+var rlMemo = { w: null, tick: -1, gen: null, torch: null, fire: null }
 function renderLight(w, tick) {
   var c = cache(w)
-  return { torch: lightField(w, c.torches, [], function (ti) { return flickerAt(w, ti, tick) }), fire: lightField(w, c.fires, [], function (ti) { return 0.8 + 0.2 * ((hash(ti * 17 + tick) & 255) / 255) }, 3, 0.9) }
+  if (rlMemo.w === w && rlMemo.tick === tick && rlMemo.gen === c) return rlMemo
+  if (!rlTorch) { rlTorch = new Float32Array(NN); rlFire = new Float32Array(NN) }
+  rlMemo.torch = lightField(w, c.torches, [], function (ti) { return flickerAt(w, ti, tick) }, 0, 0, rlTorch)
+  rlMemo.fire = lightField(w, c.fires, [], function (ti) { return 0.8 + 0.2 * ((hash(ti * 17 + tick) & 255) / 255) }, 3, 0.9, rlFire)
+  rlMemo.w = w; rlMemo.tick = tick; rlMemo.gen = c
+  return rlMemo
 }
 function opaque(w, i) { return w.tile[i] !== T_OPEN || w.build[i] === B_WALL }
 function facesOpen(w, i) {
@@ -845,7 +892,7 @@ function spreadLiquids(w) {
     if (budget[key] <= 0) continue
     var x = ix(i), y = iy(i), z = iz(i), cands = []
     if (z > 0 && w.tile[i - N] === T_OPEN && w.floor[i - N] !== F_NONE && w.floor[i] === F_NONE) cands.push(i - N)
-    if (x > 0 && w.tile[i - 1] === T_OPEN && w.floor[i - 1] !== F_NONE && z <= iz(i)) cands.push(i - 1)
+    if (x > 0 && w.tile[i - 1] === T_OPEN && w.floor[i - 1] !== F_NONE) cands.push(i - 1)
     if (x < W - 1 && w.tile[i + 1] === T_OPEN && w.floor[i + 1] !== F_NONE) cands.push(i + 1)
     if (y > 0 && w.tile[i - W] === T_OPEN && w.floor[i - W] !== F_NONE) cands.push(i - W)
     if (y < H - 1 && w.tile[i + W] === T_OPEN && w.floor[i + W] !== F_NONE) cands.push(i + W)
@@ -1383,6 +1430,7 @@ function die(w, u, how) {
     announce(w, u.name + " " + how + ".", 2)
     legend(w, u.name + ", " + skillTitle(u) + ", " + how + ".")
     w.dead.push({ name: u.name, t: w.tick, how: how })
+    if (w.dead.length > 200) w.dead.splice(0, w.dead.length - 200)
     w.stats.deaths++
     if (w.raid) w.raid.lost++
     for (var k = 0; k < w.units.length; k++) { var o = w.units[k]; if (o !== u && o.k === "dwarf") thought(w, o, "perdeu " + u.name.split(" ")[0], o.trait === "melancólico" ? -12 : -7) }
@@ -1398,7 +1446,10 @@ function die(w, u, how) {
 function removeUnit(w, u) {
   dropJob(w, u)
   if (u.carry) { var c = itemById(w, u.carry); if (c) { c.by = 0; c.res = 0; c.i = u.i } }
-  for (var i = 0; i < NN; i++) if (w.claim[i] === u.id) w.claim[i] = 0
+  // dropJob above releases the job's claim; the sweep catches anything a mood
+  // or an interrupted stage left behind. Only dwarves ever claim, and goblins
+  // die by the dozen, so skipping them saves an 11520-cell scan per kill.
+  if (u.k === "dwarf") for (var i = 0; i < NN; i++) if (w.claim[i] === u.id) w.claim[i] = 0
   var k = w.units.indexOf(u); if (k >= 0) w.units.splice(k, 1)
 }
 
@@ -1523,6 +1574,7 @@ function seasonStart(w, d) {
   var name = d.seasonName
   announce(w, "Chegou " + (name === "verão" || name === "outono" || name === "inverno" ? "o " : "a ") + name + ".", 0)
   w.weather = name === "inverno" ? 2 : 0
+  if (w.fallen) return
   // migrants
   if (name !== "inverno" && w.tick > YEAR / 8) {
     var p = pop(w)
@@ -1591,16 +1643,24 @@ function prospect(w) {
     }
   }
 }
+// The last dwarf is dead. Losing is fun, but the world should stop pretending
+// there is a fortress here: no more waves, caravans, thieves or migrants.
+function checkFall(w) {
+  if (w.fallen || w.tick < 10 || pop(w) > 0) return
+  w.fallen = true
+  announce(w, w.name + " caiu. Não resta nenhum anão.", 2)
+  legend(w, w.name + " caiu no ano " + date(w).year + ". " + w.stats.deaths + " anões perdidos.")
+}
 function dayStart(w, d) {
   rosterMilitia(w)
-  if (w.scenario) prospect(w)
-  if (w.scenario && !w.peaceful && !w.raid && !w.caravan && w.tick >= w.scenario.nextRaid) spawnRaid(w, d, w.scenario.wave)
+  if (w.scenario && !w.fallen) prospect(w)
+  if (w.scenario && !w.peaceful && !w.fallen && !w.raid && !w.caravan && w.tick >= w.scenario.nextRaid) spawnRaid(w, d, w.scenario.wave)
   // weather
   if (d.seasonName === "primavera" || d.seasonName === "outono") w.weather = chance(w, 0.3) ? 1 : 0
   else if (d.seasonName === "inverno") w.weather = chance(w, 0.8) ? 2 : 0
   else w.weather = chance(w, 0.08) ? 1 : 0
   // caravan
-  if (d.seasonName === "outono" && d.day === 3 && !w.caravan && !w.raid) {
+  if (d.seasonName === "outono" && d.day === 3 && !w.caravan && !w.raid && !w.fallen) {
     var sp = edgeSurface(w)
     if (sp >= 0) {
       w.caravan = { stage: "arrive", spot: w.depot, arrived: 0, days: 0, n: 3 }
@@ -1609,6 +1669,7 @@ function dayStart(w, d) {
       w.stats.caravans++
     }
   }
+  if (w.fallen) return
   if (w.caravan) caravanDay(w)
   // goblins
   if (!w.peaceful && !w.scenario && !w.raid && !w.caravan && w.tick > YEAR * 1.4 && chance(w, 0.006 + Math.min(0.03, w.wealth / 60000))) {
@@ -1665,6 +1726,8 @@ function caravanDay(w) {
 }
 function raidTick(w) {
   if (!w.raid) return
+  // nobody left to repel anything: the raid just ends, unremarked
+  if (w.fallen) { w.raid = null; return }
   var n = 0; for (var k = 0; k < w.units.length; k++) if (w.units[k].k === "goblin") n++
   if (n === 0) {
     w.stats.repelled = (w.stats.repelled || 0) + 1
@@ -1711,6 +1774,7 @@ function tick(w) {
     else if (t === T_WATER) { u.drown = (u.drown || 0) + 1; if (u.drown > 6) { if (u.k === "dwarf") die(w, u, "afogou-se"); else removeUnit(w, u) } else { var esc = neighbors(w, u.i, u, nb); if (esc > 0) u.i = nb[0] } }
     else u.drown = 0
   }
+  checkFall(w)
   if (w.tick % 50 === 0) w.wealth = computeWealth(w)
 }
 function actDwarf(w, u) {
@@ -1845,7 +1909,6 @@ function scenario(w, n, opts) {
   for (dx = 2; dx <= 8; dx++) for (dy = 3; dy <= 4; dy++) { var s3 = place(w, cx, cy, z3, dx, dy, B_STOCK); if (s3 >= 0) stock3.push(s3) }
   place(w, cx, cy, z3, -6, 0, B_TORCH); place(w, cx, cy, z3, -2, 0, B_TORCH); place(w, cx, cy, z3, 2, 0, B_TORCH); place(w, cx, cy, z3, 6, 0, B_TORCH)
   place(w, cx, cy, z3, -4, -3, B_TORCH); place(w, cx, cy, z3, -4, 3, B_TORCH)
-  for (var sq = 0; sq < stairZ.length; sq++) { var si = idx(cx, cy, stairZ[sq]); carve(w, si); w.build[si] = B_STAIR }
   // mine level: a cross of galleries, then every vein within reach designated with its own access tunnel
   var mineLevels = zm < z3 ? [zm, z3] : [z3]
   for (var ml = 0; ml < mineLevels.length; ml++) {
@@ -1869,6 +1932,11 @@ function scenario(w, n, opts) {
       }
     }
   }
+  // the stair column goes in last: every carve above clears the buildings in the
+  // cells it opens, and the mine galleries run straight through (cx, cy). Cutting
+  // the column before them used to erase the bottom step whenever the hold got a
+  // separate deep mine level (ground height 6), stranding the whole ore layer.
+  for (var sq = 0; sq < stairZ.length; sq++) { var si = idx(cx, cy, stairZ[sq]); carve(w, si); w.build[si] = B_STAIR }
   // stockpiles: the pantry upstairs, materials downstairs, spare gear
   stockAt(w, stock1, "food", 40); stockAt(w, stock1, "meal", 12); stockAt(w, stock1, "booze", 40)
   stockAt(w, stock3, "log", 20); stockAt(w, stock3, "stone", 24); stockAt(w, stock3, "ore", 12); stockAt(w, stock3, "bar", 8)
@@ -1894,8 +1962,12 @@ function scenario(w, n, opts) {
       else u.skills.craft = 4 + ri(w, 3)
     }
   }
+  // Wave sizing for the showcase hold. The old curve (step 1.5, cap 12) wiped the
+  // fortress in five seeds out of eight inside two years, which is a fine Dwarf
+  // Fortress ending but a poor first impression for a preset named "ready".
+  // Garrison and Siege pass their own, harsher numbers.
   w.scenario = { n: n, wave: 1, raidEvery: opts.raidEvery || DAY * 15, nextRaid: w.tick + (opts.firstRaid || DAY * 6),
-    base: opts.waveBase || 3, step: opts.waveStep || 1.5, eliteFrom: opts.eliteFrom || 4, cap: opts.cap || 12 }
+    base: opts.waveBase || 3, step: opts.waveStep || 1, eliteFrom: opts.eliteFrom || 5, cap: opts.cap || 9 }
   if (opts.peaceful) { w.peaceful = true; w.scenario = null }
   w.preset = opts.name || "Fortaleza pronta"
   w.popCap = Math.max(w.popCap, n + 6)
@@ -1927,9 +1999,16 @@ function newFromPreset(seed, presetId, n) {
 // Cells a walker starting at `start` can reach (1) — for the access view.
 // `u` may be null (a dwarf) or a unit whose rules apply (a goblin under lockdown).
 function reachableFrom(w, start, u) {
-  var seen = new Uint8Array(NN), stack = [start], out = [0, 0, 0, 0, 0, 0]
-  if (!passableFor(w, start, u)) { var n0 = neighbors(w, start, u, out); for (var q = 0; q < n0; q++) stack.push(out[q]) }
-  seen[start] = 1
+  var seen = new Uint8Array(NN), stack = [], out = [0, 0, 0, 0, 0, 0]
+  var starts = typeof start === "number" ? [start] : start
+  for (var sq = 0; sq < starts.length; sq++) {
+    var st = starts[sq]
+    if (st < 0 || st >= NN) continue
+    if (!seen[st]) { seen[st] = 1; stack.push(st) }
+    // a start standing on something unwalkable (the wagon spot, a dwarf in a
+    // doorway) still opens onto its neighbours
+    if (!passableFor(w, st, u)) { var n0 = neighbors(w, st, u, out); for (var q = 0; q < n0; q++) if (!seen[out[q]]) { seen[out[q]] = 1; stack.push(out[q]) } }
+  }
   while (stack.length) {
     var cur = stack.pop(), n = neighbors(w, cur, u, out)
     for (var k = 0; k < n; k++) { var nx = out[k]; if (!seen[nx]) { seen[nx] = 1; stack.push(nx) } }
@@ -1950,9 +2029,9 @@ function depthBelow(w, i, z) {
 // For the map: a designation is shown as stranded when nothing walkable
 // touches it, directly or through neighbouring designations. Cells the
 // dwarves merely have not got to yet are not stranded.
-function isStranded(w, i) { return !!w.desig[i] && !cache(w).desigOk[i] }
+function isStranded(w, i) { return !!w.desig[i] && !desigOk(w)[i] }
 function isUnreachable(w, i) { return isStranded(w, i) }
-function countUnreachable(w) { var n = 0, ds = cache(w).desigs; for (var k = 0; k < ds.length; k++) if (isStranded(w, ds[k])) n++; return n }
+function countUnreachable(w) { var n = 0, ds = cache(w).desigs, ok = desigOk(w); for (var k = 0; k < ds.length; k++) if (ds[k] && !ok[ds[k]]) n++; return n }
 function tileName(w, i) {
   var t = w.tile[i], f = w.floor[i], b = w.build[i]
   var names = { 1: "solo", 2: "rocha", 3: "veio de minério", 4: "gemas na rocha", 5: "árvore", 6: "água", 7: "magma", 8: "cogumelo gigante", 9: "arbusto" }
@@ -1985,7 +2064,7 @@ function summary(w) {
   for (var g = 0; g < w.units.length; g++) if (w.units[g].k === "goblin") { gob++; if (iz(w.units[g].i) < w.ground[w.units[g].i % N]) gobIn++ }
   return { pop: ds.length, mood: ds.length ? Math.round(mood / ds.length) : 0, food: countItems(w, "food") + countItems(w, "meal"), booze: countItems(w, "booze"),
     wealth: w.wealth, raid: !!w.raid, caravan: !!w.caravan, date: date(w), militia: militia, scenario: !!w.scenario, goblins: gob, goblinsInside: gobIn, lockdown: !!w.lockdown, deaths: w.stats.deaths,
-    wave: w.scenario ? w.scenario.wave : 0, nextRaidIn: w.scenario ? Math.max(0, w.scenario.nextRaid - w.tick) : -1 }
+    wave: w.scenario ? w.scenario.wave : 0, nextRaidIn: w.scenario ? Math.max(0, w.scenario.nextRaid - w.tick) : -1, fallen: !!w.fallen }
 }
 
 // ---- save / load ------------------------------------------------------------
@@ -2013,7 +2092,10 @@ function deserialize(json) {
     else w[k] = o[k]
   }
   w.claim = new Int32Array(NN); w.unreach = {}; w.dirty = true
-  if (!w.scenario && w.legends.length && /^Cenário de teste/.test(w.legends[0].m)) w.scenario = { n: pop(w), wave: 1, raidEvery: DAY * 15, nextRaid: Math.max(w.tick + DAY, DAY * 6) }
+  if (!w.fallen) w.fallen = false
+  // an older save may be missing counters the Legends page prints unguarded
+  var st = w.stats || (w.stats = {})
+  for (var sk = 0; sk < STAT_KEYS.length; sk++) if (typeof st[STAT_KEYS[sk]] !== "number") st[STAT_KEYS[sk]] = 0
   // units carrying items keep their claims; jobs are dropped so no stale paths survive
   for (var u = 0; u < w.units.length; u++) { var un = w.units[u]; un.path = null; un.pi = 0; un.job = null; if (un.carry) { var it = itemById(w, un.carry); if (it) { it.by = 0; it.res = 0; it.i = un.i } un.carry = 0 } }
   for (var i = 0; i < w.items.length; i++) { w.items[i].res = 0; w.items[i].by = 0 }
@@ -2023,7 +2105,7 @@ function newWorldEmpty() {
   return { v: 1, seed: 0, rs: 0, tick: 0, tile: new Uint8Array(NN), floor: new Uint8Array(NN), build: new Uint8Array(NN), desig: new Uint8Array(NN),
     dbuild: new Uint8Array(NN), grow: new Uint8Array(NN), ground: new Uint8Array(N), items: [], units: [], nextId: 1, log: [], legends: [], artifacts: [],
     dead: [], name: "", wealth: 0, alerts: 0, popCap: 20, liquidBudget: { water: 60, magma: 30 }, caravan: null, raid: null, lockdown: false, depot: -1,
-    weather: 0, stats: {}, claim: null, unreach: {}, lastBrew: 0, lastMoodTick: 0 }
+    weather: 0, stats: newStats(), fallen: false, claim: null, unreach: {}, lastMoodTick: 0 }
 }
 function rle(a) {
   var out = [], i = 0

@@ -98,7 +98,10 @@ function build(theme) {
 
 function toCss(rgb) { return css(rgb) }
 // Wall texture colors derived from a lit fill: a darker seam and a brighter edge.
-var edgeCache = {}
+// Both caches count their own entries: Object.keys(...).length walked the whole
+// table on every miss, and with the torches flickering the keys turn over every
+// tick, so a frame paid thousands of key scans for nothing.
+var edgeCache = {}, edgeCacheN = 0
 function edges(rgbCss, p, L) {
   var qL = L === undefined ? 10 : Math.round(Math.max(0, Math.min(1, L)) * 10)
   var key = rgbCss + "|" + qL
@@ -108,13 +111,13 @@ function edges(rgbCss, p, L) {
   var c = [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)]
   // the lip is brightest under light and only a faint trace in the dark
   var out = { seam: css(mix(c, p.bgRgb, 0.45)), face: css(mix(c, p.fgRgb, 0.12 + 0.45 * (qL / 10))) }
-  if (Object.keys(edgeCache).length > 4000) edgeCache = {}
-  edgeCache[key] = out
+  if (edgeCacheN > 4000) { edgeCache = {}; edgeCacheN = 0 }
+  edgeCache[key] = out; edgeCacheN++
   return out
 }
 // Light a color: below full light it sinks toward the background; torchlight
 // adds a warm cast; dawn and dusk tint toward the dusk color.
-var litCache = {}
+var litCache = {}, litCacheN = 0
 function lit(rgbCss, p, L, torch, fire, sun, isOut, solid) {
   // quantize so the cache stays small: 1440 cells x 4 fps would otherwise parse strings all day
   var qL = Math.round(L * 20), qT = Math.round(torch * 12), qF = Math.round(fire * 12), qS = Math.round(sun * 12)
@@ -133,8 +136,8 @@ function lit(rgbCss, p, L, torch, fire, sun, isOut, solid) {
   if (t > 0.04) { r = mix(r, p.warmRgb, 0.45 * t); r = scale(r, 1 + 0.25 * t) }
   if (f > 0.04) { r = mix(r, p.fireRgb, 0.5 * f); r = scale(r, 1 + 0.2 * f) }
   var out = css(r)
-  if (Object.keys(litCache).length > 6000) litCache = {}
-  litCache[key] = out
+  if (litCacheN > 6000) { litCache = {}; litCacheN = 0 }
+  litCache[key] = out; litCacheN++
   return out
 }
 function dimmed(rgbCss, bgRgb, amount) {

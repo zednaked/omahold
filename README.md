@@ -2,6 +2,8 @@
 
 **Uma fortaleza anã miniatura que mora dentro do omarchy-shell.** · by ZeD
 
+![O painel do Omahold: mapa de um nível, barra lateral e crônica](preview.png)
+
 Um plugin do Omarchy: um mundo de 48×30 células com 8 níveis de profundidade
 (z-levels), sete anões com fome, sede, sono, humor e ofícios, escavação,
 lavoura, cervejaria, artesanato, humores estranhos e artefatos, migrantes,
@@ -49,7 +51,8 @@ fecha o painel.
   autosave (`world.json`) continua independente dos slots.
 - **Ver / inspecionar** (`v` no menu; `o` no jogo alterna): Normal, **Luz**
   (mapa de calor da iluminação), **Humor** (halo por anão), **Acesso** (o que
-  se alcança a pé desde o portão; vermelho = isolado). "Pular para uma hora do
+  se alcança a pé desde o portão ou de onde os anões estão; vermelho = isolado).
+  É o mesmo campo que decide quais designações saem em vermelho no mapa. "Pular para uma hora do
   dia" mostra noite e tochas sem esperar.
 - **Opções** (persistem em `options.json`): ritmo com o painel fechado
   (congelado, 1 tick a cada 4 s / 2 s / 1 s, 4 por segundo), velocidade com o
@@ -101,9 +104,9 @@ mapa e os avisos num toast central.
 
 ## Cenário de teste
 
-`omarchy-shell omahold scenario 12` (ou `Shift+N` duas vezes no painel) troca o
-mundo por uma fortaleza pronta, feita para assistir a todos os loops rodarem e
-para medir quanto ela aguenta:
+`omarchy-shell omahold scenario 12` (ou **Novo jogo → Fortaleza pronta** no
+menu, `n`) troca o mundo por uma fortaleza pronta, feita para assistir a todos
+os loops rodarem e para medir quanto ela aguenta:
 
 | Nível | O que tem |
 |---|---|
@@ -135,11 +138,16 @@ escuro vale menos; a página Local mostra a luz em % no cursor. Quando o minéri
 prospecta o veio mais próximo sozinha; quando faltam toras, marca árvores.
 
 A **primeira onda goblin chega em seis dias** e depois a cada quinze, cada uma
-maior (3, 4, 6, 7…, veteranos a partir da quarta). O placar fica nas Lendas:
-ondas, repelidas, goblins mortos, anões perdidos. Equipamento de quem cai fica
-no chão para o próximo. Em dois anos de teste sem intervenção, 12 anões
-repelem 11 ondas e perdem uns 15 (com migrantes repondo). Trancar as portas
-(`L`) muda tudo: goblins não passam e vão embora.
+maior (4, 5, 6, 7… até nove, veteranos a partir da quinta). O placar fica nas
+Lendas: ondas, repelidas, goblins mortos, anões perdidos. Equipamento de quem
+cai fica no chão para o próximo. Em dois anos de teste sem intervenção, em oito
+sementes (`node test/scenario.js <semente> 2`), 12 anões repelem as 11 ondas,
+perdem uns 9 e terminam com uns 16 — os migrantes repõem mais do que os goblins
+levam. Trancar as portas (`L`) muda tudo: goblins não passam e vão embora.
+
+Se ainda assim o último anão morrer, a fortaleza **cai**: o painel marca `caiu`,
+as Lendas registram o fim e o mundo para de gerar ondas, caravanas e migrantes.
+Perder é divertido, mas uma ruína não fica anunciando vitórias.
 
 `omarchy-shell omahold raid` traz uma onda agora.
 
@@ -202,7 +210,9 @@ nenhum jogo ou simulação quando este foi escrito.
 
 `sim.js` é JavaScript puro, sem QML: `node test/run.js [semente] [anos]`
 joga uma fortaleza roteirizada e imprime a crônica, as estatísticas e mapas
-ASCII de três níveis. `test/debug.js` e `test/debug2.js` rastreiam caminhos
+ASCII de três níveis. `node test/scenario.js [semente] [anos] [anões]` roda a
+fortaleza pronta e imprime o placar das ondas — é com ele que se afere o
+balanceamento acima. `test/debug.js` e `test/debug2.js` rastreiam caminhos
 e transições de trabalho — foi assim que se descobriu que os anões morriam
 de sede porque `step()` confundia "ainda andando" com "bloqueado".
 

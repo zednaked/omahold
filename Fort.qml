@@ -36,7 +36,6 @@ Item {
   property int selStart: -1
   property string page: "units"         // units local legends help
   property string status: ""
-  property bool confirmNew: false
   property bool dragging: false
   property int dragStart: -1
   property int unitCycle: 0
@@ -46,7 +45,6 @@ Item {
 
   function flash(msg) { root.status = msg; statusTimer.restart() }
   Timer { id: statusTimer; interval: 3200; onTriggered: root.status = "" }
-  Timer { id: confirmTimer; interval: 3500; onTriggered: { root.confirmNew = false; root.confirmScenario = false } }
 
   function cursorIdx() { return Sim.idx(root.cx, root.cy, root.vz) }
   function setZ(nz) { World.followId = 0; World.viewZ = Math.max(0, Math.min(Sim.D - 1, nz)) }
@@ -72,16 +70,13 @@ Item {
                                       c: Sim.B_KITCHEN, u: Sim.B_SMELTER, j: Sim.B_FORGE, l: Sim.B_TORCH, r: Sim.B_TRAINING, g: Sim.B_JEWELER })
   readonly property var buildOrder: ["b", "t", "f", "e", "p", "w", "l", "o", "d", "c", "u", "j", "g", "r", "s"]
   readonly property var buildGlyph: ({ 1: "X", 2: "θ", 3: "Π", 4: "≡", 5: "¶", 6: "⌂", 7: "O", 8: "+", 9: "=", 10: "Ω", 11: "π", 12: "∆", 13: "‡", 14: "¡", 15: "Ξ", 16: "◊" })
-  property bool confirmScenario: false
-  property var accessMap: null
-  property int accessRev: -1
-  readonly property var viewModes: [["normal", "Normal", "o mapa como ele é"], ["light", "Luz", "mapa de calor da iluminação: sol, tochas (tremulando) e magma; sombras atrás da rocha"], ["mood", "Humor", "cada anão com um halo: verde contente, amarelo ok, laranja infeliz, vermelho miserável, roxo possuído/melancólico"], ["access", "Acesso", "o que se alcança a pé a partir do portão: azul alcançável, vermelho isolado (falta escada, muro no caminho)"]]
+  readonly property var viewModes: [["normal", "Normal", "o mapa como ele é"], ["light", "Luz", "mapa de calor da iluminação: sol, tochas (tremulando) e magma; sombras atrás da rocha"], ["mood", "Humor", "cada anão com um halo: verde contente, amarelo ok, laranja infeliz, vermelho miserável, roxo possuído/melancólico"], ["access", "Acesso", "o que se alcança a pé a partir do portão ou de onde os anões estão: azul alcançável, vermelho isolado (falta escada, muro no caminho)"]]
   function setViewMode(m) { World.viewMode = m; for (var k = 0; k < root.viewModes.length; k++) if (root.viewModes[k][0] === m) root.flash("ver: " + root.viewModes[k][1] + " — " + root.viewModes[k][2]) }
   function cycleViewMode() { var i = 0; for (var k = 0; k < root.viewModes.length; k++) if (root.viewModes[k][0] === World.viewMode) i = k; setViewMode(root.viewModes[(i + 1) % root.viewModes.length][0]) }
   readonly property var toolNames: ({ look: "olhar", dig: "cavar", stair: "escada", chop: "cortar", build: "construir", cancel: "cancelar designação", remove: "remover construção" })
 
   function toolLabel() {
-    if (root.tool === "build") return "construir " + Sim.BUILD_INFO[root.buildType].name
+    if (root.tool === "build") { var bi = Sim.BUILD_INFO[root.buildType]; return bi ? "construir " + bi.name : "construir" }
     return root.toolNames[root.tool] || root.tool
   }
   function isAreaTool() { return root.tool !== "look" }
@@ -333,15 +328,16 @@ Item {
   // ---- sidebar text -------------------------------------------------------------
   function bar(v, n) { var k = Math.max(0, Math.min(n, Math.round(v / 100 * n))); var s = ""; for (var i = 0; i < n; i++) s += i < k ? "▰" : "▱"; return s }
   function fmtDate(d) { return d.seasonName + ", dia " + d.day + " do ano " + d.year + " · " + (Math.floor(d.hour) < 10 ? "0" : "") + Math.floor(d.hour) + "h" }
+  // called from a Chip binding that re-evaluates every tick; the ground range is
+  // fixed for the life of a world, so it rides along on the sim's cache
   function levelName(z) {
     var w = World.w; if (!w) return ""
-    var minG = 99, maxG = 0
-    for (var k = 0; k < Sim.N; k++) { if (w.ground[k] < minG) minG = w.ground[k]; if (w.ground[k] > maxG) maxG = w.ground[k] }
-    if (z > maxG) return "céu"
-    if (z >= minG) return "superfície"
+    var c = Sim.cache(w)
+    if (z > c.maxGround) return "céu"
+    if (z >= c.minGround) return "superfície"
     if (z === 1) return "cavernas"
     if (z === 0) return "magma"
-    return "subsolo " + (minG - z)
+    return "subsolo " + (c.minGround - z)
   }
 
   property var lines: []
@@ -351,7 +347,7 @@ Item {
     var sel = World.selectedId ? Sim.unitById(w, World.selectedId) : null
     if (root.page === "units") {
       var ds = Sim.dwarves(w)
-      if (ds.length === 0) out.push({ t: "Ninguém restou. A fortaleza caiu. (N para fundar outra)", c: "urgent" })
+      if (ds.length === 0) out.push({ t: "Ninguém restou. A fortaleza caiu. (n abre o menu Novo jogo)", c: "urgent", wrap: true })
       var shown = 0
       for (k = 0; k < ds.length; k++) {
         u = ds[k]
@@ -397,7 +393,7 @@ Item {
       if (root.vz > 0 && w.tile[i] === Sim.T_OPEN && w.floor[i] === Sim.F_NONE) out.push({ t: "abaixo: " + Sim.tileName(w, i - Sim.N), c: "muted" })
       out.push({ t: "", c: "" })
       out.push({ t: "ferramenta: " + toolLabel() + (root.selStart >= 0 ? "  (canto marcado; Enter aplica)" : ""), c: "accent" })
-      if (root.tool === "build") { var bi = Sim.BUILD_INFO[root.buildType]; out.push({ t: bi.mat ? "consome 1 " + Sim.ITEM_NAME[bi.mat] : (root.buildType === Sim.B_FARM ? "só em terra, grama ou musgo" : "não consome material"), c: "muted" }) }
+      if (root.tool === "build") { var bi = Sim.BUILD_INFO[root.buildType]; if (bi) out.push({ t: bi.mat ? "consome 1 " + Sim.ITEM_NAME[bi.mat] : (root.buildType === Sim.B_FARM ? "só em terra, grama ou musgo" : "não consome material"), c: "muted" }) }
       out.push({ t: "", c: "" })
       out.push({ t: "despensa: " + Sim.countItems(w, "food") + " comida · " + Sim.countItems(w, "booze") + " bebida", c: Sim.countItems(w, "booze") < w.units.length ? "warn" : "" })
       out.push({ t: "toras " + Sim.countItems(w, "log") + " · pedras " + Sim.countItems(w, "stone") + " · minério " + Sim.countItems(w, "ore") + " · gemas " + Sim.countItems(w, "gem"), c: "muted" })
@@ -434,7 +430,7 @@ Item {
         ["x", "cancelar designação"], ["r", "remover construção"], ["v / Esc", "voltar a olhar"],
         ["] [", "próximo / anterior anão"], ["f", "seguir o anão selecionado"], ["Home", "voltar ao acampamento"],
         ["Espaço", "pausar"], ["+ -", "velocidade 1x 2x 4x"], ["L", "trancar portas (segura goblins)"],
-        ["o / Shift+o", "alternar visão: normal, luz, humor, acesso / menu Ver"], ["g", "blocos ↔ glifos"], ["m", "janelinha de canto ao fechar"], ["Tab u i y ?", "páginas do painel"], ["N N", "fundar outra fortaleza"], ["Shift+N ×2", "cenário de teste: fortaleza pronta, 12 anões equipados, ondas goblin"], ["Esc", "fechar"]]
+        ["o / Shift+o", "alternar visão: normal, luz, humor, acesso / menu Ver"], ["g", "blocos ↔ glifos"], ["m", "janelinha de canto ao fechar"], ["Tab u i y ?", "páginas do painel"], ["n", "menu Novo jogo: predefinições, personalizado"], ["Shift+S", "menu Salvar em slot"], ["Esc", "sair da ferramenta; sem nada a cancelar, abre o menu"]]
       for (k = 0; k < H.length; k++) out.push({ t: H[k][0], c: "accent", tail: H[k][1] })
       out.push({ t: "", c: "" })
       out.push({ t: "Como começar: escadas (s) no acampamento e no nível de baixo, cave (d) um salão, construa camas, mesas, uma destilaria e uma oficina; plante (b f) em terra, grama ou musgo. Cuidado ao cavar perto do riacho e do magma.", c: "muted", wrap: true })
@@ -570,6 +566,7 @@ Item {
               Chip { text: { World.rev; var s = World.summary || {}; return "☼ " + (s.wealth || 0) } }
               Chip { text: World.paused ? "‖ pausa" : "▶ " + World.speed + "×"; fg: World.paused ? Color.urgent : Color.popups.text; strong: World.paused }
               Chip { visible: !!(World.w && World.w.lockdown); text: "trancado"; fg: Color.urgent; strong: true }
+              Chip { visible: !!(World.w && World.w.fallen); text: "caiu"; fg: Color.urgent; strong: true }
               Chip { visible: World.viewMode !== "normal"; text: "ver: " + (World.viewMode === "light" ? "luz" : World.viewMode === "mood" ? "humor" : "acesso"); fg: Color.accent; strong: true }
               Chip {
                 visible: !!(World.w && World.w.scenario && !World.w.peaceful)
@@ -725,11 +722,13 @@ Item {
                   var it = w.items[q]; if (it.by) continue
                   var dk = Sim.depthBelow(w, it.i, z); if (dk < 0) continue
                   var bb = w.build[it.i]; if (bb && bb !== Sim.B_STOCK) continue
-                  if (!itemAt[it.i] || it.t === "artifact") { it._dk = dk; itemAt[it.i] = it }
+                  // a plain record: stashing the depth on the item itself put render
+                  // state (`_dk`) into every item, and serialize() copies w.items whole
+                  if (!itemAt[it.i] || it.t === "artifact") itemAt[it.i] = { t: it.t, i: it.i, dk: dk }
                 }
                 var IG = { log: "≡", stone: "•", ore: "*", gem: "♦", food: "%", booze: "!", craft: "☼", weapon: "/", artifact: "☼", remains: "†", bar: "▬", pick: "¬", axe: "Γ", armor: "[", meal: "%", cutgem: "◆", jewel: "¤" }
                 var IC = { log: p.itemLog, stone: p.itemStone, ore: p.itemOre, gem: p.itemGem, food: p.itemFood, booze: p.itemBooze, craft: p.itemCraft, weapon: p.itemWeapon, artifact: p.itemArtifact, remains: p.itemRemains, bar: p.itemBar, pick: p.itemTool, axe: p.itemTool, armor: p.itemArmor, meal: p.itemMeal, cutgem: p.itemCutGem, jewel: p.itemJewel }
-                for (var key in itemAt) { var it2 = itemAt[key]; var icol = IC[it2.t] || p.item; if (it2._dk) icol = Pal.dimmed(icol, p.bgRgb, p.dim[it2._dk]); else { var ib = bright(it2.i, Sim.outdoor(w, it2.i)); if (ib < 0.98) icol = Pal.dimmed(icol, p.bgRgb, Math.max(0.45, ib)) } ctx.fillStyle = icol; ctx.fillText(IG[it2.t] || "?", Sim.ix(it2.i) * c + half, Sim.iy(it2.i) * c + half + 1) }
+                for (var key in itemAt) { var it2 = itemAt[key]; var icol = IC[it2.t] || p.item; if (it2.dk) icol = Pal.dimmed(icol, p.bgRgb, p.dim[it2.dk]); else { var ib = bright(it2.i, Sim.outdoor(w, it2.i)); if (ib < 0.98) icol = Pal.dimmed(icol, p.bgRgb, Math.max(0.45, ib)) } ctx.fillStyle = icol; ctx.fillText(IG[it2.t] || "?", Sim.ix(it2.i) * c + half, Sim.iy(it2.i) * c + half + 1) }
                 // pass 3: creatures; those on lower levels seen through open air show dimmed, like the ground they stand on
                 for (var u = 0; u < w.units.length; u++) {
                   var un = w.units[u], udk = Sim.depthBelow(w, un.i, z)
@@ -768,8 +767,9 @@ Item {
                     ctx.fillStyle = p.dwarf; ctx.fillText("☺", Sim.ix(md.i) * c + half, Sim.iy(md.i) * c + half + 1)
                   }
                 } else if (mode === "access") {
-                  if (root.accessRev !== World.rev || !root.accessMap) { root.accessMap = Sim.reachableFrom(w, w.depot, null); root.accessRev = World.rev }
-                  var am = root.accessMap
+                  // the same field the dwarves use to decide what is workable, so the
+                  // red cells here are exactly the red designations on the map
+                  var am = Sim.reachField(w)
                   for (var ay = 0; ay < HH; ay++) for (var ax = 0; ax < WW; ax++) {
                     var ai = z * N + ay * WW + ax
                     if (!Sim.passable(w, ai)) continue

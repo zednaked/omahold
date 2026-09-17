@@ -158,12 +158,16 @@ Singleton {
   Process {
     id: loader
     running: true
-    command: ["sh", "-c", "mkdir -p \"" + root.stateDir + "\"; cat \"" + root.optionsPath + "\" 2>/dev/null; printf '\\036'; cat \"" + root.slotsPath + "\" 2>/dev/null; printf '\\036'; cat \"" + root.savePath + "\" 2>/dev/null"]
+    // the paths arrive as $1..$4, so a quote or a space in $HOME cannot become script
+    command: ["sh", "-c", "mkdir -p \"$1\"; cat \"$2\" 2>/dev/null; printf '\\036'; cat \"$3\" 2>/dev/null; printf '\\036'; cat \"$4\" 2>/dev/null",
+              "omahold", root.stateDir, root.optionsPath, root.slotsPath, root.savePath]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
         var parts = String(text).split(String.fromCharCode(30))
-        try { if (parts[0] && parts[0].trim()) root.applyOptions(JSON.parse(parts[0])) } catch (e) { console.warn("omahold: options unreadable", e) }
+        try { if (parts[0] && parts[0].trim()) root.applyOptions(JSON.parse(parts[0]), true) } catch (e) { console.warn("omahold: options unreadable", e) }
+        root.optionsLoaded = true
+        root.mergeWidgetSettings()
         try { if (parts[1] && parts[1].trim()) root.slots = JSON.parse(parts[1]) } catch (e2) { console.warn("omahold: slots index unreadable", e2) }
         var t = parts[2] || ""
         if (t.trim().length > 0) root.adopt(t)
@@ -199,7 +203,7 @@ Singleton {
   property int loadingSlot: 0
   Process {
     id: slotReader
-    command: ["sh", "-c", "cat \"" + root.stateDir + "/slot-" + root.loadingSlot + ".json\" 2>/dev/null"]
+    command: ["sh", "-c", "cat \"$1\" 2>/dev/null", "omahold", root.stateDir + "/slot-" + root.loadingSlot + ".json"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: { var t = String(text); if (t.trim().length > 0) { root.adopt(t); root.save() } else console.warn("omahold: slot empty") }
@@ -208,8 +212,31 @@ Singleton {
   function loadSlot(n) { if (!root.slots || !root.slots[String(n)]) return false; root.loadingSlot = n; slotReader.running = true; return true }
 
   // ---- options -----------------------------------------------------------------
-  function applyOptions(o) {
+  // Two sources disagree about the same settings: options.json (what the player
+  // chose in the menu) and the widget entry in shell.json (what they wrote by
+  // hand). They used to race - the bar widget's Component.onCompleted could land
+  // before or after the loader Process - and whoever came last also rewrote
+  // options.json. Now options.json wins for any key it actually contains, and
+  // the shell.json values fill in the rest, once, without saving back.
+  property bool optionsLoaded: false
+  property var savedOptionKeys: ({})
+  property var widgetSettings: ({})
+  property bool applyingOptions: false
+
+  function setWidgetSettings(o) {
+    root.widgetSettings = o || ({})
+    if (root.optionsLoaded) root.mergeWidgetSettings()
+  }
+  function mergeWidgetSettings() {
+    var o = root.widgetSettings || ({}), saved = root.savedOptionKeys || ({}), out = ({}), any = false
+    for (var k in o) { if (o[k] === undefined || o[k] === null || saved[k]) continue; out[k] = o[k]; any = true }
+    if (any) root.applyOptions(out)
+  }
+
+  function applyOptions(o, remember) {
     if (!o) return
+    root.applyingOptions = true
+    if (remember) { var ks = ({}); for (var rk in o) ks[rk] = true; root.savedOptionKeys = ks }
     if (o.backgroundMs !== undefined) root.backgroundMs = Number(o.backgroundMs)
     if (o.glyphs !== undefined) root.glyphs = !!o.glyphs
     if (o.peek !== undefined) root.peek = !!o.peek
@@ -217,6 +244,7 @@ Singleton {
     if (o.difficulty !== undefined) root.setDifficulty(String(o.difficulty), true)
     if (o.enemies !== undefined) { root.enemies = !!o.enemies; if (root.w) root.w.peaceful = !root.enemies }
     if (o.speed !== undefined) root.speed = Number(o.speed)
+    root.applyingOptions = false
   }
   function saveOptions() {
     var o = { backgroundMs: root.backgroundMs, glyphs: root.glyphs, peek: root.peek, popCap: root.popCap, difficulty: root.difficulty, enemies: root.enemies, speed: root.speed }
@@ -229,10 +257,13 @@ Singleton {
     if (!quiet) root.saveOptions()
   }
   function setEnemies(on) { root.enemies = on; if (root.w) root.w.peaceful = !on; root.saveOptions() }
-  onBackgroundMsChanged: if (root.ready) root.saveOptions()
-  onGlyphsChanged: if (root.ready) root.saveOptions()
-  onPeekChanged: if (root.ready) root.saveOptions()
-  onPopCapChanged: { if (root.w) root.w.popCap = root.popCap; if (root.ready) root.saveOptions() }
+  // read both flags directly: an intermediate binding would only be as fresh as
+  // the engine's next evaluation, and applyingOptions flips inside one call
+  onBackgroundMsChanged: if (root.ready && !root.applyingOptions) root.saveOptions()
+  onGlyphsChanged: if (root.ready && !root.applyingOptions) root.saveOptions()
+  onPeekChanged: if (root.ready && !root.applyingOptions) root.saveOptions()
+  onSpeedChanged: if (root.ready && !root.applyingOptions) root.saveOptions()
+  onPopCapChanged: { if (root.w) root.w.popCap = root.popCap; if (root.ready && !root.applyingOptions) root.saveOptions() }
 
   FileView {
     id: saveFile
@@ -241,11 +272,13 @@ Singleton {
     // never read through this one; the loader above does that once
     preload: false
   }
+  property int savedRev: -1
   function save() {
     if (!root.w) return
-    try { saveFile.setText(Sim.serialize(root.w)) } catch (e) { console.warn("omahold: save failed", e) }
+    try { saveFile.setText(Sim.serialize(root.w)); root.savedRev = root.rev } catch (e) { console.warn("omahold: save failed", e) }
   }
-  Timer { interval: 90000; running: root.ready; repeat: true; onTriggered: root.save() }
+  // frozen in the background, or paused for an hour: nothing changed, nothing to write
+  Timer { interval: 90000; running: root.ready; repeat: true; onTriggered: if (root.rev !== root.savedRev) root.save() }
 
   // ---- theme -----------------------------------------------------------------
   FileView {

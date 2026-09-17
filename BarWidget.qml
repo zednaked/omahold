@@ -19,10 +19,15 @@ Panel {
   readonly property bool alerting: World.alerts > 0
   readonly property bool danger: !!(World.summary && World.summary.raid)
 
+  // Inline options from the widget entry in shell.json. They are handed over
+  // rather than applied: World decides, once options.json has been read, which
+  // of them the player has not already overridden in the menu.
   Component.onCompleted: {
-    var bg = setting("backgroundMs", null); if (bg !== null) World.backgroundMs = Number(bg)
-    var cap = setting("popCap", null); if (cap !== null) { World.popCap = Number(cap); if (World.w) World.w.popCap = World.popCap }
-    if (setting("peek", false)) World.peek = true
+    var o = ({})
+    var bg = setting("backgroundMs", null); if (bg !== null) o.backgroundMs = Number(bg)
+    var cap = setting("popCap", null); if (cap !== null) o.popCap = Number(cap)
+    var pk = setting("peek", null); if (pk !== null) o.peek = !!pk
+    World.setWidgetSettings(o)
   }
 
   TextMetrics { id: metrics; font.family: root.fontFamily; font.pixelSize: Style.font.bodySmall; text: World.ready ? String(World.pop) : "…" }
@@ -45,7 +50,7 @@ Panel {
       return World.w.name + "\n" + (d.seasonName || "") + ", dia " + (d.day || 1) + " do ano " + (d.year || 1)
         + "\n" + s.pop + " anões, " + moodWord + " · comida " + s.food + " · bebida " + s.booze + " · riqueza " + s.wealth
         + (s.raid ? "\n!! emboscada em curso" : "") + (s.caravan ? "\ncaravana no depósito" : "")
-        + (World.paused ? "\npausado" : "")
+        + (s.fallen ? "\na fortaleza caiu" : "") + (World.paused ? "\npausado" : "")
     }
 
     iconComponent: Component {
