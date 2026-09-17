@@ -675,8 +675,17 @@ Item {
               anchors { right: parent.right; verticalCenter: parent.verticalCenter }
               spacing: Style.space(6)
               Chip { text: "z" + root.vz + " " + root.levelName(root.vz); tip: root.t("tip.level"); fg: Color.accent; strong: true }
-              Chip { text: { World.rev; var s = World.summary || {}; return "☺ " + (s.pop || 0) + (s.militia ? " · ⚔ " + s.militia : "") }; tip: root.t("tip.pop") }
-              Chip { text: { World.rev; var s = World.summary || {}; return "☼ " + (s.wealth || 0) }; tip: root.t("tip.wealth") }
+              Chip {
+                // the tip goes on its own line: a property whose value is an
+                // expression block cannot be followed by `; next:` — QML's
+                // parser stops at the semicolon after the closing brace
+                tip: root.t("tip.pop")
+                text: { World.rev; var s = World.summary || {}; return "☺ " + (s.pop || 0) + (s.militia ? " · ⚔ " + s.militia : "") }
+              }
+              Chip {
+                tip: root.t("tip.wealth")
+                text: { World.rev; var s = World.summary || {}; return "☼ " + (s.wealth || 0) }
+              }
               Chip { text: World.paused ? root.t("chip.paused") : "▶ " + World.speed + "×"; tip: root.t("tip.speed"); fg: World.paused ? Color.urgent : Color.popups.text; strong: World.paused }
               Chip { visible: !!(World.w && World.w.lockdown); text: root.t("chip.locked"); tip: root.t("tip.locked"); fg: Color.urgent; strong: true }
               Chip { visible: !!(World.w && World.w.fallen); text: root.t("chip.fallen"); tip: root.t("tip.fallen"); fg: Color.urgent; strong: true }
