@@ -2062,7 +2062,11 @@ function seasonStart(w, d) {
   announce(w, LF("season.came", "Chegou {0}.", (name === "primavera" ? "a " : "o ") + seasonName(name)), 0)
   w.weather = name === "inverno" ? 2 : 0
   if (w.fallen) return
-  // migrants
+  // migrants, on wealth alone and deliberately so. Gating them on spare beds
+  // and spare food was tried and reverted: migrants are the hold's only way of
+  // replacing a loss, so conditioning them turns any bad season into a spiral
+  // — 16 seeds over 4 years went from 8.8 dwarves and 7 falls to 5.2 and 9.
+  // The realism is not worth a game that cannot recover from one raid.
   if (name !== "inverno" && w.tick > YEAR / 8) {
     var p = pop(w)
     if (p < w.popCap) {
