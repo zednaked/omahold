@@ -135,7 +135,15 @@ para o chão, então o contorno das salas fica nítido e é óbvio onde é sóli
 A superfície escurece à noite até um luar azulado, com amanhecer e entardecer
 tingidos; o subsolo fica em penumbra onde não há tocha. Dormir e comer no
 escuro vale menos; a página Local mostra a luz em % no cursor. Quando o minério acaba, a fortaleza
-prospecta o veio mais próximo sozinha; quando faltam toras, marca árvores.
+prospecta o veio mais próximo sozinha — o veio inteiro, com um túnel de acesso
+— e quando faltam toras, marca árvores.
+
+Nada disso se acumula para sempre: a despensa guarda umas dez comidas por anão
+e o que passa daí **apodrece** (refeição preparada não, e é por isso que a
+cozinha vale a pedra que custa), e **picareta, machado, arma e armadura se
+gastam** até quebrar. Uma picareta quebrada é motivo para voltar à mina, e é o
+que mantém a fundição e a forja acesas no terceiro ano em vez de deixá-las
+ornamentais. As Lendas contam quanto estragou e quanto quebrou.
 
 A **primeira onda goblin chega em seis dias** e depois a cada quinze, cada uma
 maior (4, 5, 6, 7… até nove, veteranos a partir da quinta). O placar fica nas
@@ -172,7 +180,7 @@ ao fechar o painel; sobrevive a reinícios do shell.
 
 ## O que está simulado, e o que não está
 
-**Está**: cadeia minério → barra → ferramentas/armas/armadura, cozinha, tochas e luz, milícia automática com treino, armadura no combate, cenário-vitrine com ondas; relevo com encostas (rampas implícitas), solo/rocha/minério/gemas,
+**Está**: cadeia minério → barra → ferramentas/armas/armadura, cozinha, tochas e luz, milícia automática com treino, armadura no combate, cenário-vitrine com ondas; economia com dreno — comida crua estraga no que passa da capacidade da despensa (refeições preparadas conservam) e picareta, machado, arma e armadura se gastam com o uso até quebrar, então a mina e a forja têm por que continuar depois do primeiro ano; relevo com encostas (rampas implícitas), solo/rocha/minério/gemas,
 riacho, cavernas, mar de magma; A* em 3D com escadas e encostas; sete
 necessidades e ofícios; designações de cavar/escada/cortar/construir; lavoura
 com crescimento, destilaria, oficina (artesanato e armas de minério),
@@ -186,8 +194,9 @@ habilidade e armas; portas trancáveis; líquidos que avançam por brechas com
 orçamento finito; dia e noite, chuva e neve; crônica e memorial.
 
 **Não está** (de propósito, pela escala): hidráulica de verdade (níveis de
-água/pressão), desabamentos, temperatura, militares e treinamento, comércio
-com negociação, nobres, animais domésticos, sítios externos. Cada anão é um
+água/pressão), desabamentos, temperatura, comércio
+com negociação, nobres, animais domésticos, sítios externos, ordens de oficina
+e ofícios atribuídos à mão (os anões escolhem o trabalho sozinhos). Cada anão é um
 único glifo e não tem membros — a ferida é só um número.
 
 ## Referências

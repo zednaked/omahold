@@ -63,13 +63,23 @@ var ITEM_NAME = { log: "tora", stone: "pedra", ore: "minério", gem: "gema", foo
                   craft: "artesanato", weapon: "arma", artifact: "artefato", remains: "restos",
                   bar: "barra de metal", pick: "picareta", axe: "machado", armor: "armadura", meal: "refeição", cutgem: "gema lapidada", jewel: "joia" }
 
+// ---- economy drains ---------------------------------------------------------
+// A hold with no way to lose what it makes accumulates until the numbers stop
+// meaning anything: without these three the larder reached 2700 meals and half
+// the dwarves stood idle. Raw food rots, prepared meals keep (which is what
+// makes the kitchen worth building), and tools break from use, so the mine and
+// the forge have a reason to keep running after the first year.
+var FOOD_PER_DWARF = 10   // how much raw food a hold farms toward, per dwarf
+var SPOIL_PER_DAY = 0.012 // chance a raw food item rots each day
+var WEAR = { pick: 50, axe: 35, weapon: 60, armor: 20 }
+
 var SKILLS = ["mine", "wood", "farm", "build", "craft", "fight", "brew"]
 var SKILL_NAME = { mine: "mineração", wood: "lenha", farm: "lavoura", build: "construção", craft: "artesanato", fight: "luta", brew: "cervejaria" }
 
 // every counter the UI prints; a save from an older build gets the missing ones
 // zeroed on load instead of showing "undefined" in the chronicle
 var STAT_KEYS = ["dug", "chopped", "built", "brewed", "crafted", "migrants", "deaths", "artifacts", "raids", "caravans",
-                 "cooked", "smelted", "forged", "cut", "jewels", "repelled", "goblinsKilled"]
+                 "cooked", "smelted", "forged", "cut", "jewels", "repelled", "goblinsKilled", "spoiled", "broken"]
 function newStats() { var o = {}; for (var k = 0; k < STAT_KEYS.length; k++) o[STAT_KEYS[k]] = 0; return o }
 
 var TRAITS = ["teimoso", "alegre", "melancólico", "guloso", "valente", "preguiçoso", "curioso", "rabugento"]
@@ -706,10 +716,18 @@ function nearestOf(list, from) {
   for (var k = 0; k < list.length; k++) { var d = dist(list[k], from); if (d < bd) { bd = d; best = list[k] } }
   return best
 }
+// Counts and the haul list, both built once per tick. The haul fallback used
+// to scan every item for every idle dwarf; once the farm cap stopped soaking
+// up the workforce, enough dwarves reached that fallback to make the tick four
+// times more expensive. One pass here, a short list there.
 function recount(w) {
-  var c = {}
-  for (var k = 0; k < w.items.length; k++) { var t = w.items[k].t; c[t] = (c[t] || 0) + 1 }
-  w.counts = c
+  var c = {}, haul = []
+  for (var k = 0; k < w.items.length; k++) {
+    var it = w.items[k], t = it.t
+    c[t] = (c[t] || 0) + 1
+    if (!it.res && !it.by && t !== "remains" && !onStockpile(w, it)) haul.push(it)
+  }
+  w.counts = c; w.haulable = haul
 }
 
 // ---- items helpers ----------------------------------------------------------
@@ -782,7 +800,7 @@ function step(w, u) {
 function pickUp(w, u, it) { it.by = u.id; it.res = u.id; u.carry = it.id; it.i = u.i }
 function putDown(w, u) { if (!u.carry) return null; var it = itemById(w, u.carry); if (it) { it.by = 0; it.res = 0; it.i = u.i } u.carry = 0; return it }
 function consumeCarried(w, u) { if (!u.carry) return; var id = u.carry; u.carry = 0; removeItem(w, id) }
-function removeItem(w, id) { for (var k = 0; k < w.items.length; k++) if (w.items[k].id === id) { w.items.splice(k, 1); return } }
+function removeItem(w, id) { for (var k = 0; k < w.items.length; k++) if (w.items[k].id === id) { w.items[k].gone = true; w.items.splice(k, 1); return } }
 
 function skillMul(u, s) {
   var m = 1 + 0.12 * (u.skills[s] || 0) * (u.trait === "preguiçoso" ? 0.7 : 1)
@@ -995,14 +1013,19 @@ function gearJob(w, u) {
 function economyJob(w, u) {
   var i, it, c = cache(w)
   if (gearJob(w, u)) return true
-  // farming
+  // farming, toward a larder of FOOD_PER_DWARF per dwarf and no further. This
+  // used to run first and unconditionally, so the fields ate the whole
+  // workforce and the larder climbed past 2700 while nobody mined or built.
+  // A field left ripe keeps; only planting stops at the cap.
+  var larder = countItems(w, "food") + countItems(w, "meal") * 2, foodCap = pop(w) * FOOD_PER_DWARF
   var farms = c.farms
-  for (var fq = 0; fq < farms.length; fq++) {
+  for (var fq = 0; fq < farms.length && larder < foodCap * 1.5; fq++) {
     i = farms[fq]
     if (w.claim[i] && w.claim[i] !== u.id) continue
     if (w.unreach[i] && w.unreach[i] > w.tick) continue
-    if (w.grow[i] === 0 || w.grow[i] >= 200) {
-      if (go(w, u, workSpots(w, i, false), i, 1500)) { setJob(w, u, { k: w.grow[i] === 0 ? "plant" : "harvest", i: i, claims: true, prog: 0 }); return true }
+    var ripe = w.grow[i] >= 200
+    if (ripe || (w.grow[i] === 0 && larder < foodCap)) {
+      if (go(w, u, workSpots(w, i, false), i, 1500)) { setJob(w, u, { k: ripe ? "harvest" : "plant", i: i, claims: true, prog: 0 }); return true }
       w.unreach[i] = w.tick + 200
     }
   }
@@ -1014,7 +1037,7 @@ function economyJob(w, u) {
   }
   // cooking: raw food into meals (two per pot)
   var kitchen = freeBuilding(w, c.kitchens, u)
-  if (kitchen >= 0 && countItems(w, "food") >= 8 && countItems(w, "meal") < pop(w) + 6) {
+  if (kitchen >= 0 && countItems(w, "food") >= 8 && countItems(w, "meal") < pop(w) * 2) {
     it = freeItem(w, "food", u.i, u)
     if (it && go(w, u, function (q) { return q === it.i }, it.i)) { it.res = u.id; setJob(w, u, { k: "cook", i: kitchen, claims: true, item: it.id, stage: "fetch", prog: 0 }); return true }
   }
@@ -1068,10 +1091,10 @@ function economyJob(w, u) {
   // hauling
   var spot = stockpileSpot(w, u.i)
   if (spot >= 0) {
-    var best = null, bd = 1e9
-    for (var k = 0; k < w.items.length; k++) {
-      var ci = w.items[k]
-      if (ci.res || ci.by || onStockpile(w, ci) || ci.t === "remains") continue
+    var best = null, bd = 1e9, hl = w.haulable || w.items
+    for (var k = 0; k < hl.length; k++) {
+      var ci = hl[k]
+      if (ci.gone || ci.res || ci.by || onStockpile(w, ci) || ci.t === "remains") continue
       if (w.unreach["i" + ci.id]) continue
       var d = dist(ci.i, u.i); if (d < bd) { bd = d; best = ci }
     }
@@ -1113,6 +1136,7 @@ function work(w, u) {
         var wasSolid = solid(w.tile[j.i])
         if (!j.stair && !wasSolid) { w.desig[j.i] = DG_NONE; dropJob(w, u); return }
         finishDig(w, u, j.i, j.stair)
+        if (u.tool === "pick") wearOut(w, u, "pick")
         dropJob(w, u)
       }
       return
@@ -1125,6 +1149,7 @@ function work(w, u) {
         if (t === T_SHRUB) addItem(w, "food", j.i)
         else { addItem(w, "log", j.i); if (chance(w, 0.5)) addItem(w, "log", j.i) }
         w.stats.chopped++; gainSkill(w, u, "wood", 1)
+        if (t !== T_SHRUB && u.tool === "axe") wearOut(w, u, "axe")
         dropJob(w, u)
       }
       return
@@ -1464,8 +1489,8 @@ function attack(w, a, b) {
   var as = a.k === "dwarf" ? a.skills.fight + (a.weapon ? 3 : 0) + (a.trait === "valente" ? 1 : 0) : (a.k === "goblin" ? 1 + (a.elite ? 2 : 0) : a.k === "wolf" ? 2 : 1)
   var ds = b.k === "dwarf" ? b.skills.fight + (b.weapon ? 1 : 0) + (b.armor ? 1 : 0) : 2
   if (chance(w, Math.max(0.15, Math.min(0.9, 0.5 + 0.06 * (as - ds))))) {
-    var dmg = 1 + ri(w, 3) + (a.weapon ? 1 : 0) + (a.elite ? 1 : 0)
-    if (b.k === "dwarf" && b.armor) dmg = Math.max(0, dmg - 1 - (chance(w, 0.4) ? 1 : 0))
+    var dmg = 1 + ri(w, 3) + (a.weapon ? 1 : 0) + (a.elite ? 1 : 0), tookHit = false
+    if (b.k === "dwarf" && b.armor) { dmg = Math.max(0, dmg - 1 - (chance(w, 0.4) ? 1 : 0)); tookHit = true }
     b.hp -= dmg
     if (b.k === "goblin" && b.hp <= 0) w.stats.goblinsKilled = (w.stats.goblinsKilled || 0) + 1
     if (a.k === "dwarf") gainSkill(w, a, "fight", 1)
@@ -1473,7 +1498,8 @@ function attack(w, a, b) {
       if (a.k === "dwarf") { a.kills++; thought(w, a, "matou um " + (b.k === "goblin" ? "goblin" : b.k === "wolf" ? "lobo" : "inimigo") + " em combate", 6) }
       if (b.k === "dwarf") die(w, b, "foi morto por " + (a.k === "goblin" ? "um goblin" : a.k === "wolf" ? "um lobo" : a.name || a.k))
       else { announce(w, (b.k === "goblin" ? "Um goblin" : b.k === "wolf" ? "Um lobo" : "Um " + b.k) + " foi morto" + (a.k === "dwarf" ? " por " + a.name : "") + ".", 1); removeUnit(w, b) }
-    }
+    } else if (tookHit) wearOut(w, b, "armor")
+    if (a.k === "dwarf" && a.weapon) wearOut(w, a, "weapon")
   }
 }
 function fightOrFlee(w, u) {
@@ -1610,24 +1636,56 @@ function rosterMilitia(w) {
 // mark trees near the gate for felling. The hold keeps mining and cutting
 // without anyone giving orders, which is what makes the loops watchable.
 function prospect(w) {
-  var c = cache(w), hasDig = false
-  for (var q = 0; q < c.desigs.length; q++) if (w.desig[c.desigs[q]] === DG_DIG) { hasDig = true; break }
-  if (!hasDig && countItems(w, "ore") < 3) {
-    var cz = iz(w.depot), best = -1, bd = 1e9, bx = ix(w.depot), by = iy(w.depot)
+  var c = cache(w), pending = 0
+  for (var q = 0; q < c.desigs.length; q++) if (w.desig[c.desigs[q]] === DG_DIG) pending++
+  // Keep enough metal on hand to replace what wear breaks. The old test asked
+  // for `ore < 3` and refused to mark anything while a single cell was still
+  // designated, so the mine ran in tiny bursts: 202 cells dug in three years
+  // with 341 veins left in the rock, and the forge starved at five bars.
+  var wantOre = Math.max(6, pop(w))
+  if (pending < 8 && countItems(w, "ore") + countItems(w, "bar") < wantOre) {
+    // Every ore and gem cell on the mine level, nearest first. Taking the
+    // single nearest cell picked a lone nugget over and over - the seams on
+    // this level run 23, 12 and 11 cells wide - so walk the candidates and
+    // keep the first seam worth a tunnel.
+    var cz = iz(w.depot), bx = ix(w.depot), by = iy(w.depot), cand = []
     for (var z = Math.max(2, cz - 4); z <= cz - 3; z++) for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
       var i = idx(x, y, z), t = w.tile[i]
       if (t !== T_ORE && t !== T_GEM) continue
-      var d = Math.abs(x - bx) + Math.abs(y - by); if (d < bd) { bd = d; best = i }
+      cand.push([Math.abs(x - bx) + Math.abs(y - by), i])
     }
-    if (best >= 0) {
-      var vz = iz(best), vx = ix(best), vy = iy(best), ox = -1, oy = -1, od = 1e9
+    cand.sort(function (a, b) { return a[0] - b[0] })
+    var tried = {}, seam = null
+    for (var ci = 0; ci < cand.length && !seam; ci++) {
+      var head = cand[ci][1]
+      if (tried[head]) continue
+      var stack = [head], seen = {}, cells = []
+      seen[head] = true
+      while (stack.length && cells.length < 24) {
+        var si = stack.pop()
+        tried[si] = true
+        if (canDesignate(w, si, "dig")) cells.push(si)
+        var sxq = ix(si), syq = iy(si), nbs = []
+        if (sxq > 0) nbs.push(si - 1); if (sxq < W - 1) nbs.push(si + 1)
+        if (syq > 0) nbs.push(si - W); if (syq < H - 1) nbs.push(si + W)
+        for (var nq = 0; nq < nbs.length; nq++) {
+          var ni = nbs[nq]
+          if (seen[ni] || (w.tile[ni] !== T_ORE && w.tile[ni] !== T_GEM)) continue
+          seen[ni] = true; stack.push(ni)
+        }
+      }
+      // a nugget will do only if nothing better is left on the level
+      if (cells.length >= 4 || ci === cand.length - 1) seam = cells
+    }
+    if (seam && seam.length) {
+      var vz = iz(seam[0]), vx = ix(seam[0]), vy = iy(seam[0]), ox = -1, oy = -1, od = 1e9
       for (var yy = 0; yy < H; yy++) for (var xx = 0; xx < W; xx++) { var oi = idx(xx, yy, vz); if (!passable(w, oi)) continue; var dd = Math.abs(xx - vx) + Math.abs(yy - vy); if (dd < od) { od = dd; ox = xx; oy = yy } }
       if (ox >= 0) {
-        designate(w, best, "dig")
+        for (var mq = 0; mq < seam.length; mq++) designate(w, seam[mq], "dig")
         var sx = ox < vx ? 1 : -1, sy = oy < vy ? 1 : -1, px, py
         for (px = ox; px !== vx; px += sx) { var ti = idx(px, oy, vz); if (canDesignate(w, ti, "dig")) designate(w, ti, "dig") }
         for (py = oy; py !== vy; py += sy) { var tj = idx(vx, py, vz); if (canDesignate(w, tj, "dig")) designate(w, tj, "dig") }
-        announce(w, "Prospecção: um novo veio foi marcado para escavação.", 0)
+        if (seam.length >= 4) announce(w, "Prospecção: um veio de " + seam.length + " células foi marcado para escavação.", 0)
       }
     }
   }
@@ -1643,6 +1701,54 @@ function prospect(w) {
     }
   }
 }
+// Raw food rots in the larder; prepared meals keep. This is the drain that
+// makes the larder settle around what the hold actually eats instead of
+// climbing forever, and it is what finally makes a kitchen worth building.
+// Reserved and carried items are left alone so no job loses its item midway.
+function spoilFood(w) {
+  // Only what sits around spoils. A hold living hand to mouth keeps every
+  // scrap: eating the survival reserve did not make the game tense, it made
+  // every hungry dwarf run a 7000-node search for shrubs and the tick four
+  // times slower. The rot is here to stop the larder hoarding, nothing else.
+  // The larder holds what the fields aim for; only what piles up beyond that
+  // rots. A floor of three per dwarf looked safe and was not: the classic
+  // embark farms so close to the bone that losing a fifth of the harvest
+  // starved the still, and a hold with no beer sinks to a mood of 31 and
+  // tantrums itself to death. Never take from the chain, only from the hoard.
+  var raw = countItems(w, "food"), keep = pop(w) * FOOD_PER_DWARF
+  if (raw <= keep) return
+  var excess = raw - keep, lost = 0
+  for (var k = w.items.length - 1; k >= 0 && lost < excess; k--) {
+    var it = w.items[k]
+    if (it.t !== "food" || it.by || it.res) continue
+    if (chance(w, SPOIL_PER_DAY)) { it.gone = true; w.items.splice(k, 1); lost++ }
+  }
+  if (lost) {
+    w.stats.spoiled += lost
+    if (lost >= 3) announce(w, lost + " itens de comida estragaram na despensa.", 0)
+  }
+}
+// Tools, weapons and armor wear out with use and finally break. Without this
+// the forge satisfied every dwarf once in the first year and then had nothing
+// left to make: smelting and forging fell to 1.4% of the hold's time and the
+// mine stopped mattering. A broken pick is a reason to dig again.
+function wearOut(w, u, slot) {
+  var key = slot === "pick" || slot === "axe" ? "wtool" : slot === "weapon" ? "wweapon" : "warmor"
+  // a save from before wear, or a dwarf who started the game equipped, gets a
+  // full life the first time the item is used
+  if (typeof u[key] !== "number" || u[key] <= 0) u[key] = WEAR[slot]
+  u[key]--
+  if (u[key] > 0) return
+  u[key] = 0
+  if (slot === "weapon") u.weapon = false
+  else if (slot === "armor") u.armor = false
+  else u.tool = ""
+  w.stats.broken++
+  var what = slot === "armor" ? "a armadura" : slot === "weapon" ? "a arma" : slot === "pick" ? "a picareta" : "o machado"
+  thought(w, u, "quebrou " + what, -2)
+  announce(w, u.name + " quebrou " + what + ".", 0)
+}
+
 // The last dwarf is dead. Losing is fun, but the world should stop pretending
 // there is a fortress here: no more waves, caravans, thieves or migrants.
 function checkFall(w) {
@@ -1653,6 +1759,7 @@ function checkFall(w) {
 }
 function dayStart(w, d) {
   rosterMilitia(w)
+  if (!w.fallen) spoilFood(w)
   if (w.scenario && !w.fallen) prospect(w)
   if (w.scenario && !w.peaceful && !w.fallen && !w.raid && !w.caravan && w.tick >= w.scenario.nextRaid) spawnRaid(w, d, w.scenario.wave)
   // weather
@@ -2075,7 +2182,7 @@ function slotMeta(w) {
 function serialize(w) {
   var o = {}
   for (var k in w) {
-    if (k === "claim" || k === "unreach" || k === "cache" || k === "counts" || k === "dirty" || k === "hostiles") continue
+    if (k === "claim" || k === "unreach" || k === "cache" || k === "counts" || k === "haulable" || k === "dirty" || k === "hostiles") continue
     var v = w[k]
     if (k === "scenario" && !v) continue
     if (v && v.buffer && v.BYTES_PER_ELEMENT) o[k] = rle(v)

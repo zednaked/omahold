@@ -414,6 +414,7 @@ Item {
       out.push({ t: "cavou " + st.dug + " · cortou " + st.chopped + " · construiu " + st.built + " · fermentou " + st.brewed + " · criou " + st.crafted, c: "muted" })
       out.push({ t: "migrantes " + st.migrants + " · caravanas " + st.caravans + " · emboscadas " + st.raids + " · mortos " + st.deaths, c: "muted" })
       out.push({ t: "cozinhou " + (st.cooked || 0) + " · fundiu " + (st.smelted || 0) + " · forjou " + (st.forged || 0) + " · lapidou " + (st.cut || 0) + " · joias " + (st.jewels || 0), c: "muted" })
+      out.push({ t: "estragou " + (st.spoiled || 0) + " comida(s) · quebrou " + (st.broken || 0) + " equipamento(s)", c: "muted" })
       out.push({ t: "", c: "" })
       out.push({ t: "Resiliência", c: "accent" })
       out.push({ t: st.raids + " ataque(s) · " + (st.repelled || 0) + " repelido(s) · " + (st.goblinsKilled || 0) + " goblins mortos · " + st.deaths + " anões perdidos" + (w.scenario ? " · onda " + w.scenario.wave + " a caminho" : ""), c: st.deaths > (st.goblinsKilled || 0) ? "warn" : "" })
