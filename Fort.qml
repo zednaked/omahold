@@ -439,6 +439,7 @@ Item {
       var lt = Sim.cellLight(w, i)
       out.push({ t: root.tf("p.light", Math.round(lt * 100), lt < 0.3 ? root.t("p.light.dark") : ""), c: lt < 0.3 ? "muted" : "" })
       if (w.lockdown) out.push({ t: root.t("p.locked"), c: "warn" })
+      if (w.siege) out.push({ t: root.tf("p.siege", Math.max(1, Math.round((w.tick - w.siege) / Sim.DAY))), c: "urgent", wrap: true })
     } else if (root.page === "orders") {
       var ol = w.orders || []
       out.push({ t: root.t("p.orders.title"), c: "accent" })
@@ -468,6 +469,18 @@ Item {
       out.push({ t: root.tf("p.st.2", st.migrants, st.caravans, st.raids, st.deaths), c: "muted", wrap: true })
       out.push({ t: root.tf("p.st.3", st.cooked || 0, st.smelted || 0, st.forged || 0, st.cut || 0, st.jewels || 0), c: "muted", wrap: true })
       out.push({ t: root.tf("p.st.4", st.spoiled || 0, st.broken || 0, st.botched || 0, st.buried || 0), c: "muted", wrap: true })
+      out.push({ t: "", c: "" })
+      // Milestones before resilience: they are what the hold is playing for.
+      out.push({ t: root.t("p.milestones"), c: "accent" })
+      var msDone = 0, msLeft = []
+      for (k = 0; k < Sim.MILESTONES.length; k++) {
+        var msId = Sim.MILESTONES[k], msAt = (w.done || {})[msId]
+        if (msAt) msDone++; else msLeft.push(root.t("ms.short." + msId))
+        out.push({ t: (msAt ? "✓ " : "· ") + root.t("ms.short." + msId) + (msAt ? "  ·  " + root.fmtDate(Sim.date({ tick: msAt })) : ""), c: msAt ? "good" : "muted", wrap: true })
+      }
+      out.push({ t: root.tf("p.ms.done", msDone, Sim.MILESTONES.length), c: "" })
+      if (w.legendary) out.push({ t: root.tf("p.legendary", Sim.date({ tick: w.legendary }).year), c: "accent", wrap: true })
+      else if (msLeft.length) out.push({ t: root.tf("p.ms.pending", msLeft.join(", ")), c: "muted", wrap: true })
       out.push({ t: "", c: "" })
       out.push({ t: root.t("p.resilience"), c: "accent" })
       out.push({ t: root.tf("p.res.line", st.raids, st.repelled || 0, st.goblinsKilled || 0, st.deaths, w.scenario ? root.tf("p.res.wave", w.scenario.wave) : ""), c: st.deaths > (st.goblinsKilled || 0) ? "warn" : "", wrap: true })

@@ -85,6 +85,13 @@ var FOOD_PER_DWARF = 10   // how much raw food a hold farms toward, per dwarf
 var SPOIL_PER_DAY = 0.012 // chance a raw food item rots each day
 var WEAR = { pick: 50, axe: 35, weapon: 60, armor: 20 }
 
+// How long goblins who cannot reach anybody will sit outside before going
+// home. It used to be one day, which made locking the doors (`L`) a free win:
+// the wave counted as repelled having cost nothing at all. Eight days of siege
+// costs the surface — the fields, the shrubs, the woodcutting — and the hold
+// has to live on what is already inside.
+var SIEGE_DAYS = 8
+
 // ---- kinds of work ----------------------------------------------------------
 // Every job belongs to one of these. A dwarf leans toward one and cannot stand
 // another, which decides what they reach for, how they feel doing it, and how
@@ -215,7 +222,7 @@ function newWorld(seed) {
     ground: new Uint8Array(N),
     items: [], units: [], nextId: 1,
     log: [], legends: [], artifacts: [], dead: [],
-    name: "", wealth: 0, alerts: 0, popCap: 20, graveyard: -1,
+    name: "", wealth: 0, alerts: 0, popCap: 20, graveyard: -1, done: {}, legendary: 0, siege: 0, siegeSince: 0,
     liquidBudget: { water: 60, magma: 30 },
     caravan: null, raid: null, lockdown: false, depot: -1,
     weather: 0,   // 0 clear, 1 rain, 2 snow
@@ -960,12 +967,13 @@ function skillTitle(u) {
 
 // Pick the nearest designation this dwarf could plausibly do.
 function findDesignation(w, u) {
-  var ds = cache(w).desigs, cands = []
+  var ds = cache(w).desigs, cands = [], sieged = besieged(w)
   for (var q = 0; q < ds.length; q++) {
     var i = ds[q], d = w.desig[i]
     if (d === DG_NONE) continue
     if (w.claim[i] && w.claim[i] !== u.id) continue
     var ur = w.unreach[i]; if (ur && ur > w.tick) continue
+    if (sieged && outdoor(w, i)) continue
     var dd = dist(i, u.i), dcat = (d === DG_DIG || d === DG_STAIR) ? "mine" : d === DG_CHOP ? "wood" : "build"
     if (avoiding(w, u, dcat)) continue
 
@@ -1369,9 +1377,10 @@ function branchFarm(w, u) {
   // the larder climbed past 2700 while nobody mined or built. A field left
   // ripe keeps; only planting stops at the cap.
   var larder = countItems(w, "food") + countItems(w, "meal") * 2, foodCap = pop(w) * FOOD_PER_DWARF
-  var farms = c.farms
+  var farms = c.farms, sieged = besieged(w)
   for (var fq = 0; fq < farms.length && larder < foodCap * 1.5; fq++) {
     i = farms[fq]
+    if (sieged && outdoor(w, i)) continue
     if (w.claim[i] && w.claim[i] !== u.id) continue
     if (w.unreach[i] && w.unreach[i] > w.tick) continue
     var ripe = w.grow[i] >= 200
@@ -1383,8 +1392,14 @@ function branchFarm(w, u) {
   return false
 }
 // when the larder runs low, pick shrubs
+// Under siege nobody works above ground: the fields, the shrubs and the trees
+// are all out there with the goblins. This is what the siege actually costs,
+// and it is why a hold with its plots on the surface feels it and one with
+// them underground does not.
+function besieged(w) { return !!w.siege && w.hostiles > 0 }
 function branchGather(w, u) {
   var c = cache(w)
+  if (besieged(w)) return false
   if (countItems(w, "food") >= pop(w) + 2 || c.shrubs.length === 0) return false
   // A cooldown of its own: sharing one with the eating-a-shrub search in
   // needJob meant a dwarf who failed to find a shrub to *harvest* was then
@@ -1941,7 +1956,7 @@ function actHostile(w, u) {
         && !(u.i !== w.depot && dist(u.i, w.depot) > 1 && go(w, u, function (c) { return c === w.depot || adjacent(c, w.depot) }, w.depot, 4000))) {
       // can't reach anyone: mill around; give up after a while
       u.wait++
-      if (u.wait > DAY) { leaveMap(w, u); return }
+      if (u.wait > DAY * SIEGE_DAYS) { leaveMap(w, u); return }
       var x = ix(u.i) + ri(w, 5) - 2, y = iy(u.i) + ri(w, 5) - 2
       if (inb(x, y, iz(u.i)) && passableFor(w, idx(x, y, iz(u.i)), u)) go(w, u, function (c) { return c === idx(x, y, iz(u.i)) }, idx(x, y, iz(u.i)), 200)
       return
@@ -2152,11 +2167,61 @@ function wearOut(w, u, slot) {
 
 // The last dwarf is dead. Losing is fun, but the world should stop pretending
 // there is a fortress here: no more waves, caravans, thieves or migrants.
+// ---- milestones and the end of a game --------------------------------------
+// There was no way to win, only `checkFall` — the last dwarf dying. A hold
+// could run for five years and nothing ever said it had got anywhere, which is
+// what made watching it feel like a screensaver instead of a game.
+//
+// These are the six things a hold does on its way up, each announced once when
+// it happens. Doing all six makes the hold **legendary**, which is this game's
+// version of winning: the world keeps going afterwards (there is no screen to
+// stop at), but the Legends page carries the date it was earned, and the
+// scoreboard is written then instead of only when everyone is dead.
+var MILESTONES = ["artifact", "wealth", "pop", "repelled", "depths", "years"]
+function milestoneMet(w, id) {
+  if (id === "artifact") return w.stats.artifacts >= 1
+  if (id === "wealth") return w.wealth >= 6000
+  if (id === "pop") return pop(w) >= 18
+  if (id === "repelled") return (w.stats.repelled || 0) >= 3
+  // the magma sea is level 0: reaching it means somebody dug all the way down
+  if (id === "depths") { for (var i = 0; i < N; i++) if (w.tile[i] === T_OPEN && w.floor[i] !== F_NONE) return true; return false }
+  if (id === "years") return w.tick >= YEAR * 5
+  return false
+}
+function checkMilestones(w) {
+  if (w.fallen) return
+  if (!w.done) w.done = {}
+  var all = true
+  for (var k = 0; k < MILESTONES.length; k++) {
+    var id = MILESTONES[k]
+    if (w.done[id]) continue
+    if (!milestoneMet(w, id)) { all = false; continue }
+    w.done[id] = w.tick
+    announce(w, L("ms." + id, "Marco alcançado."), 1)
+    legend(w, LF("lg.ms." + id, "Marco alcançado no ano {0}.", date(w).year))
+  }
+  if (all && !w.legendary) {
+    w.legendary = w.tick
+    announce(w, LF("msg.legendary.hold", "{0} é uma fortaleza lendária. As Montanhas-Lar cantam o seu nome.", w.name), 2)
+    legend(w, LF("lg.legendary", "{0} tornou-se lendária no ano {1}.", w.name, date(w).year))
+  }
+}
+// What a game is worth when it ends, either way. Written once, into the
+// chronicle, so a fallen hold leaves a reckoning and not just a last death.
+function scoreboard(w) {
+  var d = date(w), st = w.stats, met = 0
+  for (var k = 0; k < MILESTONES.length; k++) if (w.done && w.done[MILESTONES[k]]) met++
+  return { years: d.year, wealth: w.wealth, pop: pop(w), milestones: met, of: MILESTONES.length,
+           artifacts: w.stats.artifacts, repelled: st.repelled || 0, goblins: st.goblinsKilled || 0,
+           deaths: st.deaths, buried: st.buried || 0, legendary: !!w.legendary, fallen: !!w.fallen }
+}
 function checkFall(w) {
   if (w.fallen || w.tick < 10 || pop(w) > 0) return
   w.fallen = true
   announce(w, LF("msg.fallen", "{0} caiu. Não resta nenhum anão.", w.name), 2)
   legend(w, LF("lg.fallen", "{0} caiu no ano {1}. {2}.", w.name, date(w).year, LP(w.stats.deaths, "n.lost.one", "n.lost.many", "anão perdido", "anões perdidos")))
+  var sc = scoreboard(w)
+  legend(w, LF("lg.score", "Placar: {0} de {1} marcos, riqueza {2}, {3} artefato(s), {4} onda(s) repelida(s).", sc.milestones, sc.of, sc.wealth, sc.artifacts, sc.repelled))
 }
 function dayStart(w, d) {
   rosterMilitia(w)
@@ -2240,13 +2305,37 @@ function raidTick(w) {
   if (!w.raid) return
   // nobody left to repel anything: the raid just ends, unremarked
   if (w.fallen) { w.raid = null; return }
-  var n = 0; for (var k = 0; k < w.units.length; k++) if (w.units[k].k === "goblin") n++
+  var n = 0, inside = 0
+  for (var k = 0; k < w.units.length; k++) {
+    var g = w.units[k]
+    if (g.k !== "goblin") continue
+    n++
+    if (iz(g.i) < w.ground[g.i % N]) inside++
+  }
+  // A siege is a situation, not a mood: goblins alive on the surface and not
+  // one of them through the door. Measured per goblin first — "this one found
+  // no path" — which fired with the doors wide open, because a goblin loose
+  // inside a hold whose survivors are three levels down also finds no path.
+  if (n > 0 && inside === 0) {
+    if (!w.siegeSince) w.siegeSince = w.tick
+    if (!w.siege && w.tick - w.siegeSince > DAY / 2) {
+      w.siege = w.tick
+      announce(w, LF("msg.siege", "{0} está sitiada. Ninguém sai à superfície.", w.name), 2)
+      legend(w, LF("lg.siege", "Cerco a {0} no ano {1}.", w.name, date(w).year))
+    }
+  } else w.siegeSince = 0
   if (n === 0) {
     w.stats.repelled = (w.stats.repelled || 0) + 1
     announce(w, LF("msg.repelled", "{0}{1} resiste{2}", w.raid.wave ? LF("msg.repelled.wave", "Onda {0} repelida. ", w.raid.wave) : L("msg.repelled.ambush", "A emboscada terminou. "), w.name, w.raid.lost ? LF("msg.repelled.losses", ", com {0}.", LP(w.raid.lost, "n.loss.one", "n.loss.many", "baixa", "baixas")) : L("msg.repelled.none", " sem baixas.")), 1)
     legend(w, LF("lg.repelled", "{0} repelida{1}", w.raid.wave ? LF("lg.wave", "Onda {0}", w.raid.wave) : L("lg.ambush", "Emboscada"), w.raid.lost ? LF("lg.repelled.losses", " ({0}).", LP(w.raid.lost, "n.lost.one", "n.lost.many", "anão perdido", "anões perdidos")) : L("msg.repelled.none", " sem baixas.")))
     w.raid = null
-    var ds = dwarves(w); for (var q = 0; q < ds.length; q++) thought(w, ds[q], "sobreviveu a uma emboscada", 2)
+    if (w.siege) {
+      var days = Math.max(1, Math.round((w.tick - w.siege) / DAY))
+      announce(w, LF("msg.siege.over", "O cerco terminou depois de {0} dia(s).", days), 1)
+      legend(w, LF("lg.siege.over", "O cerco durou {0} dia(s).", days))
+      w.siege = 0
+    }
+    var ds = dwarves(w); for (var q = 0; q < ds.length; q++) thought(w, ds[q], L("th.survived", "sobreviveu a uma emboscada"), 2)
   }
 }
 
@@ -2287,7 +2376,7 @@ function tick(w) {
     else u.drown = 0
   }
   checkFall(w)
-  if (w.tick % 50 === 0) w.wealth = computeWealth(w)
+  if (w.tick % 50 === 0) { w.wealth = computeWealth(w); checkMilestones(w) }
 }
 function actDwarf(w, u) {
   u.cool--
@@ -2624,6 +2713,10 @@ function deserialize(json) {
   for (var sk = 0; sk < STAT_KEYS.length; sk++) if (typeof st[STAT_KEYS[sk]] !== "number") st[STAT_KEYS[sk]] = 0
   if (!w.orders) w.orders = []
   if (typeof w.graveyard !== "number") w.graveyard = -1
+  if (!w.done) w.done = {}
+  if (typeof w.legendary !== "number") w.legendary = 0
+  if (typeof w.siege !== "number") w.siege = 0
+  if (typeof w.siegeSince !== "number") w.siegeSince = 0
   // units carrying items keep their claims; jobs are dropped so no stale paths survive
   for (var u = 0; u < w.units.length; u++) {
     var un = w.units[u]; un.path = null; un.pi = 0; un.job = null
@@ -2643,7 +2736,7 @@ function deserialize(json) {
 function newWorldEmpty() {
   return { v: 1, seed: 0, rs: 0, tick: 0, tile: new Uint8Array(NN), floor: new Uint8Array(NN), build: new Uint8Array(NN), desig: new Uint8Array(NN),
     dbuild: new Uint8Array(NN), grow: new Uint8Array(NN), ground: new Uint8Array(N), items: [], units: [], nextId: 1, log: [], legends: [], artifacts: [],
-    dead: [], orders: [], graveyard: -1, name: "", wealth: 0, alerts: 0, popCap: 20, liquidBudget: { water: 60, magma: 30 }, caravan: null, raid: null, lockdown: false, depot: -1,
+    dead: [], orders: [], graveyard: -1, done: {}, legendary: 0, siege: 0, siegeSince: 0, name: "", wealth: 0, alerts: 0, popCap: 20, liquidBudget: { water: 60, magma: 30 }, caravan: null, raid: null, lockdown: false, depot: -1,
     weather: 0, stats: newStats(), fallen: false, claim: null, unreach: {}, lastMoodTick: 0 }
 }
 function rle(a) {
