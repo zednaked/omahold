@@ -4,10 +4,11 @@
 #   make sim       the simulation, headless, two years on one seed
 #   make i18n      both languages, the fallback, and key parity
 #   make hostile   what save.py refuses, in a throwaway $HOME
+#   make deep      the relic from the tomb and the court of the deep
 
-.PHONY: test sim i18n hostile validate
+.PHONY: test sim i18n hostile deep validate
 
-test: sim i18n hostile
+test: sim i18n deep hostile
 
 sim:
 	@echo "== simulation =="
@@ -17,6 +18,11 @@ sim:
 i18n:
 	@echo "== languages =="
 	@node test/i18n.js
+
+deep:
+	@echo "== the deep =="
+	@node test/relic.js | tail -1
+	@node test/court.js | tail -1
 
 hostile:
 	@echo "== save.py =="

@@ -128,6 +128,41 @@ The Legends page counts how many jobs were ruined. The curve is visible: in a
 new hold it is about 140 in the first year and 50 in the fourth, as skill goes
 up — and it climbs again when a batch of migrants arrives with no trade.
 
+## Who knows whom
+
+A dwarf had a trait, a trade and a mood, and was alone in the world. Every
+loss cost every survivor the same −7 whoever died, so "3 dwarves lost" was
+arithmetic and never a story.
+
+Now they have people. Some arrive with **kin** already in the hold — a quarter
+of every group, founders included — and **friendships and rivalries** come out
+of standing next to the same people: every couple of hours of game time, each
+dwarf builds a tie with whoever is nearest, twice as fast in the meeting hall.
+A dwarf keeps four ties plus their kin, which is what makes a tie mean
+anything: remember everyone and a death is diluted into twenty small sorrows,
+remember four and it lands on somebody.
+
+What it changes:
+
+| who died | what it costs them |
+|---|---|
+| kin | **−16**, and grief that has to be dealt with |
+| a friend | **−12**, and grief |
+| anyone else | −5 with a grave to go to, −7 without |
+| someone they could not stand | −1, and a line in their thoughts about it |
+
+**Grief is not a mood, it is work.** It weighs on them every day until they
+have gone and stood among the graves — which is what the graveyard the hold
+chose is for. A hold with nowhere to bury anyone carries it for weeks instead.
+
+Friendships pay for themselves: measured over sixteen fortresses, adding ties
+took survivors from 14/16 to 15/16, because the +5 of finding a friend and the
++3 of a night drinking with them outweigh the deeper grief.
+
+Kin, friends, rivals and what they are carrying show on a dwarf's own page, and
+the chronicle records the day two of them became inseparable, the day two of
+them fell out, and every loss that landed on someone.
+
 ## The dead
 
 Whoever falls stays where they fell, and every dwarf who walks past feels it.
@@ -217,8 +252,41 @@ Each new waking sends more than the last, because a hold that keeps digging
 keeps paying.
 
 The deepest rock sometimes gives up a **tomb**: an artifact older than the
-hold, named after the lost king buried with it — the best thing depth can pay.
-It never comes alone, because something was keeping it.
+hold, named after the lost king buried with it. It never comes alone, because
+something was keeping it — and what is keeping it is holding **the one weapon
+in the game nobody can make**. It has a name, it is one grade above steel, and
+it does not wear out. Killing the guard is the only way it changes hands; when
+its bearer dies it keeps its name and lies there waiting for whoever picks it
+up next. Militia dwarves reach for the best weapon in the hold rather than the
+nearest one, so a relic on the floor does not sit there.
+
+That is what depth is for. Every other reward down there is a better grade of
+something you were already making; this one exists once.
+
+## The lost court
+
+Everything that came up from the deep wanted the hold dead, which made depth a
+monster with better loot behind it. Something else lives down there: a people
+who did not die out, ruled by a king nobody up here has heard of in centuries.
+When a shaft breaks into one of the bottom two levels and *nothing wakes*,
+there is a good chance they send someone up to talk instead.
+
+The **envoy** is not a foe and cannot be fought into anything useful. They walk
+to the depot, ask for **tribute** — real goods, taken out of your stockpiles,
+counted above what you already have — and wait fifteen days.
+
+Pay them and they give back something the hold cannot make:
+
+- a **pact**, and nothing wakes in the deep again;
+- **steel from their own forges**, three bars and a cut gem;
+- the **map of their level**, which is the only way the fog comes off ground no
+  dwarf has walked.
+
+Refuse them and the envoy goes back down empty-handed. They do not forget:
+everything in the deep wakes at **twice** the chance from then on, and
+something comes up in the envoy's place that same day.
+
+This is the one pressure in the game you create entirely by digging.
 
 Measured: a hold that stays at its mine level pays nothing, and one that digs
 to the magma lost two fortresses in five. The `⚷` chip in the header shows how
@@ -515,6 +583,7 @@ simulation when this was written.
 make test      everything below
 make sim       the simulation, headless
 make i18n      both languages, the fallback, and key parity
+make deep      the relic from the tomb and the court of the deep
 make hostile   what save.py refuses, in a throwaway $HOME
 make validate  omarchy plugin validate .
 ```
@@ -523,7 +592,10 @@ make validate  omarchy plugin validate .
 scripted hold and prints the chronicle, the statistics and ASCII maps of three
 levels. `node test/scenario.js [seed] [years] [dwarves]` runs the ready hold
 and prints the wave scoreboard — it is what the balance figures above are
-measured with. `test/debug.js` and `test/debug2.js` trace paths and job
+measured with. `test/relic.js` and `test/court.js` drive the two things at the
+bottom of the world that a normal run almost never reaches — a tomb is a 2%
+roll per cell dug at level 1 — and check the whole chain each one hangs off.
+`test/debug.js` and `test/debug2.js` trace paths and job
 transitions — that is how it was found that dwarves were dying of thirst
 because `step()` confused "still walking" with "blocked".
 

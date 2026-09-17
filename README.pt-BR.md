@@ -123,6 +123,42 @@ As Lendas contam quantas tarefas foram estragadas. A curva é visível: numa
 fortaleza nova são umas 140 no primeiro ano e 50 no quarto, conforme a perícia
 sobe — e volta a subir quando chega uma leva de migrantes sem ofício.
 
+## Quem conhece quem
+
+Um anão tinha um traço, um ofício e um humor, e estava sozinho no mundo. Cada
+perda custava a mesma coisa a todos os sobreviventes, −7, quem quer que
+morresse — então "3 anões perdidos" era aritmética e nunca história.
+
+Agora eles têm gente. Alguns chegam com **parentes** já na fortaleza — um
+quarto de cada grupo, fundadores incluídos — e **amizades e rivalidades**
+nascem de ficar ao lado das mesmas pessoas: a cada duas horas de jogo, cada
+anão constrói um vínculo com quem estiver mais perto, duas vezes mais rápido no
+salão de refeições. Um anão guarda quatro vínculos mais os parentes, e é isso
+que faz um vínculo significar algo: lembrar de todos dilui a morte em vinte
+tristezas pequenas, lembrar de quatro faz ela cair em alguém.
+
+O que muda:
+
+| quem morreu | quanto custa |
+|---|---|
+| parente | **−16**, e um luto que precisa ser resolvido |
+| um amigo | **−12**, e luto |
+| qualquer outro | −5 com um túmulo para visitar, −7 sem |
+| alguém que não suportava | −1, e uma linha nos pensamentos sobre isso |
+
+**O luto não é humor, é trabalho.** Pesa todo dia até eles irem ficar um tempo
+junto aos túmulos — que é para isso que serve o cemitério que a fortaleza
+escolheu. Uma fortaleza sem lugar para enterrar ninguém carrega o luto por
+semanas.
+
+As amizades se pagam: medido em dezesseis fortalezas, os vínculos levaram os
+sobreviventes de 14/16 para 15/16, porque os +5 de encontrar um amigo e os +3
+de uma noite bebendo com ele compensam o luto mais fundo.
+
+Parentes, amigos, rivais e o que ele empunha aparecem na página do próprio
+anão, e a crônica registra o dia em que dois deles ficaram inseparáveis, o dia
+em que dois romperam, e cada perda que caiu em alguém.
+
 ## Os mortos
 
 Quem cai fica onde caiu, e todo anão que passa por perto sente. Eles resolvem
@@ -212,9 +248,41 @@ Cada novo despertar manda mais que o anterior, porque uma fortaleza que
 continua cavando continua pagando.
 
 A rocha mais funda às vezes entrega uma **tumba**: um artefato mais antigo que
-a fortaleza, com o nome do rei perdido que foi enterrado com ele — a melhor
-coisa que a profundidade pode pagar. E nunca vem sozinha, porque algo a estava
-guardando.
+a fortaleza, com o nome do rei perdido que foi enterrado com ele. E nunca vem
+sozinha, porque algo a estava guardando — e o que a guarda empunha **a única
+arma do jogo que ninguém consegue fabricar**. Ela tem nome, é um grau acima do
+aço e não se desgasta. Matar o guardião é o único jeito de ela trocar de mãos;
+quando quem a empunha morre, ela mantém o nome e fica ali esperando o próximo.
+Os milicianos passaram a pegar a melhor arma da fortaleza em vez da mais perto,
+então uma relíquia no chão não fica no chão.
+
+É para isso que serve a profundidade. Toda outra recompensa lá embaixo é um
+grau melhor de algo que você já fazia; essa existe uma vez.
+
+## A corte perdida
+
+Tudo o que subia das profundezas queria a fortaleza morta, o que fazia da
+profundidade um monstro com um loot melhor atrás. Mas mora outra coisa lá
+embaixo: um povo que não se extinguiu, sob um rei de quem ninguém aqui em cima
+ouviu falar em séculos. Quando um poço abre um dos dois níveis mais fundos e
+*nada desperta*, há boa chance de eles mandarem alguém subir para conversar.
+
+O **emissário** não é inimigo e não dá em nada lutar com ele. Ele caminha até o
+depósito, pede **tributo** — bens de verdade, tirados dos seus estoques,
+contados acima do que você já tem — e espera quinze dias.
+
+Pague e eles devolvem algo que a fortaleza não sabe fazer:
+
+- um **pacto**, e nada mais desperta nas profundezas;
+- **aço das forjas deles**, três barras e uma gema lapidada;
+- o **mapa do nível deles**, o único jeito de a névoa sair de um chão onde
+  nenhum anão pisou.
+
+Recuse e o emissário desce de mãos vazias. Eles não esquecem: dali em diante
+tudo lá embaixo desperta com o **dobro** da chance, e algo sobe no lugar dele no
+mesmo dia.
+
+Essa é a única pressão do jogo que você cria inteiramente cavando.
 
 Medido: uma fortaleza que fica no nível da mina não paga nada, e uma que cava
 até o magma perdeu duas fortalezas em cinco. A pílula `⚷` no cabeçalho mostra
@@ -485,7 +553,10 @@ nenhum jogo ou simulação quando este foi escrito.
 joga uma fortaleza roteirizada e imprime a crônica, as estatísticas e mapas
 ASCII de três níveis. `node test/scenario.js [semente] [anos] [anões]` roda a
 fortaleza pronta e imprime o placar das ondas — é com ele que se afere o
-balanceamento acima. `test/debug.js` e `test/debug2.js` rastreiam caminhos
+balanceamento acima. `test/relic.js` e `test/court.js` dirigem as duas coisas no fundo do mundo que
+uma partida normal quase nunca alcança — uma tumba é uma chance de 2% por
+célula cavada no nível 1 — e verificam a cadeia inteira de cada uma.
+`test/debug.js` e `test/debug2.js` rastreiam caminhos
 e transições de trabalho — foi assim que se descobriu que os anões morriam
 de sede porque `step()` confundia "ainda andando" com "bloqueado".
 

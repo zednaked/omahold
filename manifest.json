@@ -2,11 +2,15 @@
   "schemaVersion": 1,
   "id": "zed.omahold",
   "name": "Omahold",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "author": "ZeD",
   "license": "MIT",
-  "description": "A miniature dwarf fortress in your bar. Eight z-levels of dwarves who take the orders you file but reach for the trade they love, ruin work when they are tired, and bury their dead in a corner they pick themselves. Dig deep for better metal; six milestones make the hold legendary. English or Portuguese, in your theme's colors.",
-  "kinds": ["service", "bar-widget", "overlay"],
+  "description": "A miniature dwarf fortress in your bar. Eight z-levels of dwarves who take the orders you file but reach for the trade they love, ruin work when they are tired, make friends and enemies, and grieve the kin they bury in a corner they pick themselves. Dig deep for better metal, a named weapon nobody can forge, and a lost king who would rather be paid than fight. English or Portuguese, in your theme's colors.",
+  "kinds": [
+    "service",
+    "bar-widget",
+    "overlay"
+  ],
   "keepLoaded": true,
   "entryPoints": {
     "service": "Service.qml",

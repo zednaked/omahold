@@ -409,9 +409,24 @@ Item {
           if (sel.avoid && (sel.avoidUntil || 0) > w.tick) out.push({ t: root.tf("p.frustrated.off", Sim.workName(sel.avoid)), c: "warn", wrap: true })
           else if ((sel.frust || 0) > 0) out.push({ t: root.tf("p.frustrated", sel.frust), c: "warn" })
           out.push({ t: root.tf("p.now", Sim.jobName(sel), Sim.iz(sel.i), World.followId === sel.id ? root.t("p.following") : ""), c: "", wrap: true })
+          // Who they have. Kin first, because that is the tie they arrived
+          // with, then whoever they cannot do without and whoever they cannot
+          // stand — the two that change what a death costs them.
+          var tiesTxt = []
+          for (k = 0; k < (sel.kin || []).length; k++) { var ku = Sim.unitById(w, sel.kin[k]); if (ku) tiesTxt.push(root.tf("p.tie.kin", ku.name)) }
+          var bm = sel.bonds || {}
+          for (var bid in bm) {
+            var ou = Sim.unitById(w, parseInt(bid, 10))
+            if (!ou || ou.k !== "dwarf" || Sim.isKin(sel, ou.id)) continue
+            if (bm[bid] >= Sim.BOND_FRIEND) tiesTxt.push(root.tf("p.tie.friend", ou.name))
+            else if (bm[bid] <= Sim.BOND_RIVAL) tiesTxt.push(root.tf("p.tie.rival", ou.name))
+          }
+          if (tiesTxt.length) out.push({ t: tiesTxt.join(" · "), c: "accent", wrap: true })
+          if ((sel.grief || 0) > 0) out.push({ t: root.t("p.grieving"), c: "warn", wrap: true })
+          if (sel.wnm) out.push({ t: root.tf("p.bears", sel.wnm, sel.wtitle || ""), c: "accent", wrap: true })
           if (sel.thoughts.length) { out.push({ t: root.t("p.thoughts"), c: "muted" }); for (k = 0; k < Math.min(5, sel.thoughts.length); k++) { var th = sel.thoughts[k]; out.push({ t: "  " + (th.v >= 0 ? "+" : "") + th.v + " " + th.m, c: th.v < 0 ? "warn" : "good", wrap: true }) } }
         } else {
-          var kinds = { goblin: root.t("unit.goblin"), wolf: root.t("unit.wolf"), deer: root.t("unit.deer"), kobold: root.t("unit.kobold"), merchant: root.t("unit.merchant") }
+          var kinds = { goblin: root.t("unit.goblin"), wolf: root.t("unit.wolf"), deer: root.t("unit.deer"), kobold: root.t("unit.kobold"), merchant: root.t("unit.merchant"), crawler: root.t("unit.crawler"), sentinel: root.t("unit.sentinel"), envoy: root.t("unit.envoy") }
           out.push({ t: kinds[sel.k] || sel.k, c: "accent" }); out.push({ t: "hp " + sel.hp + "/" + sel.maxhp + " · z" + Sim.iz(sel.i), c: "muted" })
         }
       } else out.push({ t: root.t("p.selecthint"), c: "muted", wrap: true })
@@ -452,6 +467,13 @@ Item {
       var dd = Sim.digDepth(w)
       if (dd < Sim.iz(w.depot)) out.push({ t: root.tf("p.deepest", dd, w.stirred ? root.tf("p.stirred", w.stirred) : ""), c: w.stirred ? "warn" : "muted", wrap: true })
       if (w.siege) out.push({ t: root.tf("p.siege", Math.max(1, Math.round((w.tick - w.siege) / Sim.DAY))), c: "urgent", wrap: true })
+      if (w.court && w.court.said) {
+        var cleft = Math.max(0, Sim.TRIBUTE_DAYS - Math.round((w.tick - w.court.since) / Sim.DAY))
+        out.push({ t: root.tf("p.court", w.court.race, w.court.n, Sim.itemName(w.court.k), cleft), c: cleft <= 5 ? "warn" : "accent", wrap: true })
+      }
+      if (w.pact) out.push({ t: root.t("p.pact"), c: "good", wrap: true })
+      else if (w.grudge) out.push({ t: root.t("p.grudge"), c: "warn", wrap: true })
+      if (w.relic) out.push({ t: root.tf("p.relic", w.relic.nm, w.relic.title), c: "accent", wrap: true })
       if (w.baron) {
         var bu = Sim.unitById(w, w.baron)
         if (bu) out.push({ t: root.tf("p.baron", bu.name), c: "accent", wrap: true })
@@ -537,7 +559,7 @@ Item {
         if (++legN % 3 === 0) { out.push({ t: legRow, c: "", wrap: true }); legRow = "" }
       }
       if (legRow) out.push({ t: legRow, c: "", wrap: true })
-      out.push({ t: "  ☺ " + root.t("h.leg.dwarf") + "   g " + root.t("unit.goblin") + "   w " + root.t("unit.wolf") + "   d " + root.t("unit.deer") + "   k " + root.t("unit.kobold") + "   c " + root.t("h.leg.deep") + "   S " + root.t("h.leg.sentinel"), c: "", wrap: true })
+      out.push({ t: "  ☺ " + root.t("h.leg.dwarf") + "   g " + root.t("unit.goblin") + "   w " + root.t("unit.wolf") + "   d " + root.t("unit.deer") + "   k " + root.t("unit.kobold") + "   c " + root.t("h.leg.deep") + "   S " + root.t("h.leg.sentinel") + "   Ε " + root.t("h.leg.envoy") + "   ☻ " + root.t("unit.merchant"), c: "", wrap: true })
       if (World.fog) out.push({ t: "  " + root.t("h.leg.fog"), c: "", wrap: true })
       out.push({ t: root.t("h.leg.note"), c: "muted", wrap: true })
       out.push({ t: "", c: "" })
@@ -807,6 +829,18 @@ Item {
                       ctx.fillStyle = root.pal.hunch
                       ctx.fillText("·", x * c + half, y * c + half + 1)
                     }
+                    // The player's own marks are drawn through the fog: they
+                    // put them there, and the red of an unreachable one is the
+                    // only sign that a level nobody can get to is waiting on a
+                    // staircase. Hiding them made a stuck level look merely
+                    // unexplored.
+                    var fdg = w.desig[i0]
+                    if (fdg) {
+                      var fbad = Sim.isUnreachable(w, i0)
+                      ctx.fillStyle = fbad ? p.desigBad : p.desig; ctx.fillRect(x * c, y * c, c, c)
+                      ctx.fillStyle = fbad ? p.desigBadGlyph : p.desigGlyph
+                      ctx.fillText(fdg === Sim.DG_DIG ? "·" : fdg === Sim.DG_STAIR ? "X" : fdg === Sim.DG_CHOP ? "♠" : root.buildGlyph[w.dbuild[i0]] || "?", x * c + half, y * c + half + 1)
+                    }
                     continue
                   }
                   var fill = null, glyph = null, gcol = null, jit = Sim.hash(i) & 3
@@ -913,11 +947,11 @@ Item {
                   var un = w.units[u], udk = Sim.depthBelow(w, un.i, z)
                   if (udk < 0) continue
                   if (fog && un.k !== "dwarf" && !Sim.seenAt(w, un.i)) continue
-                  var col = un.k === "dwarf" ? (un.mood_state === "berserk" ? p.urgent : un.mood_state ? p.kobold : p.dwarf) : un.k === "goblin" ? p.goblin : un.k === "wolf" ? p.wolf : un.k === "deer" ? p.deer : un.k === "kobold" ? p.kobold : un.k === "crawler" ? p.crawler : un.k === "sentinel" ? p.sentinel : p.merchant
+                  var col = un.k === "dwarf" ? (un.mood_state === "berserk" ? p.urgent : un.mood_state ? p.kobold : p.dwarf) : un.k === "goblin" ? p.goblin : un.k === "wolf" ? p.wolf : un.k === "deer" ? p.deer : un.k === "kobold" ? p.kobold : un.k === "crawler" ? p.crawler : un.k === "sentinel" ? p.sentinel : un.k === "envoy" ? p.envoy : p.merchant
                   if (un.id === World.selectedId) { ctx.fillStyle = p.select; ctx.fillRect(Sim.ix(un.i) * c, Sim.iy(un.i) * c, c, c); col = p.dwarfSel }
                   if (udk) col = Pal.dimmed(col, p.bgRgb, p.dim[udk])
                   else if (un.id !== World.selectedId) { var ub = bright(un.i, Sim.outdoor(w, un.i)); if (ub < 0.98) col = Pal.dimmed(col, p.bgRgb, Math.max(0.5, ub)) }
-                  var gl = un.k === "dwarf" ? "☺" : un.k === "goblin" ? "g" : un.k === "wolf" ? "w" : un.k === "deer" ? "d" : un.k === "kobold" ? "k" : un.k === "crawler" ? "c" : un.k === "sentinel" ? "S" : "☻"
+                  var gl = un.k === "dwarf" ? "☺" : un.k === "goblin" ? "g" : un.k === "wolf" ? "w" : un.k === "deer" ? "d" : un.k === "kobold" ? "k" : un.k === "crawler" ? "c" : un.k === "sentinel" ? "S" : un.k === "envoy" ? "Ε" : "☻"
                   ctx.fillStyle = col; ctx.fillText(gl, Sim.ix(un.i) * c + half, Sim.iy(un.i) * c + half + 1)
                 }
                 // pass 4: weather over outdoor cells (light itself is baked into the fills)

@@ -402,6 +402,10 @@ function gradeName(q) { return L("grade." + (GRADES[q] || "copper"), GRADES[q] |
 // The label a player reads: "an iron axe", "uma barra de aço".
 function itemLabel(it) {
   if (!it) return ""
+  // A relic has a name, and a name outranks a grade: nobody calls it "a lost
+  // weapon". Its grade is 5, one above steel, and `GRADES` deliberately stops
+  // at steel — there is no metal you can smelt that gets here.
+  if (it.nm) return it.title ? it.nm + ", " + it.title : it.nm
   if (!it.q || it.q < 1) return itemName(it.t)
   if (it.t !== "bar" && it.t !== "pick" && it.t !== "axe" && it.t !== "weapon" && it.t !== "armor") return itemName(it.t)
   // a graded bar is a "copper bar", not a "copper metal bar"
@@ -414,7 +418,7 @@ function addItem(w, type, i, grade) {
   w.items.push(it); return it
 }
 function addUnit(w, kind, i) {
-  var hp = { dwarf: 12, goblin: 5, deer: 5, wolf: 5, kobold: 4, merchant: 10, crawler: 7, sentinel: 16 }[kind] || 6
+  var hp = { dwarf: 12, goblin: 5, deer: 5, wolf: 5, kobold: 4, merchant: 10, crawler: 7, sentinel: 16, envoy: 14 }[kind] || 6
   var u = { id: w.nextId++, k: kind, i: i, hp: hp, maxhp: hp, path: null, pi: 0, job: null, born: w.tick, cool: 0, wait: 0 }
   w.units.push(u); return u
 }
@@ -435,6 +439,8 @@ function addDwarf(w, i) {
   u.bed = -1; u.carry = 0; u.weapon = false; u.armor = false; u.tool = ""; u.militia = false
   u.mood_state = "" // "", "strange", "melancholy", "berserk"
   u.kills = 0; u.made = 0
+  u.bonds = {}; u.kin = []; u.grief = 0
+  maybeKin(w, u)
   return u
 }
 function unitById(w, id) { for (var k = 0; k < w.units.length; k++) if (w.units[k].id === id) return w.units[k]; return null }
@@ -584,7 +590,12 @@ function canDesignate(w, i, tool, bt) {
   switch (tool) {
     case "dig": return solid(t) && t !== T_TREE && t !== T_SHRUB && t !== T_FUNGUS
     case "stair":
-      if (t === T_OPEN && w.build[i] === B_STAIR) return iz(i) > 0 && solid(w.tile[i - N]) && w.tile[i - N] !== T_TREE && w.tile[i - N] !== T_FUNGUS && w.desig[i - N] === DG_NONE
+      // On a built staircase "s" means "go one level deeper", so what matters
+      // is the rock below. A dig already pending there must not refuse the
+      // order: drawing a room on the level below before cutting the descent is
+      // the natural way to play, and refusing silently left the whole level
+      // unreachable with no way to fix it. The stair takes that cell over.
+      if (t === T_OPEN && w.build[i] === B_STAIR) return iz(i) > 0 && solid(w.tile[i - N]) && w.tile[i - N] !== T_TREE && w.tile[i - N] !== T_FUNGUS && w.desig[i - N] !== DG_STAIR
       return (solid(t) && t !== T_TREE && t !== T_FUNGUS && t !== T_SHRUB) || (t === T_OPEN && w.floor[i] !== F_NONE && w.build[i] === B_NONE)
     case "chop": return t === T_TREE || t === T_FUNGUS || t === T_SHRUB
     case "build":
@@ -605,7 +616,7 @@ function designate(w, i, tool, bt) {
   // the rock under it in one go, so a single order makes a working descent
   if (d === DG_STAIR && w.tile[i] === T_OPEN && iz(i) > 0) {
     var under = i - N
-    if (solid(w.tile[under]) && w.tile[under] !== T_TREE && w.tile[under] !== T_FUNGUS && w.tile[under] !== T_SHRUB && w.desig[under] === DG_NONE) { w.desig[under] = DG_STAIR; w.dbuild[under] = 0; delete w.unreach[under]; w.dirty = true }
+    if (solid(w.tile[under]) && w.tile[under] !== T_TREE && w.tile[under] !== T_FUNGUS && w.tile[under] !== T_SHRUB && w.desig[under] !== DG_STAIR) { w.desig[under] = DG_STAIR; w.dbuild[under] = 0; delete w.unreach[under]; w.dirty = true }
     if (w.build[i] === B_STAIR) return true   // already a stair here: the order was "go deeper"
   }
   if (w.desig[i] === d && (d !== DG_BUILD || w.dbuild[i] === bt)) return false
@@ -1275,6 +1286,104 @@ function branchBury(w, u) {
   return true
 }
 
+// ---- who knows whom ---------------------------------------------------------
+// A dwarf had a trait, a trade and a mood, and was alone in the world. Every
+// loss cost every survivor the same -7 whoever died, so "3 dwarves lost" was
+// arithmetic and never a story. These are the ties: kin, who arrive already
+// related, and the friendships and rivalries that come out of standing next to
+// the same people for a year.
+//
+// A dwarf keeps four ties, plus their kin. Four is not a budget — it is what
+// makes a tie mean anything: remember everyone and a death is diluted into
+// twenty small sorrows, remember four and it lands on somebody.
+var BOND_KEEP = 4, BOND_FRIEND = 30, BOND_RIVAL = -25, KIN_BOND = 40
+function first(n) { return String(n || "").split(" ")[0] }
+function bondMap(u) { if (!u.bonds) u.bonds = {}; return u.bonds }
+function isKin(u, id) { return !!(u.kin && u.kin.indexOf(id) >= 0) }
+// What one dwarf's death is worth to another: the tie they built, plus blood.
+function bondTotal(u, id) { return (bondMap(u)[id] || 0) + (isKin(u, id) ? KIN_BOND : 0) }
+function trimBonds(u) {
+  var b = bondMap(u), ks = Object.keys(b)
+  if (ks.length <= BOND_KEEP) return
+  // the strongest feelings stay, in either direction; acquaintance goes
+  ks.sort(function (p, q) { return Math.abs(b[q]) - Math.abs(b[p]) })
+  for (var k = BOND_KEEP; k < ks.length; k++) delete b[ks[k]]
+}
+// Ties are symmetric, which is one of the few places this game is kinder than
+// life. Crossing either threshold is announced once, from the pair's side, so
+// it cannot fire again every time the bond wobbles over the line.
+function shiftBond(w, a, b, n) {
+  var wasA = bondTotal(a, b.id), wasB = bondTotal(b, a.id)
+  var ma = bondMap(a), mb = bondMap(b)
+  ma[b.id] = Math.max(-100, Math.min(100, (ma[b.id] || 0) + n))
+  mb[a.id] = Math.max(-100, Math.min(100, (mb[a.id] || 0) + n))
+  trimBonds(a); trimBonds(b)
+  var now = bondTotal(a, b.id)
+  if (wasA < BOND_FRIEND && wasB < BOND_FRIEND && now >= BOND_FRIEND) {
+    thought(w, a, LF("th.friend", "tem em {0} um amigo", first(b.name)), 5)
+    thought(w, b, LF("th.friend", "tem em {0} um amigo", first(a.name)), 5)
+    legend(w, LF("lg.friend", "{0} e {1} tornaram-se inseparáveis no ano {2}.", a.name, b.name, date(w).year))
+  } else if (wasA > BOND_RIVAL && wasB > BOND_RIVAL && now <= BOND_RIVAL) {
+    thought(w, a, LF("th.rival", "não suporta mais {0}", first(b.name)), -3)
+    thought(w, b, LF("th.rival", "não suporta mais {0}", first(a.name)), -3)
+    announce(w, LF("msg.rival", "{0} e {1} não se falam mais.", a.name, b.name), 0)
+    legend(w, LF("lg.rival", "{0} e {1} romperam no ano {2}.", a.name, b.name, date(w).year))
+  }
+}
+// Some arrive with family already in the hold. It is the one tie that exists
+// before anyone has done anything together, and it is what makes the first
+// death of a young fortress hurt.
+function maybeKin(w, u) {
+  var ds = dwarves(w), pool = []
+  for (var k = 0; k < ds.length; k++) if (ds[k] !== u && (!ds[k].kin || ds[k].kin.length < 3)) pool.push(ds[k])
+  if (!pool.length || !chance(w, 0.25)) return
+  var o = pick(w, pool)
+  u.kin = (u.kin || []).concat([o.id])
+  o.kin = (o.kin || []).concat([u.id])
+}
+// Everyone, every two hours of game time, and only against whoever is nearest:
+// one tie per dwarf per round, so time spent together concentrates on the
+// person actually beside them instead of spreading a thin acquaintance over
+// the whole hold. Doing one dwarf per round was tried first and was too slow
+// to matter — over two years the strongest tie in the fortress reached 15 of
+// the 30 a friendship needs, and nobody was ever anybody's friend.
+//
+// The cost is a fifth of a distance check per dwarf per tick.
+function socialTick(w) {
+  var ds = dwarves(w)
+  if (ds.length < 2 || w.hostiles > 0) return
+  for (var q = 0; q < ds.length; q++) {
+    var u = ds[q]
+    if (u.mood_state === "berserk" || u.mood_state === "melancholy") continue
+    var near = null, nd = 3
+    for (var k = 0; k < ds.length; k++) {
+      var o = ds[k]
+      if (o === u || o.mood_state === "berserk") continue
+      var dd = dist(o.i, u.i)
+      if (dd < nd) { nd = dd; near = o }
+    }
+    if (!near) continue
+    var hall = nearBuilding(w, u.i, B_TABLE, 2)
+    shiftBond(w, u, near, hall ? 2 : 1)
+    if (hall && bondTotal(u, near.id) >= BOND_FRIEND && chance(w, 0.06))
+      thought(w, u, LF("th.withfriend", "bebeu a noite toda com {0}", first(near.name)), 3)
+  }
+}
+// Standing at the grave. The one job in the hold that nobody ordered and that
+// produces nothing — which is the point: grief is work, and it is the
+// graveyard the hold chose that makes it possible to finish.
+function branchMourn(w, u) {
+  if (!u.grief || u.grief <= 0) return false
+  if (graveyard(w) < 0) return false
+  var gs = cache(w).graves
+  if (!gs.length) return false
+  var gr = nearestOf(gs, u.i)
+  if (gr < 0) return false
+  if (!go(w, u, function (q) { return q === gr || adjacent(q, gr) }, gr, 800)) return false
+  setJob(w, u, { k: "mourn", i: gr, prog: 0 })
+  return true
+}
+
 // ---- work orders ------------------------------------------------------------
 // One queue that the hold and the player both write to. The hold files what it
 // notices missing every morning, so a hold with a still and barley brews
@@ -1455,7 +1564,9 @@ function gearJob(w, u) {
   else if (!u.tool && !u.militia && u.skills.mine >= 2) want = "pick"
   else if (!u.tool && !u.militia && u.skills.wood >= 2) want = "axe"
   if (!want) return false
-  var it = freeItem(w, want, u.i, u)
+  // The best one, not the nearest: a relic on the floor is worth the walk, and
+  // so is steel over copper. Tools stay nearest-first — a pick is a pick.
+  var it = (want === "weapon" || want === "armor") ? bestItem(w, want, u) : freeItem(w, want, u.i, u)
   if (!it || !go(w, u, function (c) { return c === it.i }, it.i)) return false
   it.res = u.id; setJob(w, u, { k: "equip", i: -1, item: it.id, slot: want }); return true
 }
@@ -1536,6 +1647,7 @@ function branchHaul(w, u) {
 // a leaning can move it up or down the list.
 var BRANCHES = [
   { cat: "haul",  fn: branchBury },  // the dead first: everyone walks past them
+  { cat: "",      fn: branchMourn }, // then whoever cannot work for grieving
   { cat: "farm",  fn: branchFarm },
   { cat: "",      fn: takeOrder },   // orders carry their own kind; takeOrder sorts them
   { cat: "farm",  fn: branchGather },
@@ -1648,10 +1760,14 @@ function work(w, u) {
       it = itemById(w, j.item)
       if (!it || it.i !== u.i) { dropJob(w, u); return }
       removeItem(w, it.id)
-      if (j.slot === "weapon") { u.weapon = true; u.weaponQ = it.q || 1 }
+      if (j.slot === "weapon") { u.weapon = true; u.weaponQ = it.q || 1; u.wnm = it.nm || ""; u.wtitle = it.title || "" }
       else if (j.slot === "armor") { u.armor = true; u.armorQ = it.q || 1 }
       else { u.tool = j.slot; u.toolQ = it.q || 1 }
-      thought(w, u, j.slot === "weapon" ? L("th.armed", "pegou em armas") : j.slot === "armor" ? L("th.armored", "vestiu uma armadura") : j.slot === "pick" ? L("th.newpick", "ganhou uma picareta nova") : L("th.newaxe", "ganhou um machado novo"), 2)
+      if (j.slot === "weapon" && it.nm) {
+        thought(w, u, LF("th.bore.relic", "empunha {0}", it.nm), 10)
+        announce(w, LF("msg.bore.relic", "{0} empunha {1}, {2}.", u.name, it.nm, it.title), 1)
+        legend(w, LF("lg.bore.relic", "{0} empunhou {1} no ano {2}.", u.name, it.nm, date(w).year))
+      } else thought(w, u, j.slot === "weapon" ? L("th.armed", "pegou em armas") : j.slot === "armor" ? L("th.armored", "vestiu uma armadura") : j.slot === "pick" ? L("th.newpick", "ganhou uma picareta nova") : L("th.newaxe", "ganhou um machado novo"), 2)
       dropJob(w, u); return
     case "train":
       if (w.build[j.i] !== B_TRAINING) { dropJob(w, u); return }
@@ -1747,6 +1863,14 @@ function work(w, u) {
         w.stats.buried++
         thought(w, u, L("th.buried", "sepultou um companheiro como se deve"), 3)
         announce(w, LF("msg.buried", "{0} sepultou um companheiro no cemitério.", u.name), 0)
+        dropJob(w, u)
+      }
+      return
+    case "mourn":
+      j.prog++
+      if (j.prog >= 20) {
+        u.grief = Math.max(0, (u.grief || 0) - 2)
+        thought(w, u, L("th.mourned", "ficou um tempo junto aos túmulos"), 6)
         dropJob(w, u)
       }
       return
@@ -1918,6 +2042,13 @@ function moodTick(w, u) {
       break
     }
   }
+  // Grief weighs every day it goes unattended, and fades slowly on its own for
+  // a hold with nowhere to bury anyone — slowly enough that the graveyard is
+  // worth digging.
+  if (u.grief > 0) {
+    if (w.tick % 90 === 0) u.mood = Math.max(0, u.mood - 2)
+    if (w.tick % (DAY * 3) === 0) u.grief--
+  }
   if (u.mood_state === "melancholy") {
     if (w.tick % 30 === 0) u.mood = Math.max(0, u.mood - 1)
     if (chance(w, 0.0004)) die(w, u, L("death.melancholy", "definhou de melancolia"))
@@ -1944,7 +2075,8 @@ function tantrum(w, u) {
   var victim = null
   for (var k = 0; k < w.units.length; k++) { var o = w.units[k]; if (o !== u && o.k === "dwarf" && dist(o.i, u.i) <= 2) { victim = o; break } }
   if (victim && chance(w, 0.5)) {
-    victim.hp -= 2; thought(w, victim, "foi agredido por " + u.name.split(" ")[0], -8)
+    victim.hp -= 2; thought(w, victim, LF("th.struck", "foi agredido por {0}", first(u.name)), -8)
+    shiftBond(w, u, victim, -14)
     announce(w, LF("msg.tantrum.hit", "{0} teve um acesso de fúria e agrediu {1}!", u.name, victim.name), 2)
     if (victim.hp <= 0) die(w, victim, LF("death.tantrum", "foi morto por {0} num acesso de fúria", u.name))
   } else if (targets.length > 0) {
@@ -1973,12 +2105,30 @@ function die(w, u, how) {
     for (var k = 0; k < w.units.length; k++) {
       var o = w.units[k]
       if (o === u || o.k !== "dwarf") continue
-      if (rest) thought(w, o, LF("th.lost.grave", "perdeu {0}, mas terá sepultura", u.name.split(" ")[0]), o.trait === "melancólico" ? -9 : -5)
-      else thought(w, o, LF("th.lost", "perdeu {0}", u.name.split(" ")[0]), o.trait === "melancólico" ? -12 : -7)
+      var tie = bondTotal(o, u.id), kin = isKin(o, u.id)
+      // Somebody they could not stand. The hold is smaller either way and they
+      // know what that means, so it still costs something — just not grief.
+      if (tie <= BOND_RIVAL) { thought(w, o, LF("th.lost.rival", "não vai chorar por {0}", first(u.name)), -1); continue }
+      if (kin || tie >= BOND_FRIEND) {
+        var deep = Math.round((kin ? 16 : 12) * (o.trait === "melancólico" ? 1.4 : 1))
+        thought(w, o, kin ? LF("th.lost.kin", "perdeu {0}, do seu próprio sangue", first(u.name))
+                          : LF("th.lost.friend", "perdeu {0}, o seu amigo", first(u.name)), -deep)
+        // grief is not a mood: it is something they have to go and do
+        o.grief = (o.grief || 0) + (kin ? 3 : 2)
+        legend(w, kin ? LF("lg.lost.kin", "{0} perdeu {1}, do seu próprio sangue, no ano {2}.", o.name, u.name, date(w).year)
+                      : LF("lg.lost.friend", "{0} perdeu o amigo {1} no ano {2}.", o.name, u.name, date(w).year))
+        continue
+      }
+      if (rest) thought(w, o, LF("th.lost.grave", "perdeu {0}, mas terá sepultura", first(u.name)), o.trait === "melancólico" ? -9 : -5)
+      else thought(w, o, LF("th.lost", "perdeu {0}", first(u.name)), o.trait === "melancólico" ? -12 : -7)
     }
     if (w.tile[u.i] === T_OPEN) {
       addItem(w, "remains", u.i)
-      if (u.weapon) addItem(w, "weapon", u.i, u.weaponQ || 1)
+      if (u.weapon) {
+        var wp = addItem(w, "weapon", u.i, u.weaponQ || 1)
+        // the name stays with the weapon, not with whoever was holding it
+        if (u.wnm) { wp.nm = u.wnm; wp.title = u.wtitle || "" }
+      }
       if (u.armor) addItem(w, "armor", u.i, u.armorQ || 1)
       if (u.tool) addItem(w, u.tool, u.i, u.toolQ || 1)
     }
@@ -2024,7 +2174,11 @@ function attack(w, a, b) {
     if (b.hp <= 0) {
       if (a.k === "dwarf") { a.kills++; thought(w, a, LF("th.killed", "matou {0} em combate", foeName(b)), 6) }
       if (b.k === "dwarf") die(w, b, LF("death.killedby", "foi morto por {0}", foeName(a)))
-      else { announce(w, LF("msg.foe.killed", "{0} foi morto{1}.", foeName(b, true), a.k === "dwarf" ? LF("msg.foe.killed.by", " por {0}", a.name) : ""), 1); removeUnit(w, b) }
+      else {
+        announce(w, LF("msg.foe.killed", "{0} foi morto{1}.", foeName(b, true), a.k === "dwarf" ? LF("msg.foe.killed.by", " por {0}", a.name) : ""), 1)
+        if (b.bears) dropRelic(w, b)
+        removeUnit(w, b)
+      }
     } else if (tookHit) wearOut(w, b, "armor")
     if (a.k === "dwarf" && a.weapon) wearOut(w, a, "weapon")
   }
@@ -2267,6 +2421,10 @@ function spoilFood(w) {
 // left to make: smelting and forging fell to 1.4% of the hold's time and the
 // mine stopped mattering. A broken pick is a reason to dig again.
 function wearOut(w, u, slot) {
+  // A relic does not wear out. Anything else and the best weapon in the world
+  // would be gone in sixty swings, which turns the deepest thing in the game
+  // into a consumable.
+  if (slot === "weapon" && u.wnm) return
   var key = slot === "pick" || slot === "axe" ? "wtool" : slot === "weapon" ? "wweapon" : "warmor"
   // a save from before wear, or a dwarf who started the game equipped, gets a
   // full life the first time the item is used
@@ -2438,6 +2596,9 @@ function seedSeen(w) {
 // the magma holds a sentinel, one of them, which is.
 var WAKE_FROM = 3          // this level and below can stir
 function wakeChance(z) { return z <= 0 ? 0.85 : z === 1 ? 0.5 : z === 2 ? 0.25 : 0.1 }
+// A pact holds the deep to its word; a refused tribute is remembered by
+// everything down there, not only by the ones who asked.
+function wakeOdds(w, z) { return w.pact ? 0 : wakeChance(z) * (w.grudge ? 2 : 1) }
 // How deep the hold has *dug*, which is not the same as how deep open floor
 // goes: the caverns on level 1 are generated open, so counting floor made
 // every world start already at its deepest and nothing could ever wake. What
@@ -2464,17 +2625,38 @@ function maybeTomb(w, u, i) {
     if (g >= 0) {
       var guard = addUnit(w, "sentinel", g)
       guard.elite = true
-      announce(w, L("msg.tomb.guard", "O que guardava a tumba não gostou."), 2)
+      // The one weapon in the game that cannot be made: it is down here, in the
+      // hands of whatever has been holding it since before the hold. Killing
+      // the guard is the only way it changes hands, which is the whole point of
+      // depth — the reward is not a better grade of the same thing, it is a
+      // thing that exists once.
+      var rn = artifactName(w, "metal").split("|")
+      guard.bears = { nm: rn[0], title: rn[1], q: 5 }
+      announce(w, LF("msg.tomb.guard", "O que guardava a tumba não gostou — e empunha {0}, {1}.", rn[0], rn[1]), 2)
       if (!w.raid) { w.raid = { since: w.tick, n: 1, wave: 0, lost: 0, deep: true }; w.stats.raids++ }
     }
   }
+}
+// Whatever it was carrying lies where it died, named, and the hold is told —
+// the shaft that reached it is now the reason anyone here has this thing.
+function dropRelic(w, u) {
+  var r = u.bears
+  u.bears = null
+  var it = addItem(w, "weapon", u.i, r.q)
+  it.nm = r.nm; it.title = r.title
+  w.relic = { nm: r.nm, title: r.title, t: w.tick }
+  announce(w, LF("msg.relic.dropped", "{0}, {1}, caiu onde o guardião tombou.", r.nm, r.title), 2)
+  legend(w, LF("lg.relic", "{0}, {1}, foi arrancada das profundezas no ano {2}.", r.nm, r.title, date(w).year))
 }
 function maybeWake(w, z) {
   if (w.peaceful || z > WAKE_FROM) return
   if (!w.woke) w.woke = {}
   if (w.woke[z]) return
   w.woke[z] = w.tick
-  if (!chance(w, wakeChance(z))) {
+  if (!chance(w, wakeOdds(w, z))) {
+    // Nothing woke — but the deepest levels are inhabited, and somebody down
+    // there noticed the shaft. This is the only friendly thing depth does.
+    if (z <= 1 && chance(w, 0.5) && courtArrive(w, z)) return
     announce(w, LF("msg.deep.quiet", "Nível {0} aberto. O silêncio aqui embaixo é diferente.", z), 1)
     return
   }
@@ -2514,6 +2696,137 @@ function deepSpot(w, z) {
   }
   for (var j = z * N; j < (z + 1) * N; j++) if (passable(w, j)) return j
   return -1
+}
+
+// ---- the lost court ---------------------------------------------------------
+// Everything that came up from the deep so far wanted the hold dead, so depth
+// was only ever a monster with better loot behind it. Something else lives
+// down there: a people who did not die out, ruled by a king nobody up here has
+// heard of in centuries, and what they do when a shaft breaks into their level
+// is send someone up to talk.
+//
+// The envoy is not hostile and cannot be fought into anything useful. They ask
+// for tribute — real goods, taken out of the stockpile, not merely counted like
+// the baron's demands — and what they give back is something the hold cannot
+// make: a pact that puts the deep back to sleep, steel out of their own forges,
+// or the map of a level they have lived in for a thousand years.
+//
+// Refuse them and they do not simply leave. This is the one pressure in the
+// game the player creates entirely by digging.
+var TRIBUTE = ["cutgem", "bar", "craft", "booze", "meal"]
+var TRIBUTE_N = { cutgem: 2, bar: 3, craft: 4, booze: 12, meal: 6 }
+var TRIBUTE_DAYS = 15
+function raceName(w) { return pick(w, tbl("SUR_A", SUR_A)) + pick(w, tbl("SUR_B", SUR_B)) }
+function courtGoods(w, k) {
+  var n = 0
+  for (var q = 0; q < w.items.length; q++) { var it = w.items[q]; if (it.t === k && !it.by && !it.gone) n++ }
+  return n
+}
+// Paying takes the goods away. A tribute you keep is not a tribute.
+function payTribute(w, k, n) {
+  var taken = 0
+  for (var q = w.items.length - 1; q >= 0 && taken < n; q--) {
+    var it = w.items[q]
+    if (it.t !== k || it.by || it.gone) continue
+    removeItem(w, it.id); taken++
+  }
+  return taken
+}
+// Someone comes up to ask. They walk to the depot and wait there; if they
+// cannot get up at all, nothing happens and the level stays quiet.
+function courtArrive(w, z) {
+  if (w.court || w.pact || w.grudge) return false
+  var spot = deepSpot(w, z)
+  if (spot < 0) return false
+  var kind = pick(w, TRIBUTE)
+  var e = addUnit(w, "envoy", spot)
+  e.name = dwarfName(w)
+  // Counted from what the hold already has, the same lesson the baron taught:
+  // a tribute the stockpile already covers is paid the morning it is asked and
+  // costs the player nothing.
+  w.court = { race: raceName(w), king: dwarfName(w), k: kind, n: courtGoods(w, kind) + TRIBUTE_N[kind], since: w.tick, z: z, envoy: e.id, said: false }
+  announce(w, LF("msg.court.come", "Algo sobe do nível {0} — e não vem para lutar.", z), 2)
+  return true
+}
+// The envoy makes their way to the depot, says what they came to say once they
+// are there, and then stands and waits out the deadline.
+function actEnvoy(w, u) {
+  var c = w.court
+  // Their business is done: they go back the way they came. Walking them out
+  // through the surface edge like a merchant was wrong — they did not arrive
+  // through the gate, and a hold that watches them leave downward learns where
+  // they live.
+  if (!c) { descendHome(w, u); return }
+  if (dist(u.i, w.depot) <= 2) {
+    if (!c.said) {
+      c.said = true; c.since = w.tick
+      announce(w, LF("msg.court.ask", "O emissário dos {0}, em nome do rei {1}, pede tributo: {2} de {3}.", c.race, c.king, c.n, itemName(c.k)), 2)
+      legend(w, LF("lg.court.ask", "Os {0}, das profundezas, pediram tributo no ano {1}.", c.race, date(w).year))
+    }
+    u.wait = 20
+    return
+  }
+  if (u.wait > 0) { u.wait--; return }
+  if (!u.path && !go(w, u, function (q) { return dist(q, w.depot) <= 2 }, w.depot, 4000)) { u.wait = 40; return }
+  step(w, u)
+}
+// Their side of it, once a day.
+function courtTick(w, d) {
+  var c = w.court
+  if (!c) return
+  var envoy = unitById(w, c.envoy)
+  if (!envoy) { w.court = null; return }
+  if (!c.said) return
+  if (courtGoods(w, c.k) >= c.n) {
+    payTribute(w, c.k, c.n)
+    w.stats.tributes = (w.stats.tributes || 0) + 1
+    var gift = pick(w, ["pact", "steel", "map"])
+    if (gift === "pact") {
+      w.pact = 1
+      announce(w, LF("msg.court.pact", "Tributo pago. Os {0} selam um pacto: as profundezas voltam a dormir.", c.race), 1)
+      legend(w, LF("lg.court.pact", "Um pacto foi selado com os {0} no ano {1}.", c.race, date(w).year))
+    } else if (gift === "steel") {
+      for (var k = 0; k < 3; k++) addItem(w, "bar", w.depot, 3)
+      addItem(w, "cutgem", w.depot)
+      announce(w, LF("msg.court.steel", "Tributo pago. Os {0} deixam aço das suas próprias forjas.", c.race), 1)
+    } else {
+      revealLevel(w, c.z)
+      announce(w, LF("msg.court.map", "Tributo pago. Os {0} mostram o nível {1} como quem mostra a própria casa.", c.race, c.z), 1)
+    }
+    var ds = dwarves(w)
+    for (var q = 0; q < ds.length; q++) thought(w, ds[q], L("th.court.paid", "a fortaleza tratou com um rei das profundezas"), 5)
+    envoy.going = c.z
+    w.court = null
+    return
+  }
+  if (w.tick - c.since <= DAY * TRIBUTE_DAYS) return
+  // The deadline passed. They go home, and they remember.
+  w.grudge = 1
+  w.stats.tributesFailed = (w.stats.tributesFailed || 0) + 1
+  announce(w, LF("msg.court.refused", "O emissário dos {0} desceu de mãos vazias. Eles não esquecem.", c.race), 2)
+  legend(w, LF("lg.court.refused", "Os {0} foram recusados no ano {1}.", c.race, date(w).year))
+  var ds2 = dwarves(w)
+  for (var q2 = 0; q2 < ds2.length; q2++) thought(w, ds2[q2], L("th.court.refused", "negou o tributo a um rei das profundezas"), -4)
+  removeUnit(w, envoy)
+  w.court = null
+  spawnDeep(w, c.z)
+}
+function descendHome(w, u) {
+  var z = typeof u.going === "number" ? u.going : 1
+  if (iz(u.i) <= z) { removeUnit(w, u); return }
+  if (u.wait > 0) { u.wait--; return }
+  if (!u.path || !u.job || u.job.k !== "leave") {
+    var home = deepSpot(w, z)
+    if (home < 0 || !go(w, u, function (q) { return q === home }, home, 4000)) { removeUnit(w, u); return }
+    u.job = { k: "leave", i: -1 }
+  }
+  if (step(w, u) === 1) removeUnit(w, u)
+}
+// A level shown by people who have lived in it. The one way the fog comes off
+// somewhere a dwarf has never walked.
+function revealLevel(w, z) {
+  if (!w.seen) return
+  for (var i = z * N; i < (z + 1) * N; i++) w.seen[i] = 1
 }
 
 // ---- the baron and their demands -------------------------------------------
@@ -2664,12 +2977,12 @@ function checkFall(w) {
 }
 function dayStart(w, d) {
   rosterMilitia(w)
-  if (!w.fallen) nobleTick(w, d)
+  if (!w.fallen) { nobleTick(w, d); courtTick(w, d) }
   // Once a day, at dawn. Rewriting the queue four times a day instead looked
   // like the obvious fix for a cellar that runs dry at breakfast, and cost
   // a third of the hold's brewing and six fortresses in sixteen: the churn
   // orphaned the order every dwarf was already working on.
-  if (!w.fallen) { spoilFood(w); holdOrders(w) }
+  if (!w.fallen) { spoilFood(w); holdOrders(w); noAccessTick(w) }
   if (w.scenario && !w.fallen) prospect(w)
   if (w.scenario && !w.peaceful && !w.fallen && !w.raid && !w.caravan && w.tick >= w.scenario.nextRaid) spawnRaid(w, d, w.scenario.wave)
   // weather
@@ -2834,6 +3147,7 @@ function tick(w) {
   spreadLiquids(w)
   maybeStrangeMood(w)
   raidTick(w)
+  if (w.tick % 24 === 0) socialTick(w)
   // units (copy: acts may remove units)
   var us = w.units.slice()
   w.hostiles = 0
@@ -2846,6 +3160,7 @@ function tick(w) {
     else if (u.k === "deer") actDeer(w, u)
     else if (u.k === "kobold") actKobold(w, u)
     else if (u.k === "merchant") actMerchant(w, u)
+    else if (u.k === "envoy") actEnvoy(w, u)
     // liquids
     var t = w.tile[u.i]
     if (t === T_MAGMA) { if (u.k === "dwarf") die(w, u, L("death.magma", "queimou até a morte no magma")); else removeUnit(w, u) }
@@ -3121,6 +3436,32 @@ function depthBelow(w, i, z) {
 // dwarves merely have not got to yet are not stranded.
 function isStranded(w, i) { return !!w.desig[i] && !desigOk(w)[i] }
 function isUnreachable(w, i) { return isStranded(w, i) }
+// A designation nobody can stand next to is drawn red, which is easy to miss
+// on a level that is still fog: the marks are the only thing showing, and the
+// level just looks unexplored. Say it out loud once, naming the level, because
+// what is missing is almost always a staircase down into it.
+//
+// Cutting that staircase automatically was tried and reverted. It works — the
+// stranded room starts the next morning — but going deeper is the most
+// expensive decision in the game, and the hold took it on its own: across
+// sixteen seeds the miners drove to the bottom level in the first spring,
+// days four to eleven, woke what sleeps there with seven dwarves and no
+// infrastructure, and three fortresses in sixteen died of it (14/16 survivors
+// became 11/16). Restricting it to levels already dug would not have saved the
+// case it was written for, where the level below was untouched. So the descent
+// stays the player's, and this only makes sure they are told.
+function noAccessTick(w) {
+  var ds = cache(w).desigs, ok = desigOk(w), byZ = {}, worst = -1, n = 0
+  for (var k = 0; k < ds.length; k++) {
+    var di = ds[k]; if (!di || ok[di]) continue
+    var dz = iz(di); byZ[dz] = (byZ[dz] || 0) + 1; n++
+    if (worst < 0 || byZ[dz] > byZ[worst]) worst = dz
+  }
+  if (n < 4) { delete w.noaccess; return }
+  if (w.noaccess) return
+  w.noaccess = Math.max(1, w.tick)
+  announce(w, LF("msg.noaccess", "{0} escavação(ões) em z{1} não têm acesso: ninguém consegue chegar lá. Falta uma escada descendo para o nível.", byZ[worst], worst), 2)
+}
 function countUnreachable(w) { var n = 0, ds = cache(w).desigs, ok = desigOk(w); for (var k = 0; k < ds.length; k++) if (ds[k] && !ok[ds[k]]) n++; return n }
 var TILE_KEY = { 1: "soil", 2: "stone", 3: "ore", 4: "gem", 5: "tree", 6: "water", 7: "magma", 8: "fungus", 9: "shrub" }
 var FLOOR_KEY = { 0: "none", 1: "soil", 2: "stone", 3: "grass", 4: "moss" }
@@ -3137,7 +3478,7 @@ var JOB_PT = { dig: "cavando", digstair: "cavando escada", chop: "cortando", bui
   brew: "fermentando", craft: "criando", haul: "carregando", eat: "comendo", forage: "coletando", drink: "bebendo", drinkwater: "bebendo água",
   sleep: "dormindo", fight: "lutando", arm: "pegando arma", mood: "humor estranho", flee: "fugindo", idle: "ocioso",
   equip: "equipando", train: "treinando", cook: "cozinhando", smelt: "fundindo", forge: "forjando", cut: "lapidando", setgem: "fazendo joia",
-  bury: "sepultando os mortos" }
+  bury: "sepultando os mortos", mourn: "velando os mortos" }
 function jobName(u) {
   if (!u.job) return u.mood_state === "melancholy" ? L("mood.melancholy", "melancólico") : u.mood_state === "berserk" ? L("mood.berserk", "furioso") : L("job.idle", "ocioso")
   var j = u.job, key = j.k === "dig" && j.stair ? "digstair" : j.k
@@ -3210,6 +3551,9 @@ function deserialize(json) {
   if (!w.woke) w.woke = {}
   if (typeof w.stirred !== "number") w.stirred = 0
   if (typeof w.tomb !== "number") w.tomb = 0
+  if (w.court === undefined) w.court = null
+  if (typeof w.pact !== "number") w.pact = 0
+  if (typeof w.grudge !== "number") w.grudge = 0
   if (typeof w.demandSince !== "number") w.demandSince = 0
   if (w.demand === undefined) w.demand = null
   // units carrying items keep their claims; jobs are dropped so no stale paths survive
@@ -3218,6 +3562,7 @@ function deserialize(json) {
     if (un.carry) { var it = itemById(w, un.carry); if (it) { it.by = 0; it.res = 0; it.i = un.i } un.carry = 0 }
     // a dwarf saved before inclinations existed gets theirs now, or they would
     // go through life with no trade they love and none they cannot stand
+    if (un.k === "dwarf") { if (!un.bonds) un.bonds = {}; if (!un.kin) un.kin = []; if (typeof un.grief !== "number") un.grief = 0 }
     if (un.k === "dwarf" && !un.likes) {
       un.likes = pick(w, WORK_CATS)
       un.dislikes = pick(w, WORK_CATS)
@@ -3226,6 +3571,15 @@ function deserialize(json) {
     }
   }
   for (var i = 0; i < w.items.length; i++) { w.items[i].res = 0; w.items[i].by = 0 }
+  // A hold saved before any of this had no families, and kin are only ever
+  // decided on arrival — so without this pass the dwarves already living there
+  // would go to their graves as strangers. Done once, behind a flag: rolling it
+  // on every load would hand out relatives for reloading the game.
+  if (!w.kinV) {
+    w.kinV = 1
+    var ex = dwarves(w)
+    for (var kq = 0; kq < ex.length; kq++) if (!ex[kq].kin || !ex[kq].kin.length) maybeKin(w, ex[kq])
+  }
   return w
 }
 function newWorldEmpty() {

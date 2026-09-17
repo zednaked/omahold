@@ -75,6 +75,8 @@ function build(theme) {
     // what comes up from below reads as the deep does: the crawler in the
     // fungus colour of the caverns it lives in, the sentinel in magma
     crawler: css(magenta), sentinel: css(byellow),
+    // an envoy of the deep is not a foe and must not read like one
+    envoy: css(bmag),
     item: css(mix(fg, bg, 0.25)), itemLog: css(yellow), itemStone: css(gray), itemOre: css(byellow), itemGem: css(bmag), itemFood: css(bgreen), itemBooze: css(byellow), itemCraft: css(cyan), itemWeapon: css(bwhite), itemArtifact: css(accent), itemRemains: css(gray),
     bKitchen: css(byellow), bSmelter: css(bred), bForge: css(bwhite), bTorch: css(byellow), bTraining: css(mix(fg, bg, 0.35)),
     itemBar: css(byellow), itemTool: css(bcyan), itemArmor: css(bwhite), itemMeal: css(bgreen), itemCutGem: css(mix(bmag, bwhite, 0.35)), itemJewel: css(mix(accent, bwhite, 0.5)), bJeweler: css(bmag),
