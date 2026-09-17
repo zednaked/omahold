@@ -137,6 +137,26 @@ fortaleza não tiver nenhum canto quieto e alcançável — tudo ocupado, ou o
 único espaço isolado sem escada — os mortos ficam no chão e isso aparece no
 humor de todos. As Lendas contam quantos foram sepultados.
 
+## O barão
+
+Uma fortaleza que vale 4000 atrai um nobre. É um dos seus próprios anões,
+promovido — o de mais perícia — e se ele morre a fortaleza nomeia outro, que é
+a única promoção deste jogo.
+
+O barão **quer coisas**: mais uma estátua para contemplar, joias no tesouro,
+uma adega mais cheia, um campo de treino, tochas nos salões, refeições prontas
+na despensa. Cada exigência é contada a partir do que a fortaleza já tinha
+quando ela foi feita — "mais uma estátua", não "uma estátua": um barão
+satisfeito com o que você já tem não é pressão. Há uma estação para atender.
+
+- Atendida: **+4** de humor para todos. Uma fortaleza que agrada o barão é uma
+  fortaleza que vai bem, e sabe disso.
+- Sem resposta depois de vinte dias: **−3** para todos, e as Lendas registram.
+
+Algumas exigências a fortaleza cumpre sozinha (a cozinha segue fazendo
+refeições); outras pedem que você construa. O barão e a exigência aberta
+aparecem na página Local, com os dias que faltam.
+
 ## Marcos e vitória
 
 São seis coisas que uma fortaleza faz no caminho para cima, cada uma anunciada

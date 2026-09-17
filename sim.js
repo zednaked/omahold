@@ -144,7 +144,8 @@ var SKILL_NAME = { mine: "mineração", wood: "lenha", farm: "lavoura", build: "
 // every counter the UI prints; a save from an older build gets the missing ones
 // zeroed on load instead of showing "undefined" in the chronicle
 var STAT_KEYS = ["dug", "chopped", "built", "brewed", "crafted", "migrants", "deaths", "artifacts", "raids", "caravans",
-                 "cooked", "smelted", "forged", "cut", "jewels", "repelled", "goblinsKilled", "spoiled", "broken", "botched", "buried"]
+                 "cooked", "smelted", "forged", "cut", "jewels", "repelled", "goblinsKilled", "spoiled", "broken", "botched", "buried",
+                 "demandsMet", "demandsFailed"]
 function newStats() { var o = {}; for (var k = 0; k < STAT_KEYS.length; k++) o[STAT_KEYS[k]] = 0; return o }
 
 var TRAITS = ["teimoso", "alegre", "melancólico", "guloso", "valente", "preguiçoso", "curioso", "rabugento"]
@@ -222,7 +223,7 @@ function newWorld(seed) {
     ground: new Uint8Array(N),
     items: [], units: [], nextId: 1,
     log: [], legends: [], artifacts: [], dead: [],
-    name: "", wealth: 0, alerts: 0, popCap: 20, graveyard: -1, done: {}, legendary: 0, siege: 0, siegeSince: 0,
+    name: "", wealth: 0, alerts: 0, popCap: 20, graveyard: -1, done: {}, legendary: 0, siege: 0, baron: 0, demand: null, demandSince: 0, siegeSince: 0,
     liquidBudget: { water: 60, magma: 30 },
     caravan: null, raid: null, lockdown: false, depot: -1,
     weather: 0,   // 0 clear, 1 rain, 2 snow
@@ -2216,6 +2217,96 @@ function wearOut(w, u, slot) {
 
 // The last dwarf is dead. Losing is fun, but the world should stop pretending
 // there is a fortress here: no more waves, caravans, thieves or migrants.
+// ---- the baron and their demands -------------------------------------------
+// The hold had no source of pressure that came from inside it. Goblins arrive
+// on a schedule, hunger is arithmetic, and neither asks the player for
+// anything in particular — so past the first hour there was nothing to do that
+// somebody wanted done.
+//
+// A hold worth 4000 draws a noble. They are one of your own dwarves, promoted,
+// and they want things: a statue to look at, a jewel, a full cellar, a drill
+// yard, a cook. Each demand has a season to be met. Meeting it lifts everyone
+// (a hold that satisfies its baron is a hold that is doing well and knows it);
+// letting it lapse costs everyone a little, and the baron remembers.
+//
+// The demands are deliberately things the player builds or produces, never
+// things that happen on their own — a demand you satisfy by waiting is not a
+// demand.
+// A demand is a target, counted from what the hold already had when it was
+// made: "another statue", not "a statue". Asking only for what is missing
+// meant the ready hold — which starts with a statue, a jeweler, a kitchen, a
+// drill yard and a full cellar — was never asked for anything at all, and a
+// baron who is satisfied by what you already own is not pressure.
+var DEMANDS = ["statue", "jewel", "cellar", "training", "torches", "meals"]
+var DEMAND_DAYS = 20
+var DEMAND_STEP = { statue: 1, jewel: 2, cellar: 10, training: 1, torches: 2, meals: 6 }
+function demandHave(w, k) {
+  var c = cache(w)
+  if (k === "statue") return c.statues.length
+  if (k === "jewel") return countItems(w, "jewel")
+  if (k === "cellar") return countItems(w, "booze")
+  if (k === "training") return c.trainings.length
+  if (k === "torches") return c.torches.length
+  if (k === "meals") return countItems(w, "meal")
+  return 0
+}
+function demandMet(w, d) { return !!d && demandHave(w, d.k) >= d.n }
+function demandText(w, d) {
+  if (!d) return ""
+  return LF("dem." + d.k, "{0}", d.n)
+}
+// Who the baron is. One of your own, the one with the most skill — and if they
+// die, the hold names another, which is the only promotion in the game.
+function pickBaron(w) {
+  var ds = dwarves(w), best = null, bs = -1
+  for (var k = 0; k < ds.length; k++) {
+    var sum = 0
+    for (var sk in ds[k].skills) sum += ds[k].skills[sk]
+    if (sum > bs) { bs = sum; best = ds[k] }
+  }
+  return best
+}
+function nobleTick(w, d) {
+  if (w.fallen || pop(w) < 5 || w.wealth < 4000) return
+  var baron = w.baron ? unitById(w, w.baron) : null
+  if (!baron) {
+    baron = pickBaron(w)
+    if (!baron) return
+    w.baron = baron.id
+    w.demand = null
+    announce(w, LF("msg.baron", "{0} tornou-se o barão de {1}.", baron.name, w.name), 1)
+    legend(w, LF("lg.baron", "{0} tornou-se barão no ano {1}.", baron.name, d.year))
+    return
+  }
+  // an open demand: met, or out of time
+  if (w.demand) {
+    if (demandMet(w, w.demand)) {
+      w.stats.demandsMet = (w.stats.demandsMet || 0) + 1
+      announce(w, LF("msg.demand.met", "O barão está satisfeito: {0}.", demandText(w, w.demand)), 1)
+      legend(w, LF("lg.demand.met", "Uma exigência do barão foi atendida no ano {0}.", d.year))
+      var ds = dwarves(w)
+      for (var k = 0; k < ds.length; k++) thought(w, ds[k], L("th.demand.met", "a fortaleza agradou o barão"), 4)
+      w.demand = null; w.demandSince = w.tick
+      return
+    }
+    if (w.tick - w.demandSince > DAY * DEMAND_DAYS) {
+      w.stats.demandsFailed = (w.stats.demandsFailed || 0) + 1
+      announce(w, LF("msg.demand.failed", "O barão não foi atendido: {0}.", demandText(w, w.demand)), 2)
+      legend(w, LF("lg.demand.failed", "Uma exigência do barão ficou sem resposta no ano {0}.", d.year))
+      var ds2 = dwarves(w)
+      for (var q = 0; q < ds2.length; q++) thought(w, ds2[q], L("th.demand.failed", "o barão está descontente"), -3)
+      w.demand = null; w.demandSince = w.tick
+    }
+    return
+  }
+  // no demand, and a season since the last one: ask for something not yet had
+  if (w.demandSince && w.tick - w.demandSince < DAY * 10) return
+  var kind = pick(w, DEMANDS)
+  w.demand = { k: kind, n: demandHave(w, kind) + DEMAND_STEP[kind] }
+  w.demandSince = w.tick
+  announce(w, LF("msg.demand", "O barão {0} exige: {1}.", baron.name, demandText(w, w.demand)), 1)
+}
+
 // ---- milestones and the end of a game --------------------------------------
 // There was no way to win, only `checkFall` — the last dwarf dying. A hold
 // could run for five years and nothing ever said it had got anywhere, which is
@@ -2274,6 +2365,7 @@ function checkFall(w) {
 }
 function dayStart(w, d) {
   rosterMilitia(w)
+  if (!w.fallen) nobleTick(w, d)
   // Once a day, at dawn. Rewriting the queue four times a day instead looked
   // like the obvious fix for a cellar that runs dry at breakfast, and cost
   // a third of the hold's brewing and six fortresses in sixteen: the churn
@@ -2777,6 +2869,9 @@ function deserialize(json) {
   if (typeof w.legendary !== "number") w.legendary = 0
   if (typeof w.siege !== "number") w.siege = 0
   if (typeof w.siegeSince !== "number") w.siegeSince = 0
+  if (typeof w.baron !== "number") w.baron = 0
+  if (typeof w.demandSince !== "number") w.demandSince = 0
+  if (w.demand === undefined) w.demand = null
   // units carrying items keep their claims; jobs are dropped so no stale paths survive
   for (var u = 0; u < w.units.length; u++) {
     var un = w.units[u]; un.path = null; un.pi = 0; un.job = null
@@ -2796,7 +2891,7 @@ function deserialize(json) {
 function newWorldEmpty() {
   return { v: 1, seed: 0, rs: 0, tick: 0, tile: new Uint8Array(NN), floor: new Uint8Array(NN), build: new Uint8Array(NN), desig: new Uint8Array(NN),
     dbuild: new Uint8Array(NN), grow: new Uint8Array(NN), ground: new Uint8Array(N), items: [], units: [], nextId: 1, log: [], legends: [], artifacts: [],
-    dead: [], orders: [], graveyard: -1, done: {}, legendary: 0, siege: 0, siegeSince: 0, name: "", wealth: 0, alerts: 0, popCap: 20, liquidBudget: { water: 60, magma: 30 }, caravan: null, raid: null, lockdown: false, depot: -1,
+    dead: [], orders: [], graveyard: -1, done: {}, legendary: 0, siege: 0, baron: 0, demand: null, demandSince: 0, siegeSince: 0, name: "", wealth: 0, alerts: 0, popCap: 20, liquidBudget: { water: 60, magma: 30 }, caravan: null, raid: null, lockdown: false, depot: -1,
     weather: 0, stats: newStats(), fallen: false, claim: null, unreach: {}, lastMoodTick: 0 }
 }
 function rle(a) {

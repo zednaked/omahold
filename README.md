@@ -142,6 +142,27 @@ if the hold has no quiet reachable corner — everything occupied, or the only
 isolated space with no stairs — the dead stay on the floor and it shows in
 everyone's mood. The Legends page counts how many were buried.
 
+## The baron
+
+A hold worth 4000 draws a noble. It is one of your own dwarves, promoted — the
+one with the most skill — and if they die the hold names another, which is the
+only promotion in the game.
+
+The baron **wants things**: another statue to look at, jewels in the treasury,
+a fuller cellar, a drill yard, torches in the halls, prepared meals in the
+larder. Each demand is counted from what the hold already had when it was
+made, so "another statue" rather than "a statue" — a baron satisfied by what
+you already own is not pressure. There is a season to meet it.
+
+- Met: **+4** mood for everyone. A hold that satisfies its baron is a hold
+  doing well, and it knows it.
+- Unanswered after twenty days: **−3** for everyone, and the Legends page
+  records it.
+
+Some demands the hold meets on its own (the kitchen keeps making meals); others
+need you to build something. The baron and the open demand show on the Here
+page, with the days left.
+
 ## Milestones, and winning
 
 There are six things a hold does on its way up, each announced when it happens
