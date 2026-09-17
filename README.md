@@ -142,6 +142,61 @@ if the hold has no quiet reachable corner — everything occupied, or the only
 isolated space with no stairs — the dead stay on the floor and it shows in
 everyone's mood. The Legends page counts how many were buried.
 
+## Milestones, and winning
+
+There are six things a hold does on its way up, each announced when it happens
+and dated in the Legends page:
+
+| milestone | what it takes |
+|---|---|
+| an artifact | a strange mood runs its course and names something |
+| 6000 in worth | everything the hold owns and has built |
+| eighteen dwarves | migrants come by wealth, and they need beds and food to stay |
+| three attacks repelled | the militia holds three times |
+| reach the magma | somebody digs a shaft all the way to level 0 |
+| five years standing | the hold is still there |
+
+Doing all six makes the hold **legendary**, which is this game's version of
+winning: the world keeps going (there is no screen to stop at), but the date
+is recorded and the reckoning is written then rather than only when everyone
+is dead. A fallen hold gets the same reckoning, which is what a ruin deserves
+instead of a last death notice.
+
+Measured over eight seeds and six years with nobody touching anything: the
+artifact and the three attacks land 8 times out of 8, eighteen dwarves 6, the
+worth 5, five years 3 — and **the magma 0, legendary 0**. Five of the six come
+with a healthy hold; the one that closes the game asks you to dig where it is
+dangerous.
+
+## Metal grades
+
+The deeper the ore, the better the metal: **copper** in the shallow levels,
+**iron** below them, **steel** in the last level before the magma. A bar keeps
+the grade of the ore it was smelted from, gear keeps the grade of the bar, and
+better gear hits harder and absorbs more — so the shaft that earns the magma
+milestone is also what lets a hold meet the ninth wave in something better
+than copper. Arms and armor are always forged from the best bar in the hold,
+not the nearest one.
+
+## Siege
+
+Goblins who cannot get through the door used to give up after a day, and the
+wave counted as repelled having cost nothing: locking the doors (`L`) was a
+free win. Now they sit outside for up to eight days, and while there are
+goblins alive on the surface with none of them inside, the hold is **under
+siege** — nobody works above ground, which takes the surface fields, the shrub
+gathering and the woodcutting with it.
+
+Four seeds over two years, with and without locking:
+
+| | repelled | deaths | pop | days besieged |
+|---|---|---|---|---|
+| doors open | 11.0 | 13.0 | 13.8 | 2.0 |
+| doors locked | 10.5 | 14.5 | 9.8 | 21.2 |
+
+Deaths go **up** when you lock, which is the point: nobody is lost to a goblin
+and the bill arrives as privation instead. The decision has two sides now.
+
 ## How it is played
 
 It is Dwarf Fortress in miniature: you do not control dwarves, you

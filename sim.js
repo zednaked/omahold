@@ -381,8 +381,28 @@ function nearFree(w, c, r) {
 }
 
 // ---- entities ---------------------------------------------------------------
-function addItem(w, type, i) {
+// ---- metal grades -----------------------------------------------------------
+// The deeper the ore, the better the metal: copper near the surface, iron
+// below it, steel in the last level before the magma. This is what makes
+// digging down worth the risk — and it is the same shaft that earns the
+// "reach the magma" milestone. Gear of a better grade hits harder and absorbs
+// more, so a hold that only scratched the top levels meets the ninth wave in
+// copper.
+var GRADES = ["", "copper", "iron", "steel"]
+function oreGrade(z) { return z <= 1 ? 3 : z === 2 ? 2 : 1 }
+function gradeName(q) { return L("grade." + (GRADES[q] || "copper"), GRADES[q] || "copper") }
+// The label a player reads: "an iron axe", "uma barra de aço".
+function itemLabel(it) {
+  if (!it) return ""
+  if (!it.q || it.q < 1) return itemName(it.t)
+  if (it.t !== "bar" && it.t !== "pick" && it.t !== "axe" && it.t !== "weapon" && it.t !== "armor") return itemName(it.t)
+  // a graded bar is a "copper bar", not a "copper metal bar"
+  var base = it.t === "bar" ? L("item.bar.plain", "barra") : itemName(it.t)
+  return LF("item.of", "{0} de {1}", base, gradeName(it.q))
+}
+function addItem(w, type, i, grade) {
   var it = { id: w.nextId++, t: type, i: i, res: 0, by: 0 }
+  if (grade) it.q = grade
   w.items.push(it); return it
 }
 function addUnit(w, kind, i) {
@@ -827,6 +847,18 @@ function freeItem(w, type, from, u, ignoreUnreach) {
   }
   return best
 }
+// The highest-grade free item of a type, ties broken by distance.
+function bestItem(w, type, u) {
+  var best = null, bq = -1, bd = 1e9
+  for (var k = 0; k < w.items.length; k++) {
+    var it = w.items[k]
+    if (it.t !== type || it.res || it.by || it.gone) continue
+    if (w.unreach["i" + it.id]) continue
+    var q = it.q || 1, d = dist(it.i, u.i)
+    if (q > bq || (q === bq && d < bd)) { best = it; bq = q; bd = d }
+  }
+  return best
+}
 function stockpileSpot(w, from) {
   var stocks = cache(w).stocks
   if (stocks.length === 0) return -1
@@ -1009,7 +1041,7 @@ function findDesignation(w, u) {
 function finishDig(w, u, i, stair) {
   var t = w.tile[i]
   if (t === T_STONE) addItem(w, "stone", i)
-  else if (t === T_ORE) addItem(w, "ore", i)
+  else if (t === T_ORE) addItem(w, "ore", i, oreGrade(iz(i)))
   else if (t === T_GEM) { addItem(w, "gem", i); thought(w, u, L("th.gem", "encontrou uma gema"), 4) }
   if (t !== T_OPEN) w.floor[i] = t === T_SOIL ? F_SOIL : F_STONE
   w.tile[i] = T_OPEN
@@ -1302,13 +1334,20 @@ function startOrder(w, u, o, spec) {
   var b = freeBuilding(w, buildingsFor(w, spec.b), u)
   if (b < 0) return false
   if (spec.min && countItems(w, spec.mat) < spec.min) return false
-  var mat = freeItem(w, spec.mat, u.i, u)
+  var mat = null
+  // Arms and armor get the best bar in the hold, not the nearest one. Without
+  // this the steel sat in the stockpile while the militia was equipped in
+  // copper: the grade average was 1.32 out of 3, and the whole point of
+  // digging deep never reached the people doing the fighting.
+  if (spec.product === "weapon" || spec.product === "armor") mat = bestItem(w, spec.mat, u)
+  if (!mat) mat = freeItem(w, spec.mat, u.i, u)
   if (!mat && spec.mat2) mat = freeItem(w, spec.mat2, u.i, u)
   if (!mat) return false
   if (!go(w, u, function (q) { return q === mat.i }, mat.i)) return false
   mat.res = u.id
   var job = { k: spec.job, i: b, claims: true, item: mat.id, stage: "fetch", prog: 0, order: o.id }
   if (spec.product) job.product = spec.product
+  if (mat.q) job.grade = mat.q      // the grade travels with the material
   setJob(w, u, job)
   return true
 }
@@ -1553,7 +1592,9 @@ function work(w, u) {
       it = itemById(w, j.item)
       if (!it || it.i !== u.i) { dropJob(w, u); return }
       removeItem(w, it.id)
-      if (j.slot === "weapon") u.weapon = true; else if (j.slot === "armor") u.armor = true; else u.tool = j.slot
+      if (j.slot === "weapon") { u.weapon = true; u.weaponQ = it.q || 1 }
+      else if (j.slot === "armor") { u.armor = true; u.armorQ = it.q || 1 }
+      else { u.tool = j.slot; u.toolQ = it.q || 1 }
       thought(w, u, j.slot === "weapon" ? L("th.armed", "pegou em armas") : j.slot === "armor" ? L("th.armored", "vestiu uma armadura") : j.slot === "pick" ? L("th.newpick", "ganhou uma picareta nova") : L("th.newaxe", "ganhou um machado novo"), 2)
       dropJob(w, u); return
     case "train":
@@ -1597,8 +1638,12 @@ function work(w, u) {
         }
         consumeCarried(w, u)
         if (j.k === "cook") { addItem(w, "meal", j.i); addItem(w, "meal", j.i); w.stats.cooked = (w.stats.cooked || 0) + 1; gainSkill(w, u, "brew", 1) }
-        else if (j.k === "smelt") { addItem(w, "bar", j.i); w.stats.smelted = (w.stats.smelted || 0) + 1; gainSkill(w, u, "craft", 1) }
-        else { addItem(w, j.product, j.i); w.stats.forged = (w.stats.forged || 0) + 1; u.made++; gainSkill(w, u, "craft", 1); if (j.product !== "craft") thought(w, u, LF("th.forged", "forjou uma {0}", itemName(j.product)), 2) }
+        else if (j.k === "smelt") { addItem(w, "bar", j.i, j.grade || 1); w.stats.smelted = (w.stats.smelted || 0) + 1; gainSkill(w, u, "craft", 1) }
+        else {
+          var made = addItem(w, j.product, j.i, j.product === "craft" ? 0 : (j.grade || 1))
+          w.stats.forged = (w.stats.forged || 0) + 1; u.made++; gainSkill(w, u, "craft", 1)
+          if (j.product !== "craft") thought(w, u, LF("th.forged", "forjou uma {0}", itemLabel(made)), 2)
+        }
         wellDone(w, u, ccat); orderDone(w, j)
         dropJob(w, u)
       }
@@ -1877,9 +1922,9 @@ function die(w, u, how) {
     }
     if (w.tile[u.i] === T_OPEN) {
       addItem(w, "remains", u.i)
-      if (u.weapon) addItem(w, "weapon", u.i)
-      if (u.armor) addItem(w, "armor", u.i)
-      if (u.tool) addItem(w, u.tool, u.i)
+      if (u.weapon) addItem(w, "weapon", u.i, u.weaponQ || 1)
+      if (u.armor) addItem(w, "armor", u.i, u.armorQ || 1)
+      if (u.tool) addItem(w, u.tool, u.i, u.toolQ || 1)
     }
   }
   removeUnit(w, u)
@@ -1902,11 +1947,11 @@ function nearestUnit(w, from, pred, maxd) {
   return best
 }
 function attack(w, a, b) {
-  var as = a.k === "dwarf" ? a.skills.fight + (a.weapon ? 3 : 0) + (a.trait === "valente" ? 1 : 0) : (a.k === "goblin" ? 1 + (a.elite ? 2 : 0) : a.k === "wolf" ? 2 : 1)
+  var as = a.k === "dwarf" ? a.skills.fight + (a.weapon ? 3 + ((a.weaponQ || 1) - 1) : 0) + (a.trait === "valente" ? 1 : 0) : (a.k === "goblin" ? 1 + (a.elite ? 2 : 0) : a.k === "wolf" ? 2 : 1)
   var ds = b.k === "dwarf" ? b.skills.fight + (b.weapon ? 1 : 0) + (b.armor ? 1 : 0) : 2
   if (chance(w, Math.max(0.15, Math.min(0.9, 0.5 + 0.06 * (as - ds))))) {
-    var dmg = 1 + ri(w, 3) + (a.weapon ? 1 : 0) + (a.elite ? 1 : 0), tookHit = false
-    if (b.k === "dwarf" && b.armor) { dmg = Math.max(0, dmg - 1 - (chance(w, 0.4) ? 1 : 0)); tookHit = true }
+    var dmg = 1 + ri(w, 3) + (a.weapon ? (a.weaponQ || 1) : 0) + (a.elite ? 1 : 0), tookHit = false
+    if (b.k === "dwarf" && b.armor) { dmg = Math.max(0, dmg - (b.armorQ || 1) - (chance(w, 0.4) ? 1 : 0)); tookHit = true }
     b.hp -= dmg
     if (b.k === "goblin" && b.hp <= 0) w.stats.goblinsKilled = (w.stats.goblinsKilled || 0) + 1
     if (a.k === "dwarf") gainSkill(w, a, "fight", 1)
@@ -2318,7 +2363,12 @@ function raidTick(w) {
   // inside a hold whose survivors are three levels down also finds no path.
   if (n > 0 && inside === 0) {
     if (!w.siegeSince) w.siegeSince = w.tick
-    if (!w.siege && w.tick - w.siegeSince > DAY / 2) {
+    // Two full days with not one goblin inside, not half of one: half a day is
+    // only "they have not got in yet", and it fired on ordinary waves while
+    // the goblins were still walking to the gate — which shut the surface down
+    // for every raid instead of only for a siege, and cost three fortresses in
+    // sixteen.
+    if (!w.siege && w.tick - w.siegeSince > DAY * 2) {
       w.siege = w.tick
       announce(w, LF("msg.siege", "{0} está sitiada. Ninguém sai à superfície.", w.name), 2)
       legend(w, LF("lg.siege", "Cerco a {0} no ano {1}.", w.name, date(w).year))
@@ -2433,7 +2483,13 @@ function actDwarf(w, u) {
 }
 function computeWealth(w) {
   var v = 0, i
-  for (var k = 0; k < w.items.length; k++) v += ITEM_VALUE[w.items[k].t] || 0
+  for (var k = 0; k < w.items.length; k++) {
+    var iv = ITEM_VALUE[w.items[k].t] || 0
+    // A quarter per grade, not a half: at a half the graded gear inflated the
+    // hold's worth by a third, and worth is what sizes migrant waves and
+    // ambushes — better steel was quietly buying a bigger siege.
+    v += w.items[k].q > 1 ? Math.round(iv * (1 + 0.25 * (w.items[k].q - 1))) : iv
+  }
   for (i = 0; i < NN; i++) { var b = w.build[i]; if (b) v += BUILD_INFO[b].value }
   return v
 }

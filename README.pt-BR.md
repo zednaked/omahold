@@ -137,6 +137,60 @@ fortaleza não tiver nenhum canto quieto e alcançável — tudo ocupado, ou o
 único espaço isolado sem escada — os mortos ficam no chão e isso aparece no
 humor de todos. As Lendas contam quantos foram sepultados.
 
+## Marcos e vitória
+
+São seis coisas que uma fortaleza faz no caminho para cima, cada uma anunciada
+quando acontece e datada nas Lendas:
+
+| marco | o que exige |
+|---|---|
+| um artefato | um humor estranho se completa e nomeia algo |
+| 6000 de riqueza | tudo o que a fortaleza tem e construiu |
+| dezoito anões | migrantes vêm por riqueza, e precisam de cama e comida para ficar |
+| três ataques repelidos | a milícia segura três vezes |
+| alcançar o magma | alguém cava um poço até o nível 0 |
+| cinco anos de pé | a fortaleza ainda está lá |
+
+Cumprir as seis torna a fortaleza **lendária**, que é a versão local de ganhar:
+o mundo continua (não há tela onde parar), mas a data fica registrada e o
+placar é escrito ali, em vez de só quando todos morrem. Uma fortaleza que cai
+recebe o mesmo placar, que é o que uma ruína merece em vez de um último aviso
+de óbito.
+
+Medido em oito sementes por seis anos sem ninguém tocar em nada: o artefato e
+os três ataques saem 8 de 8, dezoito anões 6, a riqueza 5, cinco anos 3 — e o
+**magma 0, lendárias 0**. Cinco dos seis vêm com uma fortaleza saudável; o que
+fecha a partida pede que você cave onde é perigoso.
+
+## Graus de metal
+
+Quanto mais fundo o minério, melhor o metal: **cobre** nos níveis rasos,
+**ferro** abaixo deles, **aço** no último nível antes do magma. A barra guarda
+o grau do minério de que foi fundida, o equipamento guarda o grau da barra, e
+equipamento melhor bate mais forte e absorve mais — então o poço que ganha o
+marco do magma é também o que permite encontrar a nona onda em algo melhor que
+cobre. Armas e armaduras são sempre forjadas da melhor barra da fortaleza, não
+da mais próxima.
+
+## Cerco
+
+Goblins que não passavam da porta desistiam em um dia, e a onda contava como
+repelida tendo custado nada: trancar as portas (`L`) era vitória de graça.
+Agora eles ficam do lado de fora por até oito dias, e enquanto há goblins
+vivos na superfície sem nenhum deles dentro a fortaleza está **sitiada** —
+ninguém trabalha acima do solo, o que leva com ele a lavoura de superfície, a
+coleta de arbustos e a lenha.
+
+Quatro sementes por dois anos, com e sem trancar:
+
+| | repelidas | mortes | pop | dias sob cerco |
+|---|---|---|---|---|
+| portas abertas | 11,0 | 13,0 | 13,8 | 2,0 |
+| portas trancadas | 10,5 | 14,5 | 9,8 | 21,2 |
+
+As mortes **sobem** ao trancar, que é o ponto: ninguém se perde para um goblin
+e a conta chega como privação. A decisão passou a ter dois lados.
+
 ## Como se joga
 
 É Dwarf Fortress em miniatura: você não controla anões, você **designa** o que

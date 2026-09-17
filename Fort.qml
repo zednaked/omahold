@@ -389,7 +389,11 @@ Item {
         if (sel.k === "dwarf") {
           out.push({ t: sel.name, c: "accent" })
           out.push({ t: Sim.skillTitle(sel) + " · " + Sim.traitName(sel.trait) + " · hp " + sel.hp + "/" + sel.maxhp + (sel.militia ? root.t("p.militia") : ""), c: sel.militia ? "accent" : "muted", wrap: true })
-          var gear = []; if (sel.weapon) gear.push(root.t("p.gear.weapon")); if (sel.armor) gear.push(root.t("p.gear.armor")); if (sel.tool) gear.push(root.t(sel.tool === "pick" ? "p.gear.pick" : "p.gear.axe"))
+          // the grade matters in a fight, so it goes on the sheet
+          var gear = [], gq = function (label, q) { return q > 1 ? root.tf("p.gear.grade", label, Sim.gradeName(q)) : label }
+          if (sel.weapon) gear.push(gq(root.t("p.gear.weapon"), sel.weaponQ || 1))
+          if (sel.armor) gear.push(gq(root.t("p.gear.armor"), sel.armorQ || 1))
+          if (sel.tool) gear.push(gq(root.t(sel.tool === "pick" ? "p.gear.pick" : "p.gear.axe"), sel.toolQ || 1))
           out.push({ t: root.tf("p.gear", gear.length ? gear.join(", ") : root.t("p.gear.none")), c: "muted" })
           out.push({ t: root.tf("p.mood", bar(sel.mood, 10), Sim.moodWord(sel)), c: sel.mood < 18 ? "urgent" : "" })
           out.push({ t: root.tf("p.needs", bar(Math.min(100, sel.hunger), 10), bar(Math.min(100, sel.thirst), 10), bar(Math.min(100, sel.sleep), 10)), c: "" })
