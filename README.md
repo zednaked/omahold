@@ -62,6 +62,60 @@ fecha o painel.
 IPC equivalente: `omarchy-shell omahold preset <classic|ready|garrison|peaceful|siege>`,
 `saveSlot <n>`, `loadSlot <n>`, `slots`, `presets`.
 
+## Ordens de oficina (`w`)
+
+O que sai de uma oficina vem de uma fila, e a fila tem dois donos.
+
+**A fortaleza escreve a sua.** Quatro vezes por dia ela olha o que tem e anota
+o que falta: cerveja se a adega está baixa, refeições se há comida crua
+sobrando, barras se há minério, uma picareta se um mineiro está sem, armadura
+para quem entrou na milícia. Se existe destilaria e existe comida, alguém
+fermenta — sem você mandar. É a autonomia mínima: havendo infraestrutura e
+material, eles produzem.
+
+**Você escreve a sua** no menu (`≡ menu → Ordens`, ou `w` para ver a fila).
+Suas ordens têm precedência sobre as da fortaleza — mas precedência não é
+obediência. Ninguém larga o que está fazendo:
+
+- **Necessidade vence ordem.** Fome, sede e sono vêm antes de qualquer fila. A
+  ordem espera o anão acordar.
+- **Subsistência vence gosto.** Com a despensa vazia ou a adega seca, ninguém
+  lapida gema — nem o joalheiro que adora lapidar, nem porque você pediu.
+- **Inclinação escolhe quem faz.** Cada anão tem um ofício que prefere e um que
+  detesta (a ficha dele, na página Anões, mostra os dois). Entre duas ordens
+  que ele poderia pegar, vai na que gosta. Medido: 12,6% do trabalho no ofício
+  preferido contra 7,5% no detestado — a aversão pesa mais que a preferência,
+  porque forçar a preferência custou 28% da produção da fortaleza quando foi
+  testado.
+- **Eles erram.** Perícia, humor, fome e gosto decidem: um aprendiz estraga uma
+  peça em cada dez, um mestre quase nunca. Trabalho estragado consome o
+  material e não rende nada. Três seguidos e o anão **larga aquele ofício por
+  um dia** — a ficha dele diz isso. Ninguém estraga a última cerveja da
+  fortaleza: quem mexe na reserva tem cuidado redobrado.
+
+As Lendas contam quantas tarefas foram estragadas. A curva é visível: numa
+fortaleza nova são umas 140 no primeiro ano e 50 no quarto, conforme a perícia
+sobe — e volta a subir quando chega uma leva de migrantes sem ofício.
+
+## Os mortos
+
+Quem cai fica onde caiu, e todo anão que passa por perto sente. Eles resolvem
+isso sozinhos: escolhem um **cemitério** — um canto que dá para alcançar a pé,
+longe das camas, das mesas e das oficinas, porque é isso que faz de um lugar
+um lugar quieto — e passam a carregar os companheiros para lá. Cada enterro
+deixa um `†` no mapa.
+
+- Passar pelos restos de alguém sem sepultura: **−4** de humor (−6 para um
+  melancólico).
+- Sepultar um companheiro como se deve: **+3** para quem carrega.
+- Com cemitério aberto, a perda pesa menos em todo mundo: **−5** em vez de
+  **−7**, porque sabem onde aquele vai ficar.
+
+Ninguém escolhe o lugar por você, e você não precisa designar nada. Mas se a
+fortaleza não tiver nenhum canto quieto e alcançável — tudo ocupado, ou o
+único espaço isolado sem escada — os mortos ficam no chão e isso aparece no
+humor de todos. As Lendas contam quantos foram sepultados.
+
 ## Como se joga
 
 É Dwarf Fortress em miniatura: você não controla anões, você **designa** o que
@@ -96,7 +150,7 @@ mapa e os avisos num toast central.
 | `L` | trancar portas: goblins, lobos e kobolds não passam |
 | `g` | blocos ↔ glifos (o visual clássico) |
 | `m` | janelinha de canto |
-| `Tab` `u` `i` `y` `?` | páginas: Anões, Local, Lendas, Ajuda |
+| `Tab` `u` `i` `w` `y` `?` | páginas: Anões, Local, **Ordens**, Lendas, Ajuda |
 | `Home` | voltar ao acampamento |
 | `n` | menu Novo jogo |
 | `Shift+S` | menu Salvar |
@@ -180,7 +234,7 @@ ao fechar o painel; sobrevive a reinícios do shell.
 
 ## O que está simulado, e o que não está
 
-**Está**: cadeia minério → barra → ferramentas/armas/armadura, cozinha, tochas e luz, milícia automática com treino, armadura no combate, cenário-vitrine com ondas; economia com dreno — comida crua estraga no que passa da capacidade da despensa (refeições preparadas conservam) e picareta, machado, arma e armadura se gastam com o uso até quebrar, então a mina e a forja têm por que continuar depois do primeiro ano; relevo com encostas (rampas implícitas), solo/rocha/minério/gemas,
+**Está**: cadeia minério → barra → ferramentas/armas/armadura, cozinha, tochas e luz, milícia automática com treino, armadura no combate, cenário-vitrine com ondas; fila de ordens que a fortaleza escreve sozinha e o jogador complementa; anões com inclinação e aversão por ofício, que erram o trabalho, se frustram e largam a bancada por um dia; cemitério escolhido pelos próprios anões, enterro dos mortos e o peso de deixá-los sem sepultura; economia com dreno — comida crua estraga no que passa da capacidade da despensa (refeições preparadas conservam) e picareta, machado, arma e armadura se gastam com o uso até quebrar, então a mina e a forja têm por que continuar depois do primeiro ano; relevo com encostas (rampas implícitas), solo/rocha/minério/gemas,
 riacho, cavernas, mar de magma; A* em 3D com escadas e encostas; sete
 necessidades e ofícios; designações de cavar/escada/cortar/construir; lavoura
 com crescimento, destilaria, oficina (artesanato e armas de minério),
@@ -195,8 +249,9 @@ orçamento finito; dia e noite, chuva e neve; crônica e memorial.
 
 **Não está** (de propósito, pela escala): hidráulica de verdade (níveis de
 água/pressão), desabamentos, temperatura, comércio
-com negociação, nobres, animais domésticos, sítios externos, ordens de oficina
-e ofícios atribuídos à mão (os anões escolhem o trabalho sozinhos). Cada anão é um
+com negociação, nobres, animais domésticos, sítios externos, e a tela de
+ofícios do DF — ninguém é designado padeiro: cada anão tem um ofício que
+prefere e um que detesta, e se arranja. Cada anão é um
 único glifo e não tem membros — a ferida é só um número.
 
 ## Referências

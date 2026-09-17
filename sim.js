@@ -33,7 +33,8 @@ var F_NONE = 0, F_SOIL = 1, F_STONE = 2, F_GRASS = 3, F_MOSS = 4
 // ---- buildings --------------------------------------------------------------
 var B_NONE = 0, B_STAIR = 1, B_BED = 2, B_TABLE = 3, B_FARM = 4, B_STILL = 5,
     B_WORKSHOP = 6, B_WALL = 7, B_DOOR = 8, B_STOCK = 9, B_STATUE = 10,
-    B_KITCHEN = 11, B_SMELTER = 12, B_FORGE = 13, B_TORCH = 14, B_TRAINING = 15, B_JEWELER = 16
+    B_KITCHEN = 11, B_SMELTER = 12, B_FORGE = 13, B_TORCH = 14, B_TRAINING = 15, B_JEWELER = 16,
+    B_GRAVE = 17
 var TORCH_RADIUS = 4.5   // cells; light fades linearly to nothing at this distance
 
 // ---- designations -----------------------------------------------------------
@@ -56,6 +57,8 @@ BUILD_INFO[B_FORGE]    = { name: "forja",      mat: "stone", value: 40, work: 34
 BUILD_INFO[B_TORCH]    = { name: "tocha",      mat: "log",   value: 3,  work: 6 }
 BUILD_INFO[B_TRAINING] = { name: "campo de treino", mat: "stone", value: 15, work: 16 }
 BUILD_INFO[B_JEWELER]  = { name: "joalheria",  mat: "stone", value: 40, work: 34 }
+// Not built to order: a grave appears where someone was buried.
+BUILD_INFO[B_GRAVE]    = { name: "túmulo",     mat: "",      value: 8,  work: 0 }
 
 var ITEM_VALUE = { log: 2, stone: 1, ore: 8, gem: 30, food: 2, booze: 3, craft: 12, weapon: 25, artifact: 400, remains: 0,
                    bar: 15, pick: 30, axe: 28, armor: 40, meal: 5, cutgem: 70, jewel: 130 }
@@ -73,13 +76,21 @@ var FOOD_PER_DWARF = 10   // how much raw food a hold farms toward, per dwarf
 var SPOIL_PER_DAY = 0.012 // chance a raw food item rots each day
 var WEAR = { pick: 50, axe: 35, weapon: 60, armor: 20 }
 
+// ---- kinds of work ----------------------------------------------------------
+// Every job belongs to one of these. A dwarf leans toward one and cannot stand
+// another, which decides what they reach for, how they feel doing it, and how
+// often they ruin it. No labor screen: they sort themselves out.
+var WORK_CATS = ["mine", "wood", "farm", "build", "craft", "brew", "fight", "haul"]
+var WORK_NAME = { mine: "a mineração", wood: "a lenha", farm: "a lavoura", build: "a construção",
+                  craft: "a oficina", brew: "a cervejaria", fight: "o treino", haul: "o transporte" }
+
 var SKILLS = ["mine", "wood", "farm", "build", "craft", "fight", "brew"]
 var SKILL_NAME = { mine: "mineração", wood: "lenha", farm: "lavoura", build: "construção", craft: "artesanato", fight: "luta", brew: "cervejaria" }
 
 // every counter the UI prints; a save from an older build gets the missing ones
 // zeroed on load instead of showing "undefined" in the chronicle
 var STAT_KEYS = ["dug", "chopped", "built", "brewed", "crafted", "migrants", "deaths", "artifacts", "raids", "caravans",
-                 "cooked", "smelted", "forged", "cut", "jewels", "repelled", "goblinsKilled", "spoiled", "broken"]
+                 "cooked", "smelted", "forged", "cut", "jewels", "repelled", "goblinsKilled", "spoiled", "broken", "botched", "buried"]
 function newStats() { var o = {}; for (var k = 0; k < STAT_KEYS.length; k++) o[STAT_KEYS[k]] = 0; return o }
 
 var TRAITS = ["teimoso", "alegre", "melancólico", "guloso", "valente", "preguiçoso", "curioso", "rabugento"]
@@ -151,7 +162,7 @@ function newWorld(seed) {
     ground: new Uint8Array(N),
     items: [], units: [], nextId: 1,
     log: [], legends: [], artifacts: [], dead: [],
-    name: "", wealth: 0, alerts: 0, popCap: 20,
+    name: "", wealth: 0, alerts: 0, popCap: 20, graveyard: -1,
     liquidBudget: { water: 60, magma: 30 },
     caravan: null, raid: null, lockdown: false, depot: -1,
     weather: 0,   // 0 clear, 1 rain, 2 snow
@@ -328,6 +339,11 @@ function addDwarf(w, i) {
   for (var s = 0; s < SKILLS.length; s++) u.skills[SKILLS[s]] = 0
   var a = pick(w, SKILLS), b = pick(w, SKILLS)
   u.skills[a] = 3 + ri(w, 3); u.skills[b] = Math.max(u.skills[b], 2 + ri(w, 3))
+  // what they lean toward and what they cannot stand
+  u.likes = pick(w, WORK_CATS)
+  u.dislikes = pick(w, WORK_CATS)
+  while (u.dislikes === u.likes) u.dislikes = pick(w, WORK_CATS)
+  u.frust = 0; u.avoid = ""; u.avoidUntil = 0
   u.bed = -1; u.carry = 0; u.weapon = false; u.armor = false; u.tool = ""; u.militia = false
   u.mood_state = "" // "", "strange", "melancholy", "berserk"
   u.kills = 0; u.made = 0
@@ -337,6 +353,12 @@ function unitById(w, id) { for (var k = 0; k < w.units.length; k++) if (w.units[
 function itemById(w, id) { for (var k = 0; k < w.items.length; k++) if (w.items[k].id === id) return w.items[k]; return null }
 function dwarves(w) { var r = []; for (var k = 0; k < w.units.length; k++) if (w.units[k].k === "dwarf") r.push(w.units[k]); return r }
 function pop(w) { var n = 0; for (var k = 0; k < w.units.length; k++) if (w.units[k].k === "dwarf") n++; return n }
+
+// The chronicle is the part people actually read, so it agrees in number and
+// gender: "1 anão perdido" and "no outono", not "1 anões perdidos" and
+// "na outono".
+function plural(n, one, many) { return n + " " + (n === 1 ? one : many) }
+function inSeason(name) { return (name === "primavera" ? "na " : "no ") + name }
 
 function announce(w, msg, lvl) {
   w.log.push({ t: w.tick, m: msg, l: lvl || 0 })
@@ -534,7 +556,7 @@ function removeBuilding(w, i, byPlayer) {
 function cache(w) {
   if (w.cache && !w.dirty) return w.cache
   var c = { stills: [], shops: [], farms: [], beds: [], stocks: [], tables: [], statues: [], shrubs: [], water: [], desigs: [],
-            kitchens: [], smelters: [], forges: [], torches: [], trainings: [], jewelers: [] }
+            kitchens: [], smelters: [], forges: [], torches: [], trainings: [], jewelers: [], graves: [] }
   var minG = 255, maxG = 0
   for (var gq = 0; gq < N; gq++) { var gv = w.ground[gq]; if (gv < minG) minG = gv; if (gv > maxG) maxG = gv }
   c.minGround = minG; c.maxGround = maxG
@@ -546,6 +568,7 @@ function cache(w) {
       else if (b === B_STATUE) c.statues.push(i); else if (b === B_KITCHEN) c.kitchens.push(i); else if (b === B_SMELTER) c.smelters.push(i)
       else if (b === B_FORGE) c.forges.push(i); else if (b === B_TORCH) c.torches.push(i); else if (b === B_TRAINING) c.trainings.push(i)
       else if (b === B_JEWELER) c.jewelers.push(i)
+      else if (b === B_GRAVE) c.graves.push(i)
     }
     var t = w.tile[i]
     if (t === T_SHRUB) c.shrubs.push(i); else if (t === T_WATER) c.water.push(i)
@@ -817,6 +840,63 @@ function gainSkill(w, u, s, n) {
     if (lvl + 1 === 12) announce(w, u.name + " tornou-se lendário em " + SKILL_NAME[s] + "!", 1)
   }
 }
+// Which kind of work a job counts as, for inclination and frustration.
+function jobCat(kind) {
+  if (kind === "dig" || kind === "stair") return "mine"
+  if (kind === "chop") return "wood"
+  if (kind === "plant" || kind === "harvest") return "farm"
+  if (kind === "build") return "build"
+  if (kind === "craft" || kind === "forge" || kind === "smelt" || kind === "cut" || kind === "setgem") return "craft"
+  if (kind === "brew" || kind === "cook") return "brew"
+  if (kind === "train") return "fight"
+  if (kind === "haul") return "haul"
+  return ""
+}
+// Is this dwarf steering clear of that kind of work right now? Three botched
+// jobs in a row and they want nothing to do with it for a day. Nobody tells
+// them to; it is how a hold ends up with everyone doing what they can stand.
+function avoiding(w, u, cat) { return !!cat && u.avoid === cat && (u.avoidUntil || 0) > w.tick }
+// How much a dwarf wants a kind of work: a bonus for the trade they lean
+// toward, a penalty for the one they cannot stand. Used as a distance handicap
+// so a hauler will still pick up what is under their nose.
+function leaning(u, cat) { return u.likes === cat ? -6 : u.dislikes === cat ? 10 : 0 }
+// Skill, mood and inclination decide whether the work comes out right. A
+// botch eats the material and yields nothing, which is what makes a master
+// smith worth feeding and an apprentice worth training.
+function botches(w, u, cat) {
+  // A dwarf working the last of the food is careful with it: no ruined batch
+  // while the hold is down to its reserve. Lowering the rate instead was the
+  // wrong lever - it made no difference the measurement could separate from
+  // noise, while the classic embark, which has a single still, was losing its
+  // cellar to botched brews and ending three dwarves smaller.
+  if (cat === "brew" && countItems(w, "food") < pop(w) * 2) return false
+  var p = 0.10 / (1 + (u.skills[cat] || 0) * 0.55)
+  if (u.dislikes === cat) p *= 2.2
+  if (u.likes === cat) p *= 0.45
+  if (u.mood < 30) p *= 1.6
+  if (u.trait === "preguiçoso") p *= 1.3
+  if (u.hunger > 100 || u.thirst > 100 || u.sleep > 110) p *= 1.5
+  return chance(w, Math.min(0.5, p))
+}
+// The work went wrong: material gone, nothing made, and it stings.
+function botch(w, u, cat, what) {
+  w.stats.botched++
+  u.frust = (u.frust || 0) + 1
+  thought(w, u, "estragou " + what, -3)
+  if (u.frust >= 3) {
+    u.frust = 0; u.avoid = cat; u.avoidUntil = w.tick + DAY
+    thought(w, u, "largou " + (WORK_NAME[cat] || "o trabalho") + " por hoje", -2)
+    announce(w, u.name + " largou " + (WORK_NAME[cat] || "o trabalho") + " de frustração.", 0)
+  }
+}
+// It came out right: a little pride if it is the work they love, and the
+// frustration eases.
+function wellDone(w, u, cat) {
+  if (u.frust > 0) u.frust--
+  if (u.likes === cat && chance(w, 0.12)) thought(w, u, "passou o dia fazendo o que gosta: " + (WORK_NAME[cat] || "um bom trabalho"), 4)
+  else if (u.dislikes === cat && chance(w, 0.10)) thought(w, u, "detesta " + (WORK_NAME[cat] || "esse trabalho"), -2)
+}
+
 function skillTitle(u) {
   var best = "", bl = -1
   for (var k in u.skills) if (u.skills[k] > bl) { bl = u.skills[k]; best = k }
@@ -833,10 +913,13 @@ function findDesignation(w, u) {
     if (d === DG_NONE) continue
     if (w.claim[i] && w.claim[i] !== u.id) continue
     var ur = w.unreach[i]; if (ur && ur > w.tick) continue
-    var dd = dist(i, u.i)
+    var dd = dist(i, u.i), dcat = (d === DG_DIG || d === DG_STAIR) ? "mine" : d === DG_CHOP ? "wood" : "build"
+    if (avoiding(w, u, dcat)) continue
+
     if (d === DG_DIG || d === DG_STAIR) dd -= u.skills.mine * 1.5
     else if (d === DG_CHOP) dd -= u.skills.wood * 1.5
     else if (d === DG_BUILD) dd -= u.skills.build * 1.5
+    dd += leaning(u, dcat)
     cands.push([dd, i, d])
   }
   if (cands.length === 0) return false
@@ -981,6 +1064,215 @@ function nearBuilding(w, c, b, r) {
   return false
 }
 
+// ---- the dead ---------------------------------------------------------------
+// Remains left lying where someone fell weigh on everyone who walks past. The
+// dwarves pick their own burial ground: somewhere they can walk to, out of the
+// way of the beds, the tables and the workshops - a quiet corner, which is
+// what a graveyard is. Nobody is told where; if the hold leaves no quiet
+// reachable corner, the dead stay unburied and it shows in every mood.
+function graveyard(w) {
+  if (w.graveyard >= 0 && passable(w, w.graveyard)) {
+    var r = reachField(w)
+    if (r[w.graveyard]) return w.graveyard
+  }
+  w.graveyard = pickGraveyard(w)
+  if (w.graveyard >= 0) {
+    announce(w, "Os anões escolheram um lugar para os seus mortos, num canto quieto.", 1)
+    legend(w, "Um cemitério foi aberto num canto afastado da fortaleza.")
+  }
+  return w.graveyard
+}
+function pickGraveyard(w) {
+  var c = cache(w), reach = reachField(w), best = -1, bs = -1e9
+  // the busy places a graveyard should keep away from
+  var busy = c.beds.concat(c.tables, c.stills, c.shops, c.kitchens, c.smelters, c.forges, c.jewelers, c.trainings, c.stocks, c.farms)
+  for (var i = 0; i < NN; i++) {
+    if (!reach[i] || w.build[i] !== B_NONE || w.desig[i] !== DG_NONE) continue
+    if (w.tile[i] !== T_OPEN || w.floor[i] === F_NONE) continue
+    var dd = dist(i, w.depot)
+    if (dd < 6 || dd > 34) continue          // not on the doorstep, not a hike
+    var quiet = 1e9
+    for (var q = 0; q < busy.length; q++) { var bq = dist(busy[q], i); if (bq < quiet) quiet = bq }
+    if (quiet > 14) quiet = 14                // past a point, quiet is quiet
+    var score = quiet * 4 - dd               // quiet first, then near enough to carry
+    if (score > bs) { bs = score; best = i }
+  }
+  return best
+}
+// A free cell at the burial ground for one more grave.
+function graveSpot(w, g) {
+  if (w.build[g] === B_NONE && w.tile[g] === T_OPEN && w.floor[g] !== F_NONE) return g
+  for (var r = 1; r <= 4; r++) {
+    for (var dy = -r; dy <= r; dy++) for (var dx = -r; dx <= r; dx++) {
+      if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue
+      var x = ix(g) + dx, y = iy(g) + dy, z = iz(g)
+      if (!inb(x, y, z)) continue
+      var i = idx(x, y, z)
+      if (w.build[i] === B_NONE && w.desig[i] === DG_NONE && w.tile[i] === T_OPEN && w.floor[i] !== F_NONE && passable(w, i)) return i
+    }
+  }
+  return -1
+}
+// Carrying a fallen companion to the burial ground.
+function branchBury(w, u) {
+  if (countItems(w, "remains") === 0) return false
+  var g = graveyard(w)
+  if (g < 0 || graveSpot(w, g) < 0) return false
+  var rem = freeItem(w, "remains", u.i, u)
+  if (!rem) return false
+  if (!go(w, u, function (q) { return q === rem.i }, rem.i)) return false
+  rem.res = u.id
+  setJob(w, u, { k: "bury", i: g, item: rem.id, stage: "fetch", prog: 0 })
+  return true
+}
+
+// ---- work orders ------------------------------------------------------------
+// One queue that the hold and the player both write to. The hold files what it
+// notices missing every morning, so a hold with a still and barley brews
+// without being told; the player files what they want, and theirs come first.
+// There is no labor screen: a dwarf takes the first order they can stand and
+// are near, which is what their inclination decides.
+var ORDER_SPEC = {
+  booze:  { job: "brew",   b: B_STILL,    mat: "food",   min: 5, cat: "brew",  name: "cerveja" },
+  meal:   { job: "cook",   b: B_KITCHEN,  mat: "food",   min: 8, cat: "brew",  name: "refeições" },
+  bar:    { job: "smelt",  b: B_SMELTER,  mat: "ore",            cat: "craft", name: "barras de metal" },
+  pick:   { job: "forge",  b: B_FORGE,    mat: "bar",            cat: "craft", name: "picaretas",  product: "pick" },
+  axe:    { job: "forge",  b: B_FORGE,    mat: "bar",            cat: "craft", name: "machados",   product: "axe" },
+  weapon: { job: "forge",  b: B_FORGE,    mat: "bar",            cat: "craft", name: "armas",      product: "weapon" },
+  armor:  { job: "forge",  b: B_FORGE,    mat: "bar",            cat: "craft", name: "armaduras",  product: "armor" },
+  craft:  { job: "craft",  b: B_WORKSHOP, mat: "stone", mat2: "log", cat: "craft", name: "artesanato" },
+  cutgem: { job: "cut",    b: B_JEWELER,  mat: "gem",            cat: "craft", name: "gemas lapidadas" },
+  jewel:  { job: "setgem", b: B_JEWELER,  mat: "cutgem",         cat: "craft", name: "joias" },
+  // spare bars become trade goods at the forge, not at the workshop: without
+  // this the metal had no consumer once everyone was equipped and the bars sat
+  // at twelve while the mine quietly stopped
+  metalcraft: { job: "craft", b: B_FORGE, mat: "bar",            cat: "craft", name: "artesanato de metal" }
+}
+var ORDER_KINDS = ["booze", "meal", "bar", "pick", "axe", "weapon", "armor", "craft", "metalcraft", "cutgem", "jewel"]
+
+function orderList(w) { if (!w.orders) w.orders = []; return w.orders }
+function buildingsFor(w, b) {
+  var c = cache(w)
+  return b === B_STILL ? c.stills : b === B_KITCHEN ? c.kitchens : b === B_SMELTER ? c.smelters
+       : b === B_FORGE ? c.forges : b === B_WORKSHOP ? c.shops : b === B_JEWELER ? c.jewelers : []
+}
+// How many of a kind are still owed across the whole queue.
+function orderPending(w, what) {
+  var list = orderList(w), n = 0
+  for (var k = 0; k < list.length; k++) if (list[k].what === what) n += Math.max(0, list[k].n - list[k].done)
+  return n
+}
+function fileOrder(w, what, n, byPlayer) {
+  if (!ORDER_SPEC[what] || n <= 0) return null
+  var list = orderList(w), mine = byPlayer ? 1 : 0
+  for (var k = 0; k < list.length; k++) if (list[k].what === what && list[k].by === mine) { list[k].n += n; return list[k] }
+  var o = { id: w.nextId++, what: what, n: n, done: 0, by: mine, at: w.tick }
+  list.push(o); return o
+}
+function cancelOrder(w, id) {
+  var list = orderList(w)
+  for (var k = 0; k < list.length; k++) if (list[k].id === id) { list.splice(k, 1); return true }
+  return false
+}
+// The player taking an order back off the queue.
+function dropPlayerOrder(w, what, n) {
+  var list = orderList(w)
+  for (var k = list.length - 1; k >= 0; k--) {
+    if (list[k].what !== what || !list[k].by) continue
+    list[k].n -= (n || 1)
+    if (list[k].n - list[k].done <= 0) list.splice(k, 1)
+    return true
+  }
+  return false
+}
+function clearPlayerOrders(w) {
+  var list = orderList(w), keep = []
+  for (var k = 0; k < list.length; k++) if (!list[k].by) keep.push(list[k])
+  w.orders = keep
+}
+// What the player has asked for and what the hold noticed, for the panel.
+function orderCounts(w, what) {
+  var list = orderList(w), r = { mine: 0, hold: 0 }
+  for (var k = 0; k < list.length; k++) {
+    if (list[k].what !== what) continue
+    var left = Math.max(0, list[k].n - list[k].done)
+    if (list[k].by) r.mine += left; else r.hold += left
+  }
+  return r
+}
+
+function orderDone(w, j) {
+  if (!j || !j.order) return
+  var list = orderList(w)
+  for (var k = 0; k < list.length; k++) {
+    if (list[k].id !== j.order) continue
+    list[k].done++
+    if (list[k].done >= list[k].n) {
+      if (list[k].by) announce(w, "Ordem cumprida: " + list[k].n + " × " + ORDER_SPEC[list[k].what].name + ".", 1)
+      list.splice(k, 1)
+    }
+    return
+  }
+}
+// The hold's own orders, rewritten every morning so they always say what is
+// missing now. The player's are left exactly as they filed them.
+function holdOrders(w) {
+  var list = orderList(w), keep = []
+  for (var k = 0; k < list.length; k++) if (list[k].by) keep.push(list[k])
+  w.orders = keep
+  var c = cache(w), p = pop(w), food = countItems(w, "food")
+  function want(what, short, ok) {
+    if (!ok || short <= 0) return
+    var gap = short - orderPending(w, what)
+    if (gap > 0) fileOrder(w, what, Math.min(gap, 8), false)
+  }
+  want("booze", p * 3 + 6 - countItems(w, "booze"), c.stills.length > 0 && food >= 5)
+  want("meal", p * 2 - countItems(w, "meal"), c.kitchens.length > 0 && food >= 8)
+  want("bar", Math.min(12 - countItems(w, "bar"), countItems(w, "ore")), c.smelters.length > 0)
+  var fw = forgeWant(w)
+  if (fw && c.forges.length > 0) want(fw === "craft" ? "metalcraft" : fw, fw === "craft" ? 2 : 1, true)
+  want("cutgem", countItems(w, "gem"), c.jewelers.length > 0)
+  want("jewel", Math.min(countItems(w, "cutgem"), 24 - countItems(w, "jewel")), c.jewelers.length > 0)
+  want("craft", 40 - countItems(w, "craft"), c.shops.length > 0 && (countItems(w, "stone") > 4 || countItems(w, "log") > 6))
+}
+// Try to take this order: a free workshop, material in reach, and a path.
+function startOrder(w, u, o, spec) {
+  var b = freeBuilding(w, buildingsFor(w, spec.b), u)
+  if (b < 0) return false
+  if (spec.min && countItems(w, spec.mat) < spec.min) return false
+  var mat = freeItem(w, spec.mat, u.i, u)
+  if (!mat && spec.mat2) mat = freeItem(w, spec.mat2, u.i, u)
+  if (!mat) return false
+  if (!go(w, u, function (q) { return q === mat.i }, mat.i)) return false
+  mat.res = u.id
+  var job = { k: spec.job, i: b, claims: true, item: mat.id, stage: "fetch", prog: 0, order: o.id }
+  if (spec.product) job.product = spec.product
+  setJob(w, u, job)
+  return true
+}
+// The order this dwarf reaches for: the player's before the hold's, and among
+// those, the work they lean toward before the work they cannot stand.
+function takeOrder(w, u) {
+  var orders = orderList(w), cands = []
+  // Subsistence outranks taste and outranks the player: with the old scoring a
+  // dwarf who leaned toward the workshop took ore to the smelter while the
+  // cellar ran dry, and a hold with no beer sinks. Food and drink first,
+  // everything else after.
+  var dry = countItems(w, "booze") < pop(w)
+  var hungry = countItems(w, "food") + countItems(w, "meal") < pop(w) * 2
+  for (var q = 0; q < orders.length; q++) {
+    var o = orders[q], spec = ORDER_SPEC[o.what]
+    if (!spec || o.done >= o.n) continue
+    if (avoiding(w, u, spec.cat)) continue
+    var urgent = (o.what === "booze" && dry) || (o.what === "meal" && hungry)
+    cands.push([(urgent ? -100 : 0) + (o.by ? 0 : 60) + q + leaning(u, spec.cat), o, spec])
+  }
+  if (!cands.length) return false
+  cands.sort(function (a, b) { return a[0] - b[0] })
+  for (var t = 0; t < cands.length; t++) if (startOrder(w, u, cands[t][1], cands[t][2])) return true
+  return false
+}
+
 // ---- economy jobs -----------------------------------------------------------
 // What the forge should make next, in order of need.
 function forgeWant(w) {
@@ -1010,13 +1302,18 @@ function gearJob(w, u) {
   if (!it || !go(w, u, function (c) { return c === it.i }, it.i)) return false
   it.res = u.id; setJob(w, u, { k: "equip", i: -1, item: it.id, slot: want }); return true
 }
-function economyJob(w, u) {
-  var i, it, c = cache(w)
-  if (gearJob(w, u)) return true
-  // farming, toward a larder of FOOD_PER_DWARF per dwarf and no further. This
-  // used to run first and unconditionally, so the fields ate the whole
-  // workforce and the larder climbed past 2700 while nobody mined or built.
-  // A field left ripe keeps; only planting stops at the cap.
+// Each kind of work a dwarf can find on their own, as a branch that either
+// takes a job or declines. They are separate functions because the *order*
+// they are tried in is the whole point: a fixed ladder meant a dwarf who
+// loves hauling still went to the fields first, and measuring showed
+// inclination changing nothing at all (11.7% of work in the trade they love,
+// against 12.5% by pure chance).
+function branchFarm(w, u) {
+  var c = cache(w), i
+  // toward a larder of FOOD_PER_DWARF per dwarf and no further. This used to
+  // run first and unconditionally, so the fields ate the whole workforce and
+  // the larder climbed past 2700 while nobody mined or built. A field left
+  // ripe keeps; only planting stops at the cap.
   var larder = countItems(w, "food") + countItems(w, "meal") * 2, foodCap = pop(w) * FOOD_PER_DWARF
   var farms = c.farms
   for (var fq = 0; fq < farms.length && larder < foodCap * 1.5; fq++) {
@@ -1029,78 +1326,74 @@ function economyJob(w, u) {
       w.unreach[i] = w.tick + 200
     }
   }
-  // brewing first: a dry hold is an unhappy hold. Keep a raw-food reserve.
-  var still = freeBuilding(w, c.stills, u)
-  if (still >= 0 && countItems(w, "food") >= 5 && countItems(w, "booze") < pop(w) * 3 + 6) {
-    it = freeItem(w, "food", u.i, u)
-    if (it && go(w, u, function (q) { return q === it.i }, it.i)) { it.res = u.id; setJob(w, u, { k: "brew", i: still, claims: true, item: it.id, stage: "fetch", prog: 0 }); return true }
+  return false
+}
+// when the larder runs low, pick shrubs
+function branchGather(w, u) {
+  var c = cache(w)
+  if (countItems(w, "food") >= pop(w) + 2 || c.shrubs.length === 0) return false
+  // A cooldown of its own: sharing one with the eating-a-shrub search in
+  // needJob meant a dwarf who failed to find a shrub to *harvest* was then
+  // barred from finding one to *eat*, and eleven holds in sixteen starved.
+  // No cooldown on this search, tempting as it is: it expands up to 5000 cells
+  // and a starving hold runs it 1632 times in two years, which is most of the
+  // tick cost when the larder is empty. But resting after a failure - by any
+  // of the three rules tried - starved the cave-moss gatherers and cost ten
+  // or eleven holds in sixteen. A hungry dwarf gets to keep looking.
+  var sh = nearestTile(w, u.i, T_SHRUB)
+  if (w.tile[sh] === T_SHRUB && !(w.claim[sh] && w.claim[sh] !== u.id) && dist(sh, u.i) < 40 && go(w, u, workSpots(w, sh, false), sh, 5000)) {
+    setJob(w, u, { k: "chop", i: sh, claims: true, prog: 0 }); return true
   }
-  // cooking: raw food into meals (two per pot)
-  var kitchen = freeBuilding(w, c.kitchens, u)
-  if (kitchen >= 0 && countItems(w, "food") >= 8 && countItems(w, "meal") < pop(w) * 2) {
-    it = freeItem(w, "food", u.i, u)
-    if (it && go(w, u, function (q) { return q === it.i }, it.i)) { it.res = u.id; setJob(w, u, { k: "cook", i: kitchen, claims: true, item: it.id, stage: "fetch", prog: 0 }); return true }
-  }
-  // gathering: when the larder runs low, pick shrubs
-  if (countItems(w, "food") < pop(w) + 2 && c.shrubs.length > 0) {
-    var sh = nearestTile(w, u.i, T_SHRUB)
-    if (w.tile[sh] === T_SHRUB && !(w.claim[sh] && w.claim[sh] !== u.id) && dist(sh, u.i) < 40 && go(w, u, workSpots(w, sh, false), sh, 5000)) {
-      setJob(w, u, { k: "chop", i: sh, claims: true, prog: 0 }); return true
-    }
-  }
-  // smelting: ore into bars while there is ore
-  var smelter = freeBuilding(w, c.smelters, u)
-  if (smelter >= 0 && countItems(w, "ore") > 0 && countItems(w, "bar") < 12) {
-    it = freeItem(w, "ore", u.i, u)
-    if (it && go(w, u, function (q) { return q === it.i }, it.i)) { it.res = u.id; setJob(w, u, { k: "smelt", i: smelter, claims: true, item: it.id, stage: "fetch", prog: 0 }); return true }
-  }
-  // forging: bars into tools, weapons and armor, by need
-  var forge = freeBuilding(w, c.forges, u)
-  if (forge >= 0 && countItems(w, "bar") > 0) {
-    var product = forgeWant(w)
-    if (product) {
-      it = freeItem(w, "bar", u.i, u)
-      if (it && go(w, u, function (q) { return q === it.i }, it.i)) { it.res = u.id; setJob(w, u, { k: "forge", i: forge, claims: true, item: it.id, stage: "fetch", product: product, prog: 0 }); return true }
-    }
-  }
-  // jeweler: rough gems are cut, cut gems set into jewelry
-  var jeweler = freeBuilding(w, c.jewelers, u)
-  if (jeweler >= 0) {
-    var gemJob = countItems(w, "gem") > 0 ? "cut" : (countItems(w, "cutgem") > 0 && countItems(w, "jewel") < 24 ? "setgem" : null)
-    if (gemJob) {
-      it = freeItem(w, gemJob === "cut" ? "gem" : "cutgem", u.i, u)
-      if (it && go(w, u, function (q) { return q === it.i }, it.i)) { it.res = u.id; setJob(w, u, { k: gemJob, i: jeweler, claims: true, item: it.id, stage: "fetch", prog: 0 }); return true }
-    }
-  }
-  // crafting: trade goods from spare stone and wood
-  var shop = freeBuilding(w, c.shops, u)
-  if (shop >= 0 && countItems(w, "craft") < 40) {
-    var mat = null
-    if (countItems(w, "stone") > 4) mat = "stone"
-    else if (countItems(w, "log") > 6) mat = "log"
-    if (mat) {
-      it = freeItem(w, mat, u.i, u)
-      if (it && go(w, u, function (q) { return q === it.i }, it.i)) { it.res = u.id; setJob(w, u, { k: "craft", i: shop, claims: true, item: it.id, stage: "fetch", prog: 0 }); return true }
-    }
-  }
-  // training: the militia drills when there is nothing else to do
-  if (u.militia) {
-    var yard = freeBuilding(w, c.trainings, u)
-    if (yard >= 0 && chance(w, 0.5) && go(w, u, workSpots(w, yard, false), yard, 1500)) { setJob(w, u, { k: "train", i: yard, claims: true, prog: 0 }); return true }
-  }
-  // hauling
+  return false
+}
+// the militia drills when there is nothing else to do
+function branchTrain(w, u) {
+  if (!u.militia) return false
+  var yard = freeBuilding(w, cache(w).trainings, u)
+  if (yard >= 0 && chance(w, 0.5) && go(w, u, workSpots(w, yard, false), yard, 1500)) { setJob(w, u, { k: "train", i: yard, claims: true, prog: 0 }); return true }
+  return false
+}
+function branchHaul(w, u) {
   var spot = stockpileSpot(w, u.i)
-  if (spot >= 0) {
-    var best = null, bd = 1e9, hl = w.haulable || w.items
-    for (var k = 0; k < hl.length; k++) {
-      var ci = hl[k]
-      if (ci.gone || ci.res || ci.by || onStockpile(w, ci) || ci.t === "remains") continue
-      if (w.unreach["i" + ci.id]) continue
-      var d = dist(ci.i, u.i); if (d < bd) { bd = d; best = ci }
-    }
-    if (best && go(w, u, function (c2) { return c2 === best.i }, best.i)) { best.res = u.id; setJob(w, u, { k: "haul", i: spot, item: best.id, stage: "fetch", prog: 0 }); return true }
-    if (best) w.unreach["i" + best.id] = true
+  if (spot < 0) return false
+  var best = null, bd = 1e9, hl = w.haulable || w.items
+  for (var k = 0; k < hl.length; k++) {
+    var ci = hl[k]
+    if (ci.gone || ci.res || ci.by || onStockpile(w, ci) || ci.t === "remains") continue
+    if (w.unreach["i" + ci.id]) continue
+    var d = dist(ci.i, u.i); if (d < bd) { bd = d; best = ci }
   }
+  if (best && go(w, u, function (c2) { return c2 === best.i }, best.i)) { best.res = u.id; setJob(w, u, { k: "haul", i: spot, item: best.id, stage: "fetch", prog: 0 }); return true }
+  if (best) w.unreach["i" + best.id] = true
+  return false
+}
+
+// The branches in their default order, with the kind of work each one is, so
+// a leaning can move it up or down the list.
+var BRANCHES = [
+  { cat: "haul",  fn: branchBury },  // the dead first: everyone walks past them
+  { cat: "farm",  fn: branchFarm },
+  { cat: "",      fn: takeOrder },   // orders carry their own kind; takeOrder sorts them
+  { cat: "farm",  fn: branchGather },
+  { cat: "fight", fn: branchTrain },
+  { cat: "haul",  fn: branchHaul }
+]
+function economyJob(w, u) {
+  if (gearJob(w, u)) return true
+  // An empty larder overrides taste: nobody sets gems while there is nothing
+  // to eat, however much they hate the fields.
+  if (countItems(w, "food") + countItems(w, "meal") < pop(w) + 2) {
+    if (branchFarm(w, u)) return true
+    if (branchGather(w, u)) return true
+  }
+  var list = []
+  for (var k = 0; k < BRANCHES.length; k++) {
+    var b = BRANCHES[k]
+    if (b.cat && avoiding(w, u, b.cat)) continue
+    list.push([k * 2 + leaning(u, b.cat), b.fn])
+  }
+  list.sort(function (a, b2) { return a[0] - b2[0] })
+  for (var t = 0; t < list.length; t++) if (list[t][1](w, u)) return true
   return false
 }
 
@@ -1120,6 +1413,7 @@ function idle(w, u) {
     for (var k = 0; k < w.units.length; k++) { var o = w.units[k]; if (o !== u && o.k === "dwarf" && dist(o.i, u.i) <= 2) { thought(w, u, "conversou com " + o.name.split(" ")[0], 2); break } }
   }
   if (nearBuilding(w, u.i, B_STATUE, 2) && chance(w, 0.05)) thought(w, u, "admirou uma bela estátua", 3)
+  if (nearBuilding(w, u.i, B_GRAVE, 2) && chance(w, 0.06)) thought(w, u, "prestou respeito aos mortos da fortaleza", 2)
 }
 
 // ---- job execution ----------------------------------------------------------
@@ -1191,7 +1485,7 @@ function work(w, u) {
       if (!it || it.i !== u.i) { dropJob(w, u); return }
       removeItem(w, it.id)
       if (j.slot === "weapon") u.weapon = true; else if (j.slot === "armor") u.armor = true; else u.tool = j.slot
-      thought(w, u, j.slot === "weapon" ? "pegou em armas" : j.slot === "armor" ? "vestiu uma armadura" : "ganhou uma " + ITEM_NAME[j.slot] + " nova", 2)
+      thought(w, u, j.slot === "weapon" ? "pegou em armas" : j.slot === "armor" ? "vestiu uma armadura" : j.slot === "pick" ? "ganhou uma picareta nova" : "ganhou um machado novo", 2)
       dropJob(w, u); return
     case "train":
       if (w.build[j.i] !== B_TRAINING) { dropJob(w, u); return }
@@ -1208,10 +1502,11 @@ function work(w, u) {
       }
       j.prog += skillMul(u, "craft")
       if (j.prog >= (j.k === "cut" ? 26 : 34)) {
+        if (botches(w, u, "craft")) { consumeCarried(w, u); botch(w, u, "craft", j.k === "cut" ? "a gema ao lapidar" : "a joia"); dropJob(w, u); return }
         consumeCarried(w, u)
         if (j.k === "cut") { addItem(w, "cutgem", j.i); w.stats.cut = (w.stats.cut || 0) + 1; thought(w, u, "lapidou uma gema", 2) }
         else { addItem(w, "jewel", j.i); w.stats.jewels = (w.stats.jewels || 0) + 1; u.made++; thought(w, u, "fez uma joia", 3) }
-        gainSkill(w, u, "craft", 1)
+        gainSkill(w, u, "craft", 1); wellDone(w, u, "craft"); orderDone(w, j)
         dropJob(w, u)
       }
       return
@@ -1223,12 +1518,19 @@ function work(w, u) {
         if (!go(w, u, workSpots(w, j.i, false), j.i)) dropJob(w, u)
         return
       }
+      var ccat = jobCat(j.k)
       j.prog += skillMul(u, j.k === "cook" ? "brew" : "craft")
       if (j.prog >= (j.k === "cook" ? 16 : j.k === "smelt" ? 24 : 30)) {
+        if (botches(w, u, ccat)) {
+          consumeCarried(w, u)
+          botch(w, u, ccat, j.k === "cook" ? "a refeição" : j.k === "smelt" ? "a fundição e perdeu o minério" : "o trabalho na forja")
+          dropJob(w, u); return
+        }
         consumeCarried(w, u)
         if (j.k === "cook") { addItem(w, "meal", j.i); addItem(w, "meal", j.i); w.stats.cooked = (w.stats.cooked || 0) + 1; gainSkill(w, u, "brew", 1) }
         else if (j.k === "smelt") { addItem(w, "bar", j.i); w.stats.smelted = (w.stats.smelted || 0) + 1; gainSkill(w, u, "craft", 1) }
         else { addItem(w, j.product, j.i); w.stats.forged = (w.stats.forged || 0) + 1; u.made++; gainSkill(w, u, "craft", 1); if (j.product !== "craft") thought(w, u, "forjou uma " + ITEM_NAME[j.product], 2) }
+        wellDone(w, u, ccat); orderDone(w, j)
         dropJob(w, u)
       }
       return
@@ -1240,9 +1542,14 @@ function work(w, u) {
         if (!go(w, u, workSpots(w, j.i, false), j.i)) dropJob(w, u)
         return
       }
-      var isBrew = j.k === "brew"
+      var isBrew = j.k === "brew", bcat = jobCat(j.k)
       j.prog += skillMul(u, isBrew ? "brew" : "craft")
       if (j.prog >= (isBrew ? 22 : 30)) {
+        if (botches(w, u, bcat)) {
+          consumeCarried(w, u)
+          botch(w, u, bcat, isBrew ? "a fornada de cerveja" : "a peça na oficina")
+          dropJob(w, u); return
+        }
         var mat = itemById(w, j.item); var matType = mat ? mat.t : "stone"
         consumeCarried(w, u)
         if (isBrew) { for (var q = 0; q < 3; q++) addItem(w, "booze", j.i); w.stats.brewed++; gainSkill(w, u, "brew", 1) }
@@ -1250,6 +1557,26 @@ function work(w, u) {
           addItem(w, "craft", j.i); w.stats.crafted++; u.made++; gainSkill(w, u, "craft", 1)
           if (u.skills.craft >= 8 && chance(w, 0.2)) thought(w, u, "criou uma obra-prima", 4)
         }
+        wellDone(w, u, bcat); orderDone(w, j)
+        dropJob(w, u)
+      }
+      return
+    case "bury":
+      if (j.stage === "fetch") {
+        it = itemById(w, j.item)
+        if (!it || it.i !== u.i) { dropJob(w, u); return }
+        pickUp(w, u, it); j.stage = "go"
+        if (!go(w, u, function (c) { return c === j.i || adjacent(c, j.i) }, j.i)) dropJob(w, u)
+        return
+      }
+      j.prog++
+      if (j.prog >= 12) {
+        var gs = graveSpot(w, j.i)
+        consumeCarried(w, u)
+        if (gs >= 0) { w.build[gs] = B_GRAVE; w.dirty = true }
+        w.stats.buried++
+        thought(w, u, "sepultou um companheiro como se deve", 3)
+        announce(w, u.name + " sepultou um companheiro no cemitério.", 0)
         dropJob(w, u)
       }
       return
@@ -1411,6 +1738,16 @@ function moodTick(w, u) {
   if (u.hunger > 90 && w.tick % 25 === 0) thought(w, u, "está faminto", -3)
   if (u.thirst > 90 && w.tick % 25 === 0) thought(w, u, "está morrendo de sede", -3)
   if (u.sleep > 95 && w.tick % 25 === 0) thought(w, u, "está exausto", -2)
+  // A companion left lying where they fell weighs on whoever walks past
+  if (w.tick % 60 === 0 && countItems(w, "remains") > 0) {
+    for (var rq = 0; rq < w.items.length; rq++) {
+      var ri2 = w.items[rq]
+      if (ri2.t !== "remains" || ri2.by) continue
+      if (dist(ri2.i, u.i) > 5) continue
+      thought(w, u, "passou pelos restos de um companheiro sem sepultura", u.trait === "melancólico" ? -6 : -4)
+      break
+    }
+  }
   if (u.mood_state === "melancholy") {
     if (w.tick % 30 === 0) u.mood = Math.max(0, u.mood - 1)
     if (chance(w, 0.0004)) die(w, u, "definhou de melancolia")
@@ -1458,7 +1795,17 @@ function die(w, u, how) {
     if (w.dead.length > 200) w.dead.splice(0, w.dead.length - 200)
     w.stats.deaths++
     if (w.raid) w.raid.lost++
-    for (var k = 0; k < w.units.length; k++) { var o = w.units[k]; if (o !== u && o.k === "dwarf") thought(w, o, "perdeu " + u.name.split(" ")[0], o.trait === "melancólico" ? -12 : -7) }
+    // A hold with a burial ground grieves a little lighter: they know where
+    // this one is going. The consolation of a grave you can visit almost never
+    // fired on its own, because a graveyard is by definition somewhere nobody
+    // walks past - so it lands here, where the loss does.
+    var rest = w.graveyard >= 0 && cache(w).graves.length > 0
+    for (var k = 0; k < w.units.length; k++) {
+      var o = w.units[k]
+      if (o === u || o.k !== "dwarf") continue
+      if (rest) thought(w, o, "perdeu " + u.name.split(" ")[0] + ", mas terá sepultura", o.trait === "melancólico" ? -9 : -5)
+      else thought(w, o, "perdeu " + u.name.split(" ")[0], o.trait === "melancólico" ? -12 : -7)
+    }
     if (w.tile[u.i] === T_OPEN) {
       addItem(w, "remains", u.i)
       if (u.weapon) addItem(w, "weapon", u.i)
@@ -1612,7 +1959,7 @@ function seasonStart(w, d) {
         for (var k = 0; k < n; k++) addDwarf(w, nearFree(w, sp, 2))
         w.stats.migrants += n
         announce(w, n === 1 ? "Um migrante chegou." : n + " migrantes chegaram.", 1)
-        legend(w, n + " migrante(s) na " + name + " do ano " + d.year + ".")
+        legend(w, plural(n, "migrante", "migrantes") + " " + inSeason(name) + " do ano " + d.year + ".")
       }
     } else if (p >= w.popCap && chance(w, 0.5)) announce(w, "Migrantes deram meia-volta: a fortaleza está cheia.", 0)
   }
@@ -1685,7 +2032,7 @@ function prospect(w) {
         var sx = ox < vx ? 1 : -1, sy = oy < vy ? 1 : -1, px, py
         for (px = ox; px !== vx; px += sx) { var ti = idx(px, oy, vz); if (canDesignate(w, ti, "dig")) designate(w, ti, "dig") }
         for (py = oy; py !== vy; py += sy) { var tj = idx(vx, py, vz); if (canDesignate(w, tj, "dig")) designate(w, tj, "dig") }
-        if (seam.length >= 4) announce(w, "Prospecção: um veio de " + seam.length + " células foi marcado para escavação.", 0)
+        if (seam.length >= 4) announce(w, "Prospecção: um veio de " + plural(seam.length, "célula", "células") + " foi marcado para escavação.", 0)
       }
     }
   }
@@ -1725,7 +2072,7 @@ function spoilFood(w) {
   }
   if (lost) {
     w.stats.spoiled += lost
-    if (lost >= 3) announce(w, lost + " itens de comida estragaram na despensa.", 0)
+    if (lost >= 3) announce(w, plural(lost, "item de comida estragou", "itens de comida estragaram") + " na despensa.", 0)
   }
 }
 // Tools, weapons and armor wear out with use and finally break. Without this
@@ -1755,11 +2102,15 @@ function checkFall(w) {
   if (w.fallen || w.tick < 10 || pop(w) > 0) return
   w.fallen = true
   announce(w, w.name + " caiu. Não resta nenhum anão.", 2)
-  legend(w, w.name + " caiu no ano " + date(w).year + ". " + w.stats.deaths + " anões perdidos.")
+  legend(w, w.name + " caiu no ano " + date(w).year + ". " + plural(w.stats.deaths, "anão perdido", "anões perdidos") + ".")
 }
 function dayStart(w, d) {
   rosterMilitia(w)
-  if (!w.fallen) spoilFood(w)
+  // Once a day, at dawn. Rewriting the queue four times a day instead looked
+  // like the obvious fix for a cellar that runs dry at breakfast, and cost
+  // a third of the hold's brewing and six fortresses in sixteen: the churn
+  // orphaned the order every dwarf was already working on.
+  if (!w.fallen) { spoilFood(w); holdOrders(w) }
   if (w.scenario && !w.fallen) prospect(w)
   if (w.scenario && !w.peaceful && !w.fallen && !w.raid && !w.caravan && w.tick >= w.scenario.nextRaid) spawnRaid(w, d, w.scenario.wave)
   // weather
@@ -1838,8 +2189,8 @@ function raidTick(w) {
   var n = 0; for (var k = 0; k < w.units.length; k++) if (w.units[k].k === "goblin") n++
   if (n === 0) {
     w.stats.repelled = (w.stats.repelled || 0) + 1
-    announce(w, (w.raid.wave ? "Onda " + w.raid.wave + " repelida. " : "A emboscada terminou. ") + w.name + " resiste" + (w.raid.lost ? ", com " + w.raid.lost + " baixa(s)." : " sem baixas."), 1)
-    legend(w, (w.raid.wave ? "Onda " + w.raid.wave : "Emboscada") + " repelida" + (w.raid.lost ? " (" + w.raid.lost + " anões perdidos)." : " sem baixas."))
+    announce(w, (w.raid.wave ? "Onda " + w.raid.wave + " repelida. " : "A emboscada terminou. ") + w.name + " resiste" + (w.raid.lost ? ", com " + plural(w.raid.lost, "baixa", "baixas") + "." : " sem baixas."), 1)
+    legend(w, (w.raid.wave ? "Onda " + w.raid.wave : "Emboscada") + " repelida" + (w.raid.lost ? " (" + plural(w.raid.lost, "anão perdido", "anões perdidos") + ")." : " sem baixas."))
     w.raid = null
     var ds = dwarves(w); for (var q = 0; q < ds.length; q++) thought(w, ds[q], "sobreviveu a uma emboscada", 2)
   }
@@ -1925,6 +2276,11 @@ function actDwarf(w, u) {
   if (needJob(w, u)) return
   if (u.jobCool > 0) u.jobCool--
   else {
+    // Which is consulted first stays fixed. Letting a dwarf who loves the
+    // workshop check the economy before the player's designations did move
+    // inclination from 12.6% to 14.9% of their work - and cost 28% of the
+    // hold's output and three fortresses in eight. A leaning sorts the
+    // choices inside each half; it does not get to reorder the halves.
     if (findDesignation(w, u)) return
     if (economyJob(w, u)) return
     u.jobCool = 4 + ri(w, 8)
@@ -2203,15 +2559,28 @@ function deserialize(json) {
   // an older save may be missing counters the Legends page prints unguarded
   var st = w.stats || (w.stats = {})
   for (var sk = 0; sk < STAT_KEYS.length; sk++) if (typeof st[STAT_KEYS[sk]] !== "number") st[STAT_KEYS[sk]] = 0
+  if (!w.orders) w.orders = []
+  if (typeof w.graveyard !== "number") w.graveyard = -1
   // units carrying items keep their claims; jobs are dropped so no stale paths survive
-  for (var u = 0; u < w.units.length; u++) { var un = w.units[u]; un.path = null; un.pi = 0; un.job = null; if (un.carry) { var it = itemById(w, un.carry); if (it) { it.by = 0; it.res = 0; it.i = un.i } un.carry = 0 } }
+  for (var u = 0; u < w.units.length; u++) {
+    var un = w.units[u]; un.path = null; un.pi = 0; un.job = null
+    if (un.carry) { var it = itemById(w, un.carry); if (it) { it.by = 0; it.res = 0; it.i = un.i } un.carry = 0 }
+    // a dwarf saved before inclinations existed gets theirs now, or they would
+    // go through life with no trade they love and none they cannot stand
+    if (un.k === "dwarf" && !un.likes) {
+      un.likes = pick(w, WORK_CATS)
+      un.dislikes = pick(w, WORK_CATS)
+      while (un.dislikes === un.likes) un.dislikes = pick(w, WORK_CATS)
+      un.frust = un.frust || 0; un.avoid = un.avoid || ""; un.avoidUntil = un.avoidUntil || 0
+    }
+  }
   for (var i = 0; i < w.items.length; i++) { w.items[i].res = 0; w.items[i].by = 0 }
   return w
 }
 function newWorldEmpty() {
   return { v: 1, seed: 0, rs: 0, tick: 0, tile: new Uint8Array(NN), floor: new Uint8Array(NN), build: new Uint8Array(NN), desig: new Uint8Array(NN),
     dbuild: new Uint8Array(NN), grow: new Uint8Array(NN), ground: new Uint8Array(N), items: [], units: [], nextId: 1, log: [], legends: [], artifacts: [],
-    dead: [], name: "", wealth: 0, alerts: 0, popCap: 20, liquidBudget: { water: 60, magma: 30 }, caravan: null, raid: null, lockdown: false, depot: -1,
+    dead: [], orders: [], graveyard: -1, name: "", wealth: 0, alerts: 0, popCap: 20, liquidBudget: { water: 60, magma: 30 }, caravan: null, raid: null, lockdown: false, depot: -1,
     weather: 0, stats: newStats(), fallen: false, claim: null, unreach: {}, lastMoodTick: 0 }
 }
 function rle(a) {

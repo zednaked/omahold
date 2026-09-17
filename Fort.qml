@@ -69,7 +69,7 @@ Item {
   readonly property var buildKeys: ({ b: Sim.B_BED, t: Sim.B_TABLE, f: Sim.B_FARM, w: Sim.B_WALL, p: Sim.B_DOOR, e: Sim.B_STOCK, o: Sim.B_WORKSHOP, d: Sim.B_STILL, s: Sim.B_STATUE,
                                       c: Sim.B_KITCHEN, u: Sim.B_SMELTER, j: Sim.B_FORGE, l: Sim.B_TORCH, r: Sim.B_TRAINING, g: Sim.B_JEWELER })
   readonly property var buildOrder: ["b", "t", "f", "e", "p", "w", "l", "o", "d", "c", "u", "j", "g", "r", "s"]
-  readonly property var buildGlyph: ({ 1: "X", 2: "θ", 3: "Π", 4: "≡", 5: "¶", 6: "⌂", 7: "O", 8: "+", 9: "=", 10: "Ω", 11: "π", 12: "∆", 13: "‡", 14: "¡", 15: "Ξ", 16: "◊" })
+  readonly property var buildGlyph: ({ 1: "X", 2: "θ", 3: "Π", 4: "≡", 5: "¶", 6: "⌂", 7: "O", 8: "+", 9: "=", 10: "Ω", 11: "π", 12: "∆", 13: "‡", 14: "¡", 15: "Ξ", 16: "◊", 17: "†" })
   readonly property var viewModes: [["normal", "Normal", "o mapa como ele é"], ["light", "Luz", "mapa de calor da iluminação: sol, tochas (tremulando) e magma; sombras atrás da rocha"], ["mood", "Humor", "cada anão com um halo: verde contente, amarelo ok, laranja infeliz, vermelho miserável, roxo possuído/melancólico"], ["access", "Acesso", "o que se alcança a pé a partir do portão ou de onde os anões estão: azul alcançável, vermelho isolado (falta escada, muro no caminho)"]]
   function setViewMode(m) { World.viewMode = m; for (var k = 0; k < root.viewModes.length; k++) if (root.viewModes[k][0] === m) root.flash("ver: " + root.viewModes[k][1] + " — " + root.viewModes[k][2]) }
   function cycleViewMode() { var i = 0; for (var k = 0; k < root.viewModes.length; k++) if (root.viewModes[k][0] === World.viewMode) i = k; setViewMode(root.viewModes[(i + 1) % root.viewModes.length][0]) }
@@ -173,6 +173,7 @@ Item {
       item("Novo jogo", "predefinições e personalizado", "n", function () { root.menuSection = "new"; root.menuIndex = 0; rebuildMenu() })
       item("Salvar em slot", "cinco slots, reutilizáveis", "s", function () { root.menuSection = "save"; root.menuIndex = 0; rebuildMenu() })
       item("Carregar slot", "", "l", function () { root.menuSection = "load"; root.menuIndex = 0; rebuildMenu() })
+      item("Ordens de oficina", "encomende o que quiser produzido", "w", function () { root.menuSection = "orders"; root.menuIndex = 0; rebuildMenu() })
       item("Ver / inspecionar", "luz, humor, acesso", "v", function () { root.menuSection = "view"; root.menuIndex = 0; rebuildMenu() })
       item("Opções", "ritmo, visual, população, inimigos", "o", function () { root.menuSection = "options"; root.menuIndex = 0; rebuildMenu() })
       gap()
@@ -203,6 +204,20 @@ Item {
       for (k = 1; k <= 5; k++) (function (n) { if (!slotsMeta[String(n)]) return; any = true; item(slotLabel(n), "", String(n), function () { if (World.loadSlot(n)) { closeMenu(); root.flash("carregando o slot " + n) } }, { slot: n }) })(k)
       if (!any) rows.push({ kind: "note", t: "Nenhum slot gravado ainda." })
       gap()
+      item("Voltar", "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
+    } else if (root.menuSection === "orders") {
+      title("Ordens de oficina", "▸ encomenda uma · ◂ devolve uma · a fortaleza já anota sozinha o que falta")
+      for (k = 0; k < Sim.ORDER_KINDS.length; k++) (function (kind) {
+        var spec = Sim.ORDER_SPEC[kind], cnt = Sim.orderCounts(w, kind)
+        var hint = cnt.mine ? "você pediu " + cnt.mine : cnt.hold ? "a fortaleza anotou " + cnt.hold : "nada na fila"
+        item(spec.name, hint, "◂ ▸", null, { value: true, adjust: function (d) {
+          if (d > 0) Sim.fileOrder(w, kind, 1, true); else Sim.dropPlayerOrder(w, kind, 1)
+          World.rev++; rebuildMenu()
+        } })
+      })(Sim.ORDER_KINDS[k])
+      gap()
+      rows.push({ kind: "note", t: "Eles não obedecem na hora: fome, sede e sono vêm primeiro, e quem detesta a oficina deixa para outro." })
+      item("Cancelar as minhas ordens", "as da fortaleza ficam", "x", function () { Sim.clearPlayerOrders(w); World.rev++; rebuildMenu(); root.flash("suas ordens canceladas") })
       item("Voltar", "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
     } else if (root.menuSection === "view") {
       title("Ver / inspecionar", "no jogo, o alterna os modos · a página Local mostra a luz em % no cursor")
@@ -306,11 +321,12 @@ Item {
       case Qt.Key_X: root.tool = "cancel"; root.selStart = -1; root.flash("cancelar designações"); break
       case Qt.Key_R: root.tool = "remove"; root.selStart = -1; root.flash("remover construções (devolve o material)"); break
       case Qt.Key_V: root.tool = "look"; root.selStart = -1; break
-      case Qt.Key_Tab: { var pages = ["units", "local", "legends", "help"]; root.page = pages[(pages.indexOf(root.page) + (shift ? 3 : 1)) % 4]; e.accepted = true; return }
-      case Qt.Key_Backtab: { var pg = ["units", "local", "legends", "help"]; root.page = pg[(pg.indexOf(root.page) + 3) % 4]; e.accepted = true; return }
+      case Qt.Key_Tab: { var pages = ["units", "local", "orders", "legends", "help"]; root.page = pages[(pages.indexOf(root.page) + (shift ? 4 : 1)) % 5]; e.accepted = true; return }
+      case Qt.Key_Backtab: { var pg = ["units", "local", "orders", "legends", "help"]; root.page = pg[(pg.indexOf(root.page) + 4) % 5]; e.accepted = true; return }
       case Qt.Key_U: root.page = "units"; break
       case Qt.Key_I: root.page = "local"; break
       case Qt.Key_Y: root.page = "legends"; break
+      case Qt.Key_W: root.page = "orders"; break
       case Qt.Key_Question: case Qt.Key_F1: root.page = root.page === "help" ? "units" : "help"; break
       case Qt.Key_G: World.glyphs = !World.glyphs; root.flash(World.glyphs ? "modo glifos (clássico)" : "modo blocos"); break
       case Qt.Key_M: World.peek = !World.peek; root.flash(World.peek ? "janelinha de canto ligada (aparece ao fechar)" : "janelinha desligada"); break
@@ -360,15 +376,18 @@ Item {
       if (sel) {
         if (sel.k === "dwarf") {
           out.push({ t: sel.name, c: "accent" })
-          out.push({ t: Sim.skillTitle(sel) + " · " + sel.trait + " · hp " + sel.hp + "/" + sel.maxhp + (sel.militia ? " · MILÍCIA" : ""), c: sel.militia ? "accent" : "muted" })
+          out.push({ t: Sim.skillTitle(sel) + " · " + sel.trait + " · hp " + sel.hp + "/" + sel.maxhp + (sel.militia ? " · MILÍCIA" : ""), c: sel.militia ? "accent" : "muted", wrap: true })
           var gear = []; if (sel.weapon) gear.push("arma"); if (sel.armor) gear.push("armadura"); if (sel.tool) gear.push(sel.tool === "pick" ? "picareta" : "machado")
           out.push({ t: "equipamento: " + (gear.length ? gear.join(", ") : "nenhum"), c: "muted" })
           out.push({ t: "humor " + bar(sel.mood, 10) + " " + Sim.moodWord(sel), c: sel.mood < 18 ? "urgent" : "" })
           out.push({ t: "fome  " + bar(Math.min(100, sel.hunger), 10) + "  sede " + bar(Math.min(100, sel.thirst), 10) + "  sono " + bar(Math.min(100, sel.sleep), 10), c: "" })
           var sk = Object.keys(sel.skills).filter(function (s) { return sel.skills[s] > 0 }).sort(function (a, b) { return sel.skills[b] - sel.skills[a] }).slice(0, 4)
-          out.push({ t: "ofícios: " + (sk.length ? sk.map(function (s) { return Sim.SKILL_NAME[s] + " " + sel.skills[s] }).join(", ") : "nenhum"), c: "muted" })
-          out.push({ t: "agora: " + Sim.jobName(sel) + " · z" + Sim.iz(sel.i) + (World.followId === sel.id ? " · seguindo (f)" : ""), c: "" })
-          if (sel.thoughts.length) { out.push({ t: "pensamentos:", c: "muted" }); for (k = 0; k < Math.min(5, sel.thoughts.length); k++) { var th = sel.thoughts[k]; out.push({ t: "  " + (th.v >= 0 ? "+" : "") + th.v + " " + th.m, c: th.v < 0 ? "warn" : "good" }) } }
+          out.push({ t: "ofícios: " + (sk.length ? sk.map(function (s) { return Sim.SKILL_NAME[s] + " " + sel.skills[s] }).join(", ") : "nenhum"), c: "muted", wrap: true })
+          if (sel.likes) out.push({ t: "prefere " + (Sim.WORK_NAME[sel.likes] || sel.likes) + " · detesta " + (Sim.WORK_NAME[sel.dislikes] || sel.dislikes), c: "muted", wrap: true })
+          if (sel.avoid && (sel.avoidUntil || 0) > w.tick) out.push({ t: "largou " + (Sim.WORK_NAME[sel.avoid] || sel.avoid) + " de frustração — volta amanhã", c: "warn", wrap: true })
+          else if ((sel.frust || 0) > 0) out.push({ t: "irritado: estragou " + sel.frust + " trabalho(s) seguido(s)", c: "warn" })
+          out.push({ t: "agora: " + Sim.jobName(sel) + " · z" + Sim.iz(sel.i) + (World.followId === sel.id ? " · seguindo (f)" : ""), c: "", wrap: true })
+          if (sel.thoughts.length) { out.push({ t: "pensamentos:", c: "muted" }); for (k = 0; k < Math.min(5, sel.thoughts.length); k++) { var th = sel.thoughts[k]; out.push({ t: "  " + (th.v >= 0 ? "+" : "") + th.v + " " + th.m, c: th.v < 0 ? "warn" : "good", wrap: true }) } }
         } else {
           var kinds = { goblin: "goblin", wolf: "lobo", deer: "veado", kobold: "kobold ladrão", merchant: "mercador das Montanhas-Lar" }
           out.push({ t: kinds[sel.k] || sel.k, c: "accent" }); out.push({ t: "hp " + sel.hp + "/" + sel.maxhp + " · z" + Sim.iz(sel.i), c: "muted" })
@@ -404,25 +423,47 @@ Item {
       out.push({ t: "camas " + cc.beds.length + " · mesas " + cc.tables.length + " · plantações " + cc.farms.length + " · tochas " + cc.torches.length, c: "muted" })
       out.push({ t: "destilarias " + cc.stills.length + " · cozinhas " + cc.kitchens.length + " · oficinas " + cc.shops.length + " · fundições " + cc.smelters.length + " · forjas " + cc.forges.length + " · treino " + cc.trainings.length, c: "muted" })
       var mil = Sim.dwarves(w).filter(function (q) { return q.militia }).length
-      out.push({ t: "milícia: " + mil + " anões" + (w.scenario ? " · próxima onda goblin (" + w.scenario.wave + ") em " + Math.max(0, Math.ceil((w.scenario.nextRaid - w.tick) / Sim.DAY)) + " dia(s)" : ""), c: w.raid ? "urgent" : "" })
+      out.push({ t: "milícia: " + mil + " anões" + (w.scenario ? " · próxima onda goblin (" + w.scenario.wave + ") em " + Math.max(0, Math.ceil((w.scenario.nextRaid - w.tick) / Sim.DAY)) + " dia(s)" : ""), c: w.raid ? "urgent" : "", wrap: true })
       var lt = Sim.cellLight(w, i)
       out.push({ t: "luz aqui: " + Math.round(lt * 100) + "%" + (lt < 0.3 ? " (escuro: uma tocha, b l, alcança ~4 células e não atravessa rocha)" : ""), c: lt < 0.3 ? "muted" : "" })
       if (w.lockdown) out.push({ t: "portas trancadas (L)", c: "warn" })
+    } else if (root.page === "orders") {
+      var ol = w.orders || []
+      out.push({ t: "Ordens de oficina", c: "accent" })
+      out.push({ t: "A fortaleza anota o que falta cada manhã. As suas vêm antes.", c: "muted", wrap: true })
+      out.push({ t: "", c: "" })
+      var mineRows = [], holdRows = [], oq
+      for (oq = 0; oq < ol.length; oq++) {
+        var o = ol[oq], sp = Sim.ORDER_SPEC[o.what]
+        if (!sp) continue
+        var row = "  " + sp.name + "  " + o.done + "/" + o.n
+        if (o.by) mineRows.push(row); else holdRows.push(row)
+      }
+      if (mineRows.length) { out.push({ t: "Suas ordens", c: "" }); for (oq = 0; oq < mineRows.length; oq++) out.push({ t: mineRows[oq], c: "good" }) ; out.push({ t: "", c: "" }) }
+      if (holdRows.length) { out.push({ t: "A fortaleza anotou", c: "" }); for (oq = 0; oq < holdRows.length; oq++) out.push({ t: holdRows[oq], c: "muted" }); out.push({ t: "", c: "" }) }
+      if (!mineRows.length && !holdRows.length) out.push({ t: "Nada na fila: não falta nada que uma oficina resolva.", c: "muted", wrap: true })
+      // who is on what right now
+      var busy = []
+      var dl = Sim.dwarves(w)
+      for (oq = 0; oq < dl.length; oq++) if (dl[oq].job && dl[oq].job.order) busy.push("  " + dl[oq].name.split(" ")[0] + " — " + Sim.jobName(dl[oq]))
+      if (busy.length) { out.push({ t: "Agora nas oficinas", c: "" }); for (oq = 0; oq < busy.length; oq++) out.push({ t: busy[oq], c: "" }); out.push({ t: "", c: "" }) }
+      out.push({ t: "≡ menu → Ordens (ou n → Ordens) para encomendar e cancelar.", c: "muted", wrap: true })
+      out.push({ t: "Ninguém obedece na hora: fome, sede e sono vêm antes, e cada anão pega o que aguenta fazer.", c: "muted", wrap: true })
     } else if (root.page === "legends") {
       out.push({ t: w.name + " · fundada há " + Math.floor(w.tick / Sim.YEAR) + " ano(s) · semente " + w.seed, c: "accent" })
       var st = w.stats
-      out.push({ t: "cavou " + st.dug + " · cortou " + st.chopped + " · construiu " + st.built + " · fermentou " + st.brewed + " · criou " + st.crafted, c: "muted" })
-      out.push({ t: "migrantes " + st.migrants + " · caravanas " + st.caravans + " · emboscadas " + st.raids + " · mortos " + st.deaths, c: "muted" })
-      out.push({ t: "cozinhou " + (st.cooked || 0) + " · fundiu " + (st.smelted || 0) + " · forjou " + (st.forged || 0) + " · lapidou " + (st.cut || 0) + " · joias " + (st.jewels || 0), c: "muted" })
-      out.push({ t: "estragou " + (st.spoiled || 0) + " comida(s) · quebrou " + (st.broken || 0) + " equipamento(s)", c: "muted" })
+      out.push({ t: "cavou " + st.dug + " · cortou " + st.chopped + " · construiu " + st.built + " · fermentou " + st.brewed + " · criou " + st.crafted, c: "muted", wrap: true })
+      out.push({ t: "migrantes " + st.migrants + " · caravanas " + st.caravans + " · emboscadas " + st.raids + " · mortos " + st.deaths, c: "muted", wrap: true })
+      out.push({ t: "cozinhou " + (st.cooked || 0) + " · fundiu " + (st.smelted || 0) + " · forjou " + (st.forged || 0) + " · lapidou " + (st.cut || 0) + " · joias " + (st.jewels || 0), c: "muted", wrap: true })
+      out.push({ t: "estragou " + (st.spoiled || 0) + " comida(s) · quebrou " + (st.broken || 0) + " equipamento(s) · estragou " + (st.botched || 0) + " trabalho(s) · sepultou " + (st.buried || 0), c: "muted", wrap: true })
       out.push({ t: "", c: "" })
       out.push({ t: "Resiliência", c: "accent" })
-      out.push({ t: st.raids + " ataque(s) · " + (st.repelled || 0) + " repelido(s) · " + (st.goblinsKilled || 0) + " goblins mortos · " + st.deaths + " anões perdidos" + (w.scenario ? " · onda " + w.scenario.wave + " a caminho" : ""), c: st.deaths > (st.goblinsKilled || 0) ? "warn" : "" })
+      out.push({ t: st.raids + " ataque(s) · " + (st.repelled || 0) + " repelido(s) · " + (st.goblinsKilled || 0) + " goblins mortos · " + st.deaths + " anões perdidos" + (w.scenario ? " · onda " + w.scenario.wave + " a caminho" : ""), c: st.deaths > (st.goblinsKilled || 0) ? "warn" : "", wrap: true })
       out.push({ t: "", c: "" })
-      if (w.artifacts.length) { out.push({ t: "Artefatos", c: "accent" }); for (k = w.artifacts.length - 1; k >= Math.max(0, w.artifacts.length - 4); k--) { var a = w.artifacts[k]; out.push({ t: "☼ " + a.name + ", '" + a.title + "'", c: "" }); out.push({ t: "  " + a.desc + " — " + a.maker, c: "muted" }) } out.push({ t: "", c: "" }) }
-      if (w.dead.length) { out.push({ t: "Memorial", c: "accent" }); for (k = w.dead.length - 1; k >= Math.max(0, w.dead.length - 5); k--) out.push({ t: "† " + w.dead[k].name + " — " + w.dead[k].how, c: "muted" }); out.push({ t: "", c: "" }) }
+      if (w.artifacts.length) { out.push({ t: "Artefatos", c: "accent" }); for (k = w.artifacts.length - 1; k >= Math.max(0, w.artifacts.length - 4); k--) { var a = w.artifacts[k]; out.push({ t: "☼ " + a.name + ", '" + a.title + "'", c: "", wrap: true }); out.push({ t: "  " + a.desc + " — " + a.maker, c: "muted", wrap: true }) } out.push({ t: "", c: "" }) }
+      if (w.dead.length) { out.push({ t: "Memorial", c: "accent" }); for (k = w.dead.length - 1; k >= Math.max(0, w.dead.length - 5); k--) out.push({ t: "† " + w.dead[k].name + " — " + w.dead[k].how, c: "muted", wrap: true }); out.push({ t: "", c: "" }) }
       out.push({ t: "Crônica", c: "accent" })
-      for (k = w.legends.length - 1; k >= Math.max(0, w.legends.length - 10); k--) { var d = Sim.date({ tick: w.legends[k].t }); out.push({ t: "a" + d.year + " " + d.seasonName + ": " + w.legends[k].m, c: "" }) }
+      for (k = w.legends.length - 1; k >= Math.max(0, w.legends.length - 10); k--) { var d = Sim.date({ tick: w.legends[k].t }); out.push({ t: "a" + d.year + " " + d.seasonName + ": " + w.legends[k].m, c: "", wrap: true }) }
     } else {
       var H = [
         ["setas / hjkl", "mover cursor (Shift: 5)"], ["< >  , .  PgUp/PgDn", "subir / descer um nível"], ["roda do mouse", "subir / descer"],
@@ -431,7 +472,7 @@ Item {
         ["x", "cancelar designação"], ["r", "remover construção"], ["v / Esc", "voltar a olhar"],
         ["] [", "próximo / anterior anão"], ["f", "seguir o anão selecionado"], ["Home", "voltar ao acampamento"],
         ["Espaço", "pausar"], ["+ -", "velocidade 1x 2x 4x"], ["L", "trancar portas (segura goblins)"],
-        ["o / Shift+o", "alternar visão: normal, luz, humor, acesso / menu Ver"], ["g", "blocos ↔ glifos"], ["m", "janelinha de canto ao fechar"], ["Tab u i y ?", "páginas do painel"], ["n", "menu Novo jogo: predefinições, personalizado"], ["Shift+S", "menu Salvar em slot"], ["Esc", "sair da ferramenta; sem nada a cancelar, abre o menu"]]
+        ["o / Shift+o", "alternar visão: normal, luz, humor, acesso / menu Ver"], ["g", "blocos ↔ glifos"], ["m", "janelinha de canto ao fechar"], ["Tab u i w y ?", "páginas do painel (w = ordens de oficina)"], ["n", "menu Novo jogo: predefinições, personalizado"], ["Shift+S", "menu Salvar em slot"], ["Esc", "sair da ferramenta; sem nada a cancelar, abre o menu"]]
       for (k = 0; k < H.length; k++) out.push({ t: H[k][0], c: "accent", tail: H[k][1] })
       out.push({ t: "", c: "" })
       out.push({ t: "Como começar: escadas (s) no acampamento e no nível de baixo, cave (d) um salão, construa camas, mesas, uma destilaria e uma oficina; plante (b f) em terra, grama ou musgo. Cuidado ao cavar perto do riacho e do magma.", c: "muted", wrap: true })
@@ -667,6 +708,7 @@ Item {
                       case Sim.B_DOOR: glyph = "+"; gcol = p.bDoor; break
                       case Sim.B_STOCK: glyph = "="; gcol = p.bStock; break
                       case Sim.B_STATUE: glyph = "Ω"; gcol = p.bStatue; break
+                      case Sim.B_GRAVE: glyph = "†"; gcol = p.bStatue; break
                       case Sim.B_KITCHEN: glyph = "π"; gcol = p.bKitchen; break
                       case Sim.B_SMELTER: glyph = "∆"; gcol = p.bSmelter; break
                       case Sim.B_FORGE: glyph = "‡"; gcol = p.bForge; break
@@ -827,7 +869,7 @@ Item {
               id: tabs
               spacing: Style.space(4)
               Repeater {
-                model: [["units", "Anões", "u"], ["local", "Local", "i"], ["legends", "Lendas", "y"], ["help", "Ajuda", "?"]]
+                model: [["units", "Anões", "u"], ["local", "Local", "i"], ["orders", "Ordens", "w"], ["legends", "Lendas", "y"], ["help", "Ajuda", "?"]]
                 delegate: Rectangle {
                   required property var modelData
                   readonly property bool active: root.page === modelData[0]
