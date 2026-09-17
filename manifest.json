@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "zed.omahold",
   "name": "Omahold",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "author": "ZeD",
   "license": "MIT",
   "description": "A miniature dwarf fortress in your bar. Eight z-levels of dwarves who take the orders you file but reach for the trade they love, ruin work when they are tired, and bury their dead in a corner they pick themselves. Dig deep for better metal; six milestones make the hold legendary. English or Portuguese, in your theme's colors.",
