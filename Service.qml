@@ -113,6 +113,9 @@ Item {
                 else if (b === Sim.B_GAMES) col = p.bGames
                 else if (b === Sim.B_TRAP) col = p.bTrap
                 else if (b === Sim.B_GRAVE) col = p.bStatue
+                else if (b === Sim.B_POST) col = p.bPost
+                else if (b === Sim.B_WELL) col = p.bWell
+                else if (b === Sim.B_FLOODGATE) col = w.gatesOpen ? p.bDoor : p.bWell
               }
               if (k === 0 && b !== Sim.B_TORCH && b !== Sim.B_HEARTH && t !== Sim.T_MAGMA) { var out2 = z - k >= w.ground[y * Sim.W + x], tl = Math.max(torchLight[i], beaconLight[i]), fl = fireLight[i]; var L = out2 ? Math.max(sun, tl, fl) : Math.max(tl, fl); col = Pal.lit(col, p, L, tl, fl, sun, out2, t !== Sim.T_OPEN || b === Sim.B_WALL) }
               if (!col) continue

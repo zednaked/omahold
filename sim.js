@@ -34,7 +34,8 @@ var F_NONE = 0, F_SOIL = 1, F_STONE = 2, F_GRASS = 3, F_MOSS = 4
 var B_NONE = 0, B_STAIR = 1, B_BED = 2, B_TABLE = 3, B_FARM = 4, B_STILL = 5,
     B_WORKSHOP = 6, B_WALL = 7, B_DOOR = 8, B_STOCK = 9, B_STATUE = 10,
     B_KITCHEN = 11, B_SMELTER = 12, B_FORGE = 13, B_TORCH = 14, B_TRAINING = 15, B_JEWELER = 16,
-    B_GRAVE = 17, B_HEARTH = 18, B_CRYSTAL = 19, B_GAMES = 20, B_TRAP = 21
+    B_GRAVE = 17, B_HEARTH = 18, B_CRYSTAL = 19, B_GAMES = 20, B_TRAP = 21, B_POST = 22,
+    B_WELL = 23, B_FLOODGATE = 24
 var TORCH_RADIUS = 4.5   // cells; light fades linearly to nothing at this distance
 var BEACON_RADIUS = 7    // a hearth or a crystal column lights a whole hall
 
@@ -49,7 +50,8 @@ BUILD_KEY[5] = "still"; BUILD_KEY[6] = "workshop"; BUILD_KEY[7] = "wall"; BUILD_
 BUILD_KEY[9] = "stock"; BUILD_KEY[10] = "statue"; BUILD_KEY[11] = "kitchen"; BUILD_KEY[12] = "smelter"
 BUILD_KEY[13] = "forge"; BUILD_KEY[14] = "torch"; BUILD_KEY[15] = "training"; BUILD_KEY[16] = "jeweler"
 BUILD_KEY[17] = "grave"; BUILD_KEY[18] = "hearth"; BUILD_KEY[19] = "crystal"
-BUILD_KEY[20] = "games"; BUILD_KEY[21] = "trap"
+BUILD_KEY[20] = "games"; BUILD_KEY[21] = "trap"; BUILD_KEY[22] = "post"
+BUILD_KEY[23] = "well"; BUILD_KEY[24] = "floodgate"
 
 var BUILD_INFO = {}
 BUILD_INFO[B_BED]      = { name: "cama",       mat: "log",   value: 10, work: 18 }
@@ -78,6 +80,19 @@ BUILD_INFO[B_CRYSTAL]  = { name: "coluna de cristal", mat: "cutgem", value: 90, 
 BUILD_INFO[B_GAMES]    = { name: "mesa de jogo", mat: "log",  value: 18, work: 20 }
 BUILD_INFO[B_TRAP]     = { name: "armadilha",  mat: "bar",    value: 20, work: 20 }
 var TRAP_CHARGES = 3     // spikes bend; three foes and the thing is scrap
+// Where the militia stands. Building one is how the player says "hold here",
+// and it is the only order the militia takes.
+BUILD_INFO[B_POST]     = { name: "posto de guarda", mat: "stone", value: 12, work: 20 }
+var POST_REACH = 12     // how far from their post a guard will chase something
+// Water was scenery with one use: a thirsty dwarf walked to the edge of it and
+// drank, which is how three of them once died of thirst on the wrong side of a
+// regrown tree. A well is drawn from where the hold lives instead, and it is
+// the thing that keeps everyone alive the season the still runs dry.
+BUILD_INFO[B_WELL]     = { name: "poço",       mat: "stone", value: 25, work: 26 }
+// The other half of water: a gate that liquid cannot pass while it is shut.
+// Dig a channel, keep it closed, and open it when the corridor is full of
+// goblins — which is the oldest trick in this genre and was impossible here.
+BUILD_INFO[B_FLOODGATE]= { name: "comporta",   mat: "stone", value: 18, work: 22 }
 
 var ITEM_VALUE = { log: 2, stone: 1, ore: 8, gem: 30, food: 2, booze: 3, craft: 12, weapon: 25, artifact: 400, remains: 0,
                    bar: 15, pick: 30, axe: 28, armor: 40, meal: 5, cutgem: 70, jewel: 130 }
@@ -449,7 +464,7 @@ function addDwarf(w, i) {
   u.bed = -1; u.carry = 0; u.weapon = false; u.armor = false; u.tool = ""; u.militia = false
   u.mood_state = "" // "", "strange", "melancholy", "berserk"
   u.kills = 0; u.made = 0
-  u.bonds = {}; u.kin = []; u.grief = 0
+  u.bonds = {}; u.kin = []; u.grief = 0; u.post = -1
   maybeKin(w, u)
   return u
 }
@@ -611,6 +626,9 @@ function canDesignate(w, i, tool, bt) {
     case "build":
       if (t !== T_OPEN || w.floor[i] === F_NONE || w.build[i] !== B_NONE) return false
       if (bt === B_FARM) return w.floor[i] === F_SOIL || w.floor[i] === F_MOSS || w.floor[i] === F_GRASS
+      // A well has to reach water: it is built on the edge of it, which is
+      // also what stops it being a free drink anywhere in the fortress.
+      if (bt === B_WELL) return touchesWater(w, i)
       return true
     case "cancel": return w.desig[i] !== DG_NONE
     case "remove": return w.build[i] !== B_NONE
@@ -666,7 +684,7 @@ function cache(w) {
   if (w.cache && !w.dirty) return w.cache
   var c = { stills: [], shops: [], farms: [], beds: [], stocks: [], tables: [], statues: [], shrubs: [], water: [], desigs: [],
             kitchens: [], smelters: [], forges: [], torches: [], trainings: [], jewelers: [], graves: [],
-            hearths: [], crystals: [], games: [], traps: [], beacons: [] }
+            hearths: [], crystals: [], games: [], traps: [], beacons: [], posts: [], wells: [] }
   var minG = 255, maxG = 0
   for (var gq = 0; gq < N; gq++) { var gv = w.ground[gq]; if (gv < minG) minG = gv; if (gv > maxG) maxG = gv }
   c.minGround = minG; c.maxGround = maxG
@@ -680,6 +698,8 @@ function cache(w) {
       else if (b === B_HEARTH) { c.hearths.push(i); c.beacons.push(i) }
       else if (b === B_CRYSTAL) { c.crystals.push(i); c.beacons.push(i) }
       else if (b === B_GAMES) c.games.push(i); else if (b === B_TRAP) c.traps.push(i)
+      else if (b === B_POST) c.posts.push(i)
+      else if (b === B_WELL) c.wells.push(i)
       else if (b === B_JEWELER) c.jewelers.push(i)
       else if (b === B_GRAVE) c.graves.push(i)
     }
@@ -1143,6 +1163,10 @@ function spreadLiquids(w) {
     var open = []
     for (var c = 0; c < cands.length; c++) {
       var ci = cands[c]
+      // a shut floodgate is rock as far as water and magma are concerned, and a
+      // well is a sealed shaft rather than a hole in the floor
+      if (w.build[ci] === B_FLOODGATE && !w.gatesOpen) continue
+      if (w.build[ci] === B_WELL) continue
       if (w.floor[ci] === F_GRASS || w.floor[ci] === F_MOSS) continue
       if (iz(ci) === w.ground[iy(ci) * W + ix(ci)] && w.floor[ci] === F_SOIL && w.build[ci] === B_NONE && w.desig[ci] === DG_NONE) continue
       open.push(ci)
@@ -1174,7 +1198,11 @@ function needJob(w, u) {
   if (u.thirst > 65) {
     var b = freeItem(w, "booze", u.i, u, true)
     if (b && go(w, u, function (c) { return c === b.i }, b.i)) { b.res = u.id; setJob(w, u, { k: "drink", i: b.i, item: b.id, prog: 0 }); return true }
-    // water: stand next to a water tile
+    // A well, if the hold has one: it is reachable, it is indoors, and nobody
+    // has to stand at the edge of open water to use it.
+    var well = freeBuilding(w, cache(w).wells, u)
+    if (well >= 0 && go(w, u, workSpots(w, well, false), well, 4000)) { setJob(w, u, { k: "drinkwater", i: well, claims: true, prog: 0 }); return true }
+    // otherwise: stand next to a water tile
     if (go(w, u, function (c) { return touchesWater(w, c) }, nearestTile(w, u.i, T_WATER), 7000)) { setJob(w, u, { k: "drinkwater", i: -1, prog: 0 }); return true }
   }
   if (u.hunger > 65) {
@@ -1402,7 +1430,12 @@ function socialTick(w) {
     // Where they are standing decides how fast this goes: a game table is the
     // fastest, then a hearth, then the meeting hall, then a corridor.
     var cc = cache(w)
-    var rate = nearAny(w, cc.games, u.i, 1) ? 4 : nearAny(w, cc.hearths, u.i, 2) ? 3 : nearAny(w, cc.tables, u.i, 2) ? 2 : 1
+    // A guard post counts, at the rate of a table: two dwarves standing a watch
+    // together talk. Without it, posting the militia cost the hold eight points
+    // of mood — soldiers at a post neither drink in the hall nor play at the
+    // table, and the fortress felt it.
+    var rate = nearAny(w, cc.games, u.i, 1) ? 4 : nearAny(w, cc.hearths, u.i, 2) ? 3
+             : nearAny(w, cc.tables, u.i, 2) || nearAny(w, cc.posts, u.i, 1) ? 2 : 1
     shiftBond(w, u, near, rate)
     if (rate >= 2 && bondTotal(u, near.id) >= BOND_FRIEND && chance(w, 0.06))
       thought(w, u, LF("th.withfriend", "bebeu a noite toda com {0}", first(near.name)), 3)
@@ -1677,7 +1710,11 @@ function branchGather(w, u) {
 function branchTrain(w, u) {
   if (!u.militia) return false
   var yard = freeBuilding(w, cache(w).trainings, u)
-  if (yard >= 0 && chance(w, 0.5) && go(w, u, workSpots(w, yard, false), yard, 1500)) { setJob(w, u, { k: "train", i: yard, claims: true, prog: 0 }); return true }
+  if (yard < 0) return false
+  // A guard trains at a yard near their post, or not at all: a drill yard on
+  // the other side of the hold is how a post empties out for half a day.
+  if (u.post >= 0 && w.build[u.post] === B_POST && dist(yard, u.post) > POST_REACH) return false
+  if (chance(w, 0.5) && go(w, u, workSpots(w, yard, false), yard, 1500)) { setJob(w, u, { k: "train", i: yard, claims: true, prog: 0 }); return true }
   return false
 }
 function branchHaul(w, u) {
@@ -1698,6 +1735,7 @@ function branchHaul(w, u) {
 // The branches in their default order, with the kind of work each one is, so
 // a leaning can move it up or down the list.
 var BRANCHES = [
+  { cat: "fight", fn: branchStation },  // a guard with a post holds it
   { cat: "haul",  fn: branchBury },  // the dead first: everyone walks past them
   { cat: "",      fn: branchMourn }, // then whoever cannot work for grieving
   { cat: "farm",  fn: branchFarm },
@@ -1709,6 +1747,15 @@ var BRANCHES = [
 ]
 function economyJob(w, u) {
   if (gearJob(w, u)) return true
+  // A posted guard does not take work. Letting them pick up a hauling job
+  // meant they held the post 12% of the time and were somewhere across the
+  // fortress the rest of it, which is the same as having no post at all. The
+  // labour it costs is the price of the order: post six dwarves and the hold
+  // is six workers short, which is the decision the player is making.
+  if (u.militia && u.post >= 0 && w.build[u.post] === B_POST) {
+    if (branchStation(w, u)) return true
+    return branchTrain(w, u)
+  }
   // An empty larder overrides taste: nobody sets gems while there is nothing
   // to eat, however much they hate the fields.
   if (countItems(w, "food") + countItems(w, "meal") < pop(w) + 2) {
@@ -1731,7 +1778,8 @@ function idle(w, u) {
   if (u.wait > 0) { u.wait--; return }
   u.wait = 3 + ri(w, 8)
   var target = -1
-  if (chance(w, 0.35)) { var t = findBuilding(w, B_TABLE, u.i); if (t >= 0 && dist(t, u.i) < 25) target = t }
+  if (u.militia && u.post >= 0 && w.build[u.post] === B_POST && dist(u.i, u.post) > 2) target = u.post
+  if (target < 0 && chance(w, 0.35)) { var t = findBuilding(w, B_TABLE, u.i); if (t >= 0 && dist(t, u.i) < 25) target = t }
   // a fire pulls harder than a table, and at night hardest of all
   if (target < 0 && chance(w, isNight(w) ? 0.5 : 0.3)) { var hh = findBuilding(w, B_HEARTH, u.i); if (hh >= 0 && dist(hh, u.i) < 25) target = hh }
   if (target < 0) {
@@ -1924,6 +1972,19 @@ function work(w, u) {
         dropJob(w, u)
       }
       return
+    case "station":
+      // Holding a post is not work that finishes; it ends when they are there,
+      // and `idle` keeps them near it from then on.
+      //
+      // Both of these releases are load-bearing. `work()` runs before
+      // `needJob()`, so a guard who cannot reach their post keeps the job
+      // forever and never eats or drinks again: posting the militia put five
+      // deaths of thirst into sixteen fortresses that had none.
+      if (w.build[j.i] !== B_POST) { u.post = -1; dropJob(w, u); return }
+      if (u.thirst > 65 || u.hunger > 65 || u.sleep > 75) { dropJob(w, u); return }
+      if (!u.path && dist(u.i, j.i) > 2) { dropJob(w, u); return }
+      if (dist(u.i, j.i) <= 2) { if (chance(w, 0.02)) thought(w, u, L("th.station", "montou guarda no posto"), 1); dropJob(w, u) }
+      return
     case "play":
       j.prog++
       // Twelve ticks, not twenty-four. A dwarf at the table does not re-check
@@ -1996,8 +2057,15 @@ function work(w, u) {
       if (j.prog >= 5) { removeItem(w, it.id); u.thirst = 0; thought(w, u, L("th.beer", "bebeu cerveja de cogumelo"), 4); dropJob(w, u) }
       return
     case "drinkwater":
+      // Water from a well is water all the same, but drawn and clean: it does
+      // not carry the indignity of lying down at the edge of a pool.
+      if (j.i >= 0 && w.build[j.i] !== B_WELL) { dropJob(w, u); return }
       j.prog++
-      if (j.prog >= 5) { u.thirst = 0; thought(w, u, L("th.water", "teve que beber água"), -2); dropJob(w, u) }
+      if (j.prog >= 5) {
+        u.thirst = 0
+        thought(w, u, j.i >= 0 ? L("th.wellwater", "bebeu do poço") : L("th.water", "teve que beber água"), j.i >= 0 ? 0 : -2)
+        dropJob(w, u)
+      }
       return
     case "sleep":
       j.prog++
@@ -2313,6 +2381,9 @@ function attack(w, a, b) {
 function fightOrFlee(w, u) {
   var foe = nearestUnit(w, u.i, function (o) { return o !== u && hostile(o) }, 9)
   if (!foe) return false
+  // A posted guard defends their post, not the whole map: chasing a wolf six
+  // levels up is how the gate ends up empty when the wave arrives.
+  if (u.militia && u.post >= 0 && w.build[u.post] === B_POST && dist(foe.i, u.post) > POST_REACH) return false
   var brave = u.militia || u.weapon || u.skills.fight >= 3 || u.trait === "valente" || u.mood_state === "berserk"
   if (u.job && u.job.k === "sleep") dropJob(w, u)
   if (!brave && (adjacent(u.i, foe.i) || u.i === foe.i)) { if (u.cool <= 0) { attack(w, u, foe); u.cool = 2 } return true }
@@ -2441,10 +2512,62 @@ function seasonStart(w, d) {
 // when idle; everyone else keeps to their trade and runs from trouble.
 function rosterMilitia(w) {
   var ds = dwarves(w)
-  if (ds.length < 3) { for (var q = 0; q < ds.length; q++) ds[q].militia = false; return }
+  if (ds.length < 3) { for (var q = 0; q < ds.length; q++) { ds[q].militia = false; ds[q].post = -1 } return }
+  // A preset that asked for six in the militia got four back the next morning,
+  // because the roster recomputed a third of the population and forgot what it
+  // had been told. The scenario's number is kept and honoured, capped by how
+  // many dwarves are actually left.
   var want = Math.max(ds.length >= 4 ? 2 : 1, Math.ceil(ds.length / 3))
+  if (typeof w.militiaWant === "number" && w.militiaWant > 0) want = Math.min(ds.length, w.militiaWant)
   ds.sort(function (a, b) { return (b.skills.fight + (b.weapon ? 2 : 0) + (b.armor ? 1 : 0) + (b.trait === "valente" ? 1 : 0)) - (a.skills.fight + (a.weapon ? 2 : 0) + (a.armor ? 1 : 0) + (a.trait === "valente" ? 1 : 0)) })
   for (var k = 0; k < ds.length; k++) ds[k].militia = k < want
+  assignPosts(w)
+}
+// The militia had no orders: every guard reacted to whatever came within nine
+// cells of wherever they happened to be, so the hold's defence was wherever
+// its soldiers were standing when the wave arrived — and once things started
+// coming up from the deep, that was almost never the right place.
+//
+// A guard post is a building, which makes "hold here" an order the player
+// gives with the tools they already have, and the squads sort themselves out:
+// every post gets its share of the militia, nearest first. No post and nothing
+// changes — the militia works and reacts, the way it always did.
+function assignPosts(w) {
+  var posts = cache(w).posts, ds = dwarves(w)
+  var guards = []
+  for (var k = 0; k < ds.length; k++) { if (ds[k].militia) guards.push(ds[k]); else ds[k].post = -1 }
+  if (!posts.length || !guards.length) { for (var q = 0; q < guards.length; q++) guards[q].post = -1; return }
+  // each guard to their nearest post, then even the squads out so one post is
+  // not held by five dwarves while another stands empty
+  var per = Math.max(1, Math.ceil(guards.length / posts.length)), load = {}
+  guards.sort(function (a, b) { return dist(a.i, nearestOf(posts, a.i)) - dist(b.i, nearestOf(posts, b.i)) })
+  for (var g = 0; g < guards.length; g++) {
+    var best = -1, bd = 1e9
+    for (var pq = 0; pq < posts.length; pq++) {
+      var pi = posts[pq]
+      if ((load[pi] || 0) >= per) continue
+      var d = dist(guards[g].i, pi)
+      if (d < bd) { bd = d; best = pi }
+    }
+    if (best < 0) best = nearestOf(posts, guards[g].i)
+    // Newly posted: drop whatever work they were in the middle of. Without
+    // this they finished the haul first, which on a two-day watch meant a
+    // tenth of the guard's time was spent wherever the job was.
+    if (guards[g].post !== best && guards[g].job && guards[g].job.k !== "sleep" && guards[g].job.k !== "eat" && guards[g].job.k !== "drink" && guards[g].job.k !== "drinkwater") dropJob(w, guards[g])
+    guards[g].post = best
+    load[best] = (load[best] || 0) + 1
+  }
+}
+// Standing the watch. A guard with a post who is not at it walks back to it,
+// and that is the whole job — the point is being in the right place when
+// something arrives, not doing anything there.
+function branchStation(w, u) {
+  if (!u.militia || !(u.post >= 0)) return false
+  if (w.build[u.post] !== B_POST) { u.post = -1; return false }
+  if (dist(u.i, u.post) <= 2) return false        // already holding it
+  if (!go(w, u, function (q) { return q === u.post || adjacent(q, u.post) }, u.post, 2000)) { u.post = -1; return false }
+  setJob(w, u, { k: "station", i: u.post })
+  return true
 }
 // Scenario upkeep: when the ore runs out, designate the nearest vein with an
 // L-shaped tunnel from the closest open cell on that level; when logs run low,
@@ -3346,7 +3469,10 @@ function actDwarf(w, u) {
     // inclination from 12.6% to 14.9% of their work - and cost 28% of the
     // hold's output and three fortresses in eight. A leaning sorts the
     // choices inside each half; it does not get to reorder the halves.
-    if (findDesignation(w, u)) return
+    // A posted guard is not available for the player's designations either:
+    // they were spending 5% of their watch digging, which is 5% of the watch
+    // spent wherever the pick happened to be.
+    if (!(u.militia && u.post >= 0 && w.build[u.post] === B_POST) && findDesignation(w, u)) return
     if (economyJob(w, u)) return
     u.jobCool = 4 + ri(w, 8)
   }
@@ -3435,6 +3561,11 @@ function scenario(w, n, opts) {
     var tp = place(w, cx, cy, z1, trapSpots[k][0], trapSpots[k][1], B_TRAP)
     if (tp >= 0) armTrap(w, tp)
   }
+  // Guard posts: the first one behind the spikes, where everything that gets
+  // through the gate arrives. A preset that wants a second line says so.
+  var nPosts = opts.posts === undefined ? 1 : opts.posts
+  var postSpots = [[2, -1], [-2, -1], [3, 1], [-3, 1]]
+  for (k = 0; k < nPosts && k < postSpots.length; k++) place(w, cx, cy, z1, postSpots[k][0], postSpots[k][1], B_POST)
   // level 2: dining hall, kitchen, still, statue
   carveRect(w, cx, cy, z2, -8, -4, 8, 4)
   var tx = [-6, -4, -2, 2, 4, 6]
@@ -3494,6 +3625,43 @@ function scenario(w, n, opts) {
       }
     }
   }
+  // Water, if this map has any within reach of the hold: a well drawn from it
+  // and a floodgate on the channel beside it, which together are the whole of
+  // the hydraulics — one keeps everyone alive when the still runs dry, the
+  // other decides when the water is allowed to move.
+  if (opts.water !== false) {
+    // A hold does not pitch camp next to a lake, so looking for natural water
+    // put the well in a cavern on level 1, unreachable from the gate and
+    // useless. It builds its own instead: a cistern cut into the rock beside
+    // the stores, a well drawing from it, and a floodgate on the other side of
+    // it — which is the whole of the hydraulics in three cells, and a warning
+    // about what the lever does, since opening it floods the corridor.
+    // The geometry matters, and the first version got it wrong: with the gate
+    // behind the well the water could never reach it, because a well is
+    // sealed. Both the well and the gate have to touch the cistern.
+    //
+    //   y-1:  [cistern][gate]      cut into the rock
+    //   y  :  [well   ][hall]      the hall is already dug
+    //
+    // Shut, the cistern is a water supply. Open, it runs into the hall — which
+    // is the trick, and the reason the lever announces itself.
+    var cist = -1, wellAt = -1, gateAt = -1
+    for (dy = -3; dy <= 3 && cist < 0; dy++) for (dx = -7; dx <= 6 && cist < 0; dx++) {
+      if (!inb(cx + dx, cy + dy - 1, z1) || !inb(cx + dx + 1, cy + dy, z1)) continue
+      var cAt = idx(cx + dx, cy + dy, z1), east = idx(cx + dx + 1, cy + dy, z1)
+      var rock = cAt - W, rockE = rock + 1
+      if (w.tile[cAt] !== T_OPEN || w.floor[cAt] === F_NONE || w.build[cAt] !== B_NONE || w.desig[cAt] !== DG_NONE) continue
+      if (w.tile[east] !== T_OPEN || w.floor[east] === F_NONE || w.build[east] !== B_NONE) continue
+      if (!solid(w.tile[rock]) || w.tile[rock] === T_TREE || !solid(w.tile[rockE]) || w.tile[rockE] === T_TREE) continue
+      cist = rock; gateAt = rockE; wellAt = cAt
+    }
+    if (cist >= 0) {
+      w.tile[cist] = T_WATER; w.floor[cist] = F_STONE; w.build[cist] = B_NONE; w.desig[cist] = DG_NONE
+      carve(w, gateAt); w.build[gateAt] = B_FLOODGATE; w.desig[gateAt] = DG_NONE
+      w.build[wellAt] = B_WELL
+    }
+    w.gatesOpen = false
+  }
   // the stair column goes in last: every carve above clears the buildings in the
   // cells it opens, and the mine galleries run straight through (cx, cy). Cutting
   // the column before them used to erase the bottom step whenever the hold got a
@@ -3506,6 +3674,7 @@ function scenario(w, n, opts) {
   // the dwarves: a militia of a third, the rest by trade
   var roles = ["miner", "miner", "woodcutter", "farmer", "brewer", "smith", "builder", "farmer", "miner", "woodcutter", "crafter", "farmer", "smith", "miner", "brewer", "builder"]
   var militia = opts.militia !== undefined ? Math.min(n, opts.militia) : Math.max(2, Math.ceil(n / 3)), ri2 = 0
+  if (opts.militia !== undefined) w.militiaWant = militia
   var hall = idx(cx, cy, z2)
   for (k = 0; k < n; k++) {
     var spot = -1
@@ -3584,11 +3753,11 @@ function newScenario(seed, n, opts) { var w = newWorld(seed); return scenario(w,
 var PRESETS = [
   { id: "classic", name: "Embarque clássico", desc: "Sete anões, uma carroça de suprimentos e uma colina. Do zero, como manda a tradição.", kind: "classic", n: 7 },
   { id: "ready", name: "Fortaleza pronta", desc: "Doze anões com ofícios e uma fortaleza já escavada em quatro níveis, com lareira, mesas de jogo e estacas na entrada.", kind: "scenario", n: 12, opts: { name: "Fortaleza pronta" } },
-  { id: "garrison", name: "Guarnição", desc: "Dez anões, seis na milícia, e o corredor da entrada cheio de estacas. Ondas mais cedo e mais frequentes: um teste de defesa.", kind: "scenario", n: 10, opts: { name: "Guarnição", militia: 6, firstRaid: DAY * 3, raidEvery: DAY * 9, waveBase: 4, waveStep: 2, eliteFrom: 3, cap: 14, halls: 0, traps: 6 } },
-  { id: "peaceful", name: "Vale tranquilo", desc: "Fortaleza pronta, sem goblins nem lobos, e o salão inteiro arrumado: duas lareiras, dois cristais, quatro mesas de jogo. Para ver a economia e os humores sem sangue.", kind: "scenario", n: 12, opts: { name: "Vale tranquilo", peaceful: true, halls: 2, traps: 0 } },
+  { id: "garrison", name: "Guarnição", desc: "Dez anões, seis na milícia, e o corredor da entrada cheio de estacas. Ondas mais cedo e mais frequentes: um teste de defesa.", kind: "scenario", n: 10, opts: { name: "Guarnição", militia: 6, firstRaid: DAY * 3, raidEvery: DAY * 9, waveBase: 4, waveStep: 2, eliteFrom: 3, cap: 14, halls: 0, traps: 6, posts: 3 } },
+  { id: "peaceful", name: "Vale tranquilo", desc: "Fortaleza pronta, sem goblins nem lobos, e o salão inteiro arrumado: duas lareiras, dois cristais, quatro mesas de jogo. Para ver a economia e os humores sem sangue.", kind: "scenario", n: 12, opts: { name: "Vale tranquilo", peaceful: true, halls: 2, traps: 0, posts: 0 } },
   { id: "kinfolk", name: "Casa cheia", desc: "Dezesseis anões que chegaram em família, metade deles inseparável, num salão completo. As histórias começam de véspera — e a primeira perda dói.", kind: "scenario", n: 16, opts: { name: "Casa cheia", kin: true, halls: 2, traps: 2, cap: 10 } },
-  { id: "depths", name: "Soleira das profundezas", desc: "Doze anões e um poço já cavado até o ferro. O último nível, onde algo dorme desde antes da fortaleza, fica para você decidir.", kind: "scenario", n: 12, opts: { name: "Soleira das profundezas", deepShaft: true, halls: 1, traps: 4, militia: 5 } },
-  { id: "siege", name: "Cerco", desc: "Oito anões, ondas grandes desde o segundo dia com veteranos, e estacas por todo o corredor. Ninguém espera que dure.", kind: "scenario", n: 8, opts: { name: "Cerco", militia: 4, firstRaid: DAY * 2, raidEvery: DAY * 7, waveBase: 5, waveStep: 2.5, eliteFrom: 2, cap: 16, halls: 0, traps: 8 } }
+  { id: "depths", name: "Soleira das profundezas", desc: "Doze anões e um poço já cavado até o ferro. O último nível, onde algo dorme desde antes da fortaleza, fica para você decidir.", kind: "scenario", n: 12, opts: { name: "Soleira das profundezas", deepShaft: true, halls: 1, traps: 4, militia: 5, posts: 2 } },
+  { id: "siege", name: "Cerco", desc: "Oito anões, ondas grandes desde o segundo dia com veteranos, e estacas por todo o corredor. Ninguém espera que dure.", kind: "scenario", n: 8, opts: { name: "Cerco", militia: 4, firstRaid: DAY * 2, raidEvery: DAY * 7, waveBase: 5, waveStep: 2.5, eliteFrom: 2, cap: 16, halls: 0, traps: 8, posts: 4 } }
 ]
 // A preset's name and blurb are text like any other, so they go through the
 // table. The fallback is the Portuguese in the list above, which is how every
@@ -3665,6 +3834,27 @@ function noAccessTick(w) {
   w.noaccess = Math.max(1, w.tick)
   announce(w, LF("msg.noaccess", "{0} escavação(ões) em z{1} não têm acesso: ninguém consegue chegar lá. Falta uma escada descendo para o nível.", byZ[worst], worst), 2)
 }
+// Everything the chronicle says about one dwarf. The legends are sentences
+// with names in them, so this is a substring match on the full name — which is
+// exactly why `dwarfName` builds unique ones. A dead dwarf's lines survive
+// them, which is the point of keeping a chronicle at all.
+function lifeLines(w, name) {
+  var out = []
+  if (!name) return out
+  for (var k = 0; k < w.legends.length; k++) if (w.legends[k].m.indexOf(name) >= 0) out.push(w.legends[k])
+  return out
+}
+// Every dwarf the hold remembers, living first and then the dead, most
+// recently lost first. One list, because a life does not stop being a life.
+function lives(w) {
+  var out = [], ds = dwarves(w), k
+  ds.sort(function (a, b) { return a.born - b.born })
+  for (k = 0; k < ds.length; k++) out.push({ name: ds[k].name, id: ds[k].id, alive: true, u: ds[k] })
+  var dead = (w.dead || []).slice()
+  dead.sort(function (a, b) { return b.t - a.t })
+  for (k = 0; k < dead.length; k++) out.push({ name: dead[k].name, id: 0, alive: false, t: dead[k].t, how: dead[k].how })
+  return out
+}
 function countUnreachable(w) { var n = 0, ds = cache(w).desigs, ok = desigOk(w); for (var k = 0; k < ds.length; k++) if (ds[k] && !ok[ds[k]]) n++; return n }
 var TILE_KEY = { 1: "soil", 2: "stone", 3: "ore", 4: "gem", 5: "tree", 6: "water", 7: "magma", 8: "fungus", 9: "shrub" }
 var FLOOR_KEY = { 0: "none", 1: "soil", 2: "stone", 3: "grass", 4: "moss" }
@@ -3681,7 +3871,7 @@ var JOB_PT = { dig: "cavando", digstair: "cavando escada", chop: "cortando", bui
   brew: "fermentando", craft: "criando", haul: "carregando", eat: "comendo", forage: "coletando", drink: "bebendo", drinkwater: "bebendo água",
   sleep: "dormindo", fight: "lutando", arm: "pegando arma", mood: "humor estranho", flee: "fugindo", idle: "ocioso",
   equip: "equipando", train: "treinando", cook: "cozinhando", smelt: "fundindo", forge: "forjando", cut: "lapidando", setgem: "fazendo joia",
-  bury: "sepultando os mortos", mourn: "velando os mortos", play: "jogando" }
+  bury: "sepultando os mortos", mourn: "velando os mortos", play: "jogando", station: "indo para o posto" }
 function jobName(u) {
   if (!u.job) return u.mood_state === "melancholy" ? L("mood.melancholy", "melancólico") : u.mood_state === "berserk" ? L("mood.berserk", "furioso") : L("job.idle", "ocioso")
   var j = u.job, key = j.k === "dig" && j.stair ? "digstair" : j.k
@@ -3757,6 +3947,8 @@ function deserialize(json) {
   if (w.court === undefined) w.court = null
   if (typeof w.pact !== "number") w.pact = 0
   if (typeof w.grudge !== "number") w.grudge = 0
+  if (typeof w.gatesOpen !== "boolean") w.gatesOpen = false
+  if (typeof w.militiaWant !== "number") w.militiaWant = 0
   if (typeof w.demandSince !== "number") w.demandSince = 0
   if (w.demand === undefined) w.demand = null
   // units carrying items keep their claims; jobs are dropped so no stale paths survive
@@ -3765,7 +3957,7 @@ function deserialize(json) {
     if (un.carry) { var it = itemById(w, un.carry); if (it) { it.by = 0; it.res = 0; it.i = un.i } un.carry = 0 }
     // a dwarf saved before inclinations existed gets theirs now, or they would
     // go through life with no trade they love and none they cannot stand
-    if (un.k === "dwarf") { if (!un.bonds) un.bonds = {}; if (!un.kin) un.kin = []; if (typeof un.grief !== "number") un.grief = 0 }
+    if (un.k === "dwarf") { if (!un.bonds) un.bonds = {}; if (!un.kin) un.kin = []; if (typeof un.grief !== "number") un.grief = 0; if (typeof un.post !== "number") un.post = -1 }
     if (un.k === "dwarf" && !un.likes) {
       un.likes = pick(w, WORK_CATS)
       un.dislikes = pick(w, WORK_CATS)

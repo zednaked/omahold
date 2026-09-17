@@ -437,6 +437,14 @@ Singleton {
   // ---- orders from the UI -----------------------------------------------------
   function designateRect(a, b, tool, bt) { if (!root.w) return 0; var n = Sim.designateRect(root.w, a, b, tool, bt); if (n) root.rev++; return n }
   function toggleLockdown() { if (!root.w) return; root.w.lockdown = !root.w.lockdown; Sim.announce(root.w, root.t(root.w.lockdown ? "ipc.lockdown" : "ipc.unlockdown"), 0); root.rev++ }
+  // The floodgates, all of them at once: this is a lever, not a building
+  // setting. Shut is the safe state, so a new hold starts shut.
+  function toggleGates() {
+    if (!root.w) return
+    root.w.gatesOpen = !root.w.gatesOpen
+    Sim.announce(root.w, root.t(root.w.gatesOpen ? "ipc.gates.open" : "ipc.gates.shut"), 1)
+    root.w.dirty = true; root.rev++
+  }
   function cycleSpeed() { root.speed = root.speed >= 4 ? 1 : root.speed * 2 }
 
   // ---- IPC: omarchy-shell omahold <method> --------------------------------------

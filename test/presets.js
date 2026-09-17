@@ -9,7 +9,8 @@
 const fs = require("fs"), path = require("path")
 const src = fs.readFileSync(path.join(__dirname, "..", "sim.js"), "utf8").replace(".pragma library", "")
 const S = new Function(src + `; return { newFromPreset, tick, PRESETS, presetName, presetDesc, cache, dwarves, pop,
-  digDepth, iz, bondTotal, isKin, BOND_FRIEND, YEAR, setI18n, countItems }`)()
+  digDepth, iz, bondTotal, isKin, BOND_FRIEND, YEAR, DAY, setI18n, countItems, dwarves, touchesWater,
+  B_FLOODGATE, NN, rosterMilitia }`)()
 const I18n = (function () {
   const isrc = fs.readFileSync(path.join(__dirname, "..", "I18n.js"), "utf8").replace(".pragma library", "")
   return new Function(isrc + "; return { t, tf, plural, table, inSeason, STRINGS, TABLES }")()
@@ -24,12 +25,12 @@ function check(cond, what) {
 // what each preset is for, which is what its blurb promises
 const WANT = {
   classic:  { pop: 7,  scenario: false },
-  ready:    { pop: 12, hearths: 1, crystals: 1, games: 2, traps: 2 },
-  garrison: { pop: 10, hearths: 0, games: 0, trapsAtLeast: 6 },
-  peaceful: { pop: 12, hearths: 2, crystals: 2, games: 4, traps: 0, peaceful: true },
-  kinfolk:  { pop: 16, hearths: 2, games: 4, allKin: true, friends: true },
-  depths:   { pop: 12, deepTo: 2, trapsAtLeast: 4 },
-  siege:    { pop: 8,  hearths: 0, trapsAtLeast: 8 },
+  ready:    { pop: 12, hearths: 1, crystals: 1, games: 2, traps: 2, posts: 1, well: true },
+  garrison: { pop: 10, hearths: 0, games: 0, trapsAtLeast: 6, posts: 3, militia: 6, well: true },
+  peaceful: { pop: 12, hearths: 2, crystals: 2, games: 4, traps: 0, posts: 0, peaceful: true, well: true },
+  kinfolk:  { pop: 16, hearths: 2, games: 4, allKin: true, friends: true, well: true },
+  depths:   { pop: 12, deepTo: 2, trapsAtLeast: 4, posts: 2, militia: 5, well: true },
+  siege:    { pop: 8,  hearths: 0, trapsAtLeast: 8, posts: 4, militia: 4, well: true },
 }
 
 check(S.PRESETS.length === Object.keys(WANT).length, "every preset is accounted for here (" + S.PRESETS.length + ")")
@@ -55,7 +56,7 @@ for (const pr of S.PRESETS) {
   check(S.pop(w) === want.pop, label + " starts with " + want.pop + " dwarves (" + S.pop(w) + ")")
   if (want.scenario === false) check(!w.scenario, label + " is a plain embark, with no wave schedule")
   if (want.peaceful) check(w.peaceful === true && !w.scenario, label + " has no enemies at all")
-  for (const [key, list] of [["hearths", c.hearths], ["crystals", c.crystals], ["games", c.games], ["traps", c.traps]]) {
+  for (const [key, list] of [["hearths", c.hearths], ["crystals", c.crystals], ["games", c.games], ["traps", c.traps], ["posts", c.posts]]) {
     if (want[key] !== undefined) check(list.length === want[key], label + " has " + want[key] + " " + key + " (" + list.length + ")")
   }
   if (want.trapsAtLeast !== undefined) check(c.traps.length >= want.trapsAtLeast, label + " lines the corridor (" + c.traps.length + " traps)")
@@ -68,6 +69,26 @@ for (const pr of S.PRESETS) {
     let fr = 0
     for (const u of ds) for (const id in (u.bonds || {})) if (u.bonds[id] >= S.BOND_FRIEND) fr++
     check(fr / 2 >= 3, label + " starts with friendships already formed (" + fr / 2 + ")")
+  }
+  // water: the cistern, the well drawing from it and the gate holding it back
+  if (want.well) {
+    check(c.wells.length >= 1, label + " has a well")
+    if (c.wells.length) check(S.touchesWater(w, c.wells[0]), label + " built it on water")
+    let gates = 0
+    for (let i = 0; i < S.NN; i++) if (w.build[i] === S.B_FLOODGATE) gates++
+    check(gates >= 1, label + " has a floodgate on the cistern")
+    check(w.gatesOpen === false, label + " starts with the gates shut")
+  }
+  // the militia a preset asked for is the militia it still has tomorrow
+  if (want.militia !== undefined) {
+    for (let k = 0; k < S.DAY + 1; k++) S.tick(w)
+    const mil = S.dwarves(w).filter(q => q.militia).length
+    check(mil === Math.min(want.militia, S.pop(w)), label + " keeps " + want.militia + " in the militia after a day (" + mil + ")")
+  }
+  if (want.posts) {
+    S.rosterMilitia(w)
+    const onDuty = S.dwarves(w).filter(q => q.militia && q.post >= 0).length
+    check(onDuty > 0, label + " puts guards on those posts (" + onDuty + ")")
   }
   // and it survives being played
   let threw = null

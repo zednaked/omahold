@@ -34,7 +34,8 @@ Item {
   property int buildType: 0
   property bool buildMenu: false
   property int selStart: -1
-  property string page: "units"         // units local legends help
+  property string page: "units"         // units local orders legends lives help
+  property int livesIndex: 0            // whose life is open on the Lives page
   property string status: ""
   property bool dragging: false
   property int dragStart: -1
@@ -68,9 +69,10 @@ Item {
   // ---- tools ------------------------------------------------------------------
   readonly property var buildKeys: ({ b: Sim.B_BED, t: Sim.B_TABLE, f: Sim.B_FARM, w: Sim.B_WALL, p: Sim.B_DOOR, e: Sim.B_STOCK, o: Sim.B_WORKSHOP, d: Sim.B_STILL, s: Sim.B_STATUE,
                                       c: Sim.B_KITCHEN, u: Sim.B_SMELTER, j: Sim.B_FORGE, l: Sim.B_TORCH, r: Sim.B_TRAINING, g: Sim.B_JEWELER,
-                                      h: Sim.B_HEARTH, y: Sim.B_CRYSTAL, m: Sim.B_GAMES, x: Sim.B_TRAP })
-  readonly property var buildOrder: ["b", "t", "f", "e", "p", "w", "l", "h", "y", "m", "x", "o", "d", "c", "u", "j", "g", "r", "s"]
-  readonly property var buildGlyph: ({ 1: "X", 2: "θ", 3: "Π", 4: "≡", 5: "¶", 6: "⌂", 7: "O", 8: "+", 9: "=", 10: "Ω", 11: "π", 12: "∆", 13: "‡", 14: "¡", 15: "Ξ", 16: "◊", 17: "†", 18: "Ψ", 19: "¥", 20: "Ж", 21: "^" })
+                                      h: Sim.B_HEARTH, y: Sim.B_CRYSTAL, m: Sim.B_GAMES, x: Sim.B_TRAP,
+                                      k: Sim.B_POST, n: Sim.B_WELL, z: Sim.B_FLOODGATE })
+  readonly property var buildOrder: ["b", "t", "f", "e", "p", "w", "l", "h", "y", "m", "x", "k", "n", "z", "o", "d", "c", "u", "j", "g", "r", "s"]
+  readonly property var buildGlyph: ({ 1: "X", 2: "θ", 3: "Π", 4: "≡", 5: "¶", 6: "⌂", 7: "O", 8: "+", 9: "=", 10: "Ω", 11: "π", 12: "∆", 13: "‡", 14: "¡", 15: "Ξ", 16: "◊", 17: "†", 18: "Ψ", 19: "¥", 20: "Ж", 21: "^", 22: "Å", 23: "Ϙ", 24: "╫" })
   // a list, not a binding: it has to be rebuilt when the language changes
   function viewModeList() {
     return [["normal", root.t("view.normal"), root.t("m.view.normal")],
@@ -129,6 +131,7 @@ Item {
         if (w.floor[i] === Sim.F_NONE) return root.t("why.build.sky")
         if (w.build[i] !== Sim.B_NONE) return root.tf("why.build.taken", Sim.buildName(w.build[i]))
         if (root.buildType === Sim.B_FARM) return root.t("p.farm.needs")
+        if (root.buildType === Sim.B_WELL) return root.t("why.well")
         return root.t("p.cant.build")
       case "cancel": return root.t("p.desig.none")
       case "remove": return root.t("p.build.none")
@@ -248,6 +251,11 @@ Item {
       gap()
       rows.push({ kind: "note", t: root.t("m.orders.note") })
       item(root.t("m.orders.clear"), root.t("m.orders.clear.sub"), "x", function () { Sim.clearPlayerOrders(w); World.rev++; rebuildMenu(); root.flash(root.t("fl.orders.cleared")) })
+      // the two standing levers: doors against goblins, floodgates against
+      // everything. Both are all-or-nothing on purpose — this game has no
+      // room for a per-building setting screen.
+      item(root.t("m.gates"), root.t(w.gatesOpen ? "m.gates.open" : "m.gates.shut"), "g", function () { World.toggleGates(); rebuildMenu() })
+      item(root.t("chip.locked"), root.t(w.lockdown ? "m.gates.shut" : "m.gates.open"), "L", function () { World.toggleLockdown(); rebuildMenu() })
       item(root.t("m.back"), "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
     } else if (root.menuSection === "view") {
       title(root.t("m.view"), root.t("m.view.hint"))
@@ -336,10 +344,11 @@ Item {
         else openMenu("main")
         break
       case Qt.Key_F10: case Qt.Key_QuoteLeft: openMenu("main"); break
+      case Qt.Key_G: if (shift) { World.toggleGates(); root.flash(root.t(w.gatesOpen ? "p.gates.open" : "ipc.gates.shut")); e.accepted = true; return } break
       case Qt.Key_Left: case Qt.Key_H: moveCursor(-stepN, 0); break
       case Qt.Key_Right: case Qt.Key_L: if (e.key === Qt.Key_L && shift) { World.toggleLockdown(); root.flash(w.lockdown ? root.t("h.lock") : "portas destrancadas") } else moveCursor(stepN, 0); break
-      case Qt.Key_Up: case Qt.Key_K: moveCursor(0, -stepN); break
-      case Qt.Key_Down: case Qt.Key_J: moveCursor(0, stepN); break
+      case Qt.Key_Up: case Qt.Key_K: if (root.page === "lives") { root.livesIndex = Math.max(0, root.livesIndex - 1); refreshLines(); e.accepted = true; return } moveCursor(0, -stepN); break
+      case Qt.Key_Down: case Qt.Key_J: if (root.page === "lives") { root.livesIndex = root.livesIndex + 1; refreshLines(); e.accepted = true; return } moveCursor(0, stepN); break
       case Qt.Key_Less: case Qt.Key_Comma: case Qt.Key_PageUp: setZ(root.vz + 1); break
       case Qt.Key_Greater: case Qt.Key_Period: case Qt.Key_PageDown: setZ(root.vz - 1); break
       case Qt.Key_Return: case Qt.Key_Enter: enterPressed(); break
@@ -353,7 +362,7 @@ Item {
       case Qt.Key_X: root.tool = "cancel"; root.selStart = -1; root.flash(root.t("fl.cancel")); break
       case Qt.Key_R: root.tool = "remove"; root.selStart = -1; root.flash(root.t("fl.remove")); break
       case Qt.Key_V: root.tool = "look"; root.selStart = -1; break
-      case Qt.Key_Tab: { var pages = ["units", "local", "orders", "legends", "help"]; root.page = pages[(pages.indexOf(root.page) + (shift ? 4 : 1)) % 5]; e.accepted = true; return }
+      case Qt.Key_Tab: { var pages = ["units", "local", "orders", "legends", "lives", "help"]; root.page = pages[(pages.indexOf(root.page) + (shift ? pages.length - 1 : 1)) % pages.length]; e.accepted = true; return }
       case Qt.Key_Backtab: { var pg = ["units", "local", "orders", "legends", "help"]; root.page = pg[(pg.indexOf(root.page) + 4) % 5]; e.accepted = true; return }
       case Qt.Key_U: root.page = "units"; break
       case Qt.Key_I: root.page = "local"; break
@@ -443,6 +452,7 @@ Item {
           if (tiesTxt.length) out.push({ t: tiesTxt.join(" · "), c: "accent", wrap: true })
           if ((sel.grief || 0) > 0) out.push({ t: root.t("p.grieving"), c: "warn", wrap: true })
           if (sel.wnm) out.push({ t: root.tf("p.bears", sel.wnm, sel.wtitle || ""), c: "accent", wrap: true })
+          if (sel.post >= 0 && w.build[sel.post] === Sim.B_POST) out.push({ t: root.tf("p.post", Sim.ix(sel.post), Sim.iy(sel.post), Sim.iz(sel.post)), c: "accent", wrap: true })
           if (sel.thoughts.length) { out.push({ t: root.t("p.thoughts"), c: "muted" }); for (k = 0; k < Math.min(5, sel.thoughts.length); k++) { var th = sel.thoughts[k]; out.push({ t: "  " + (th.v >= 0 ? "+" : "") + th.v + " " + th.m, c: th.v < 0 ? "warn" : "good", wrap: true }) } }
         } else {
           var kinds = { goblin: root.t("unit.goblin"), wolf: root.t("unit.wolf"), deer: root.t("unit.deer"), kobold: root.t("unit.kobold"), merchant: root.t("unit.merchant"), crawler: root.t("unit.crawler"), sentinel: root.t("unit.sentinel"), envoy: root.t("unit.envoy") }
@@ -483,6 +493,12 @@ Item {
       var lt = Sim.cellLight(w, i)
       out.push({ t: root.tf("p.light", Math.round(lt * 100), lt < 0.3 ? root.t("p.light.dark") : ""), c: lt < 0.3 ? "muted" : "" })
       if (w.lockdown) out.push({ t: root.t("p.locked"), c: "warn" })
+      if (w.gatesOpen) out.push({ t: root.t("p.gates.open"), c: "warn" })
+      var pst = Sim.cache(w).posts
+      if (pst.length) {
+        var manned = Sim.dwarves(w).filter(function (q) { return q.militia && q.post >= 0 }).length
+        out.push({ t: root.tf("p.posts", pst.length, manned), c: manned ? "" : "warn", wrap: true })
+      }
       var dd = Sim.digDepth(w)
       if (dd < Sim.iz(w.depot)) out.push({ t: root.tf("p.deepest", dd, w.stirred ? root.tf("p.stirred", w.stirred) : ""), c: w.stirred ? "warn" : "muted", wrap: true })
       if (w.siege) out.push({ t: root.tf("p.siege", Math.max(1, Math.round((w.tick - w.siege) / Sim.DAY))), c: "urgent", wrap: true })
@@ -523,6 +539,45 @@ Item {
       if (busy.length) { out.push({ t: root.t("p.orders.busy"), c: "" }); for (oq = 0; oq < busy.length; oq++) out.push({ t: busy[oq], c: "" }); out.push({ t: "", c: "" }) }
       out.push({ t: root.t("p.orders.how"), c: "muted", wrap: true })
       out.push({ t: root.t("p.orders.note"), c: "muted", wrap: true })
+    } else if (root.page === "lives") {
+      // One dwarf at a time, and the chronicle read back as a biography. The
+      // Legends page has everything that ever happened, in order, which is a
+      // record and not a story — the story is what happened to somebody.
+      var ls = Sim.lives(w)
+      if (!ls.length) out.push({ t: root.t("p.lives.none"), c: "muted", wrap: true })
+      else {
+        if (root.livesIndex >= ls.length) root.livesIndex = ls.length - 1
+        if (root.livesIndex < 0) root.livesIndex = 0
+        var who = ls[root.livesIndex]
+        out.push({ t: root.tf("p.lives.title", root.livesIndex + 1, ls.length), c: "muted" })
+        out.push({ t: who.name, c: "accent", wrap: true })
+        if (who.alive) {
+          var wu = who.u
+          out.push({ t: Sim.skillTitle(wu) + " · " + Sim.traitName(wu.trait) + " · " + root.tf("p.mood.n", Sim.moodWord(wu), wu.mood), c: "", wrap: true })
+          var tie = []
+          for (k = 0; k < (wu.kin || []).length; k++) { var ku2 = Sim.unitById(w, wu.kin[k]); if (ku2) tie.push(root.tf("p.tie.kin", ku2.name)) }
+          var bm2 = wu.bonds || {}
+          for (var bid2 in bm2) {
+            var ou2 = Sim.unitById(w, parseInt(bid2, 10))
+            if (!ou2 || ou2.k !== "dwarf" || Sim.isKin(wu, ou2.id)) continue
+            if (bm2[bid2] >= Sim.BOND_FRIEND) tie.push(root.tf("p.tie.friend", ou2.name))
+            else if (bm2[bid2] <= Sim.BOND_RIVAL) tie.push(root.tf("p.tie.rival", ou2.name))
+          }
+          if (tie.length) out.push({ t: tie.join(" · "), c: "accent", wrap: true })
+          out.push({ t: root.tf("p.lives.deeds", wu.kills || 0, wu.made || 0, Math.round((w.tick - wu.born) / Sim.YEAR * 10) / 10), c: "muted", wrap: true })
+          if (wu.wnm) out.push({ t: root.tf("p.bears", wu.wnm, wu.wtitle || ""), c: "accent", wrap: true })
+          if ((wu.grief || 0) > 0) out.push({ t: root.t("p.grieving"), c: "warn", wrap: true })
+        } else {
+          out.push({ t: root.tf("p.lives.died", who.how, root.fmtDate(Sim.date({ tick: who.t }))), c: "warn", wrap: true })
+        }
+        out.push({ t: "", c: "" })
+        var story = Sim.lifeLines(w, who.name)
+        if (!story.length) out.push({ t: root.t("p.lives.quiet"), c: "muted", wrap: true })
+        else for (k = story.length - 1; k >= 0 && k > story.length - 13; k--)
+          out.push({ t: root.fmtDate(Sim.date({ tick: story[k].t })) + " · " + story[k].m, c: "", wrap: true })
+        out.push({ t: "", c: "" })
+        out.push({ t: root.t("p.lives.keys"), c: "muted", wrap: true })
+      }
     } else if (root.page === "legends") {
       out.push({ t: root.tf("p.founded", w.name, Math.floor(w.tick / Sim.YEAR), w.seed), c: "accent", wrap: true })
       var st = w.stats
@@ -571,7 +626,7 @@ Item {
       out.push({ t: "", c: "" })
       out.push({ t: root.t("h.legend"), c: "accent" })
       var legRow = "", legN = 0
-      for (var bq = 1; bq <= 21; bq++) {
+      for (var bq = 1; bq <= 24; bq++) {
         var bg = root.buildGlyph[bq]
         if (!bg) continue
         legRow += "  " + bg + " " + Sim.buildName(bq)
@@ -907,6 +962,9 @@ Item {
                       case Sim.B_CRYSTAL: glyph = "¥"; gcol = p.bCrystal; break
                       case Sim.B_GAMES: glyph = "Ж"; gcol = p.bGames; break
                       case Sim.B_TRAP: glyph = "^"; gcol = p.bTrap; break
+                      case Sim.B_POST: glyph = "Å"; gcol = p.bPost; break
+                      case Sim.B_WELL: glyph = "Ϙ"; gcol = p.bWell; break
+                      case Sim.B_FLOODGATE: glyph = "╫"; gcol = w.gatesOpen ? p.bDoor : p.bWell; break
                     }
                   } else fill = p.bg
                   // lighting: sun on what lies under the sky, torches and magma anywhere,
@@ -1063,7 +1121,7 @@ Item {
               id: tabs
               spacing: Style.space(4)
               Repeater {
-                model: [["units", root.t("tab.units"), "u"], ["local", root.t("tab.local"), "i"], ["orders", root.t("tab.orders"), "w"], ["legends", root.t("tab.legends"), "y"], ["help", root.t("tab.help"), "?"]]
+                model: [["units", root.t("tab.units"), "u"], ["local", root.t("tab.local"), "i"], ["orders", root.t("tab.orders"), "w"], ["legends", root.t("tab.legends"), "y"], ["lives", root.t("tab.lives"), "v"], ["help", root.t("tab.help"), "?"]]
                 delegate: Rectangle {
                   required property var modelData
                   readonly property bool active: root.page === modelData[0]

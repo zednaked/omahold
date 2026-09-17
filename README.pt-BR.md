@@ -202,6 +202,97 @@ e quatro.** Um anão na mesa não procura trabalho até o jogo acabar, e com vin
 e quatro a fortaleza caiu para 10,9 anões e perdeu uma fortaleza. Ócio gasto um
 com o outro é de graça; ócio que ignora a despensa não é.
 
+## A milícia, e onde ela fica
+
+A milícia não tinha ordens. Cada guarda reagia ao que chegasse a nove células
+de onde ele estivesse, então a defesa da fortaleza era onde os soldados
+estivessem parados quando a onda chegou — e desde que as coisas começaram a
+subir das profundezas, isso quase nunca era o lugar certo.
+
+Um **posto de guarda** (`k`, um bloco de pedra) é como você diz *segurem aqui*.
+Os esquadrões se organizam sozinhos: cada posto recebe sua parte da milícia, os
+mais próximos primeiro, e um posto que ficou vazio é preenchido pelo próximo.
+Sem posto, nada muda — a milícia trabalha e reage, como sempre.
+
+Um guarda de plantão:
+
+- **não pega trabalho nenhum**, nem as escavações do jogador. Deixá-lo aceitar
+  um transporte fazia com que ele ficasse no posto um décimo do tempo e do
+  outro lado da fortaleza no resto. A mão de obra que isso custa é o preço da
+  ordem: seis anões de plantão e a fortaleza tem seis trabalhadores a menos.
+- **não persegue** nada a mais de doze células do posto. Correr atrás de um lobo
+  seis níveis acima é como o portão fica vazio.
+- **treina num campo perto do posto**, ou não treina.
+
+Medido em dois dias de plantão: passam cerca de um terço no posto, um quinto
+voltando para ele, e o resto comendo, bebendo e dormindo — que nenhuma ordem
+resolve.
+
+**Quanto custa um posto, em dezesseis fortalezas:**
+
+| postos | anões vivos | humor |
+|---|---|---|
+| nenhum | 13,7 | 75 |
+| um | **18,2** | 65 |
+| dois | 16,6 | 64 |
+
+Quatro anões e meio a mais vivos por dez pontos de humor — uma fortaleza
+militarizada é mais segura e mais sombria, e o segundo posto não compra nada
+que o primeiro já não tenha dado. Essa é a decisão; a fortaleza pronta vem com
+um.
+
+Uma coisa precisou ser corrigida para o posto ser seguro: `work()` roda antes
+de `needJob()`, então um guarda com um job que nunca termina nunca mais come
+nem bebe. Postar a milícia colocou cinco mortes de sede em dezesseis
+fortalezas que não tinham nenhuma, e o job agora é solto por sede, fome, sono
+ou por um caminho que acabou.
+
+Um segundo posto divide a milícia em dois, e esse é todo o sistema de
+esquadrões: o portão e a escadaria, ou a escadaria e as profundezas.
+
+## Água
+
+A água era cenário com um uso: um anão com sede andava até a beira dela e
+bebia — foi assim que três morreram de sede do lado errado de uma árvore que
+rebrotou.
+
+Um **poço** (`n`) é construído na beira da água e puxado de onde a fortaleza
+vive. É o que mantém todos vivos na estação em que a destilaria seca, e beber
+dele não custa humor, enquanto beber de uma poça custa −2.
+
+Uma **comporta** (`z`) é a outra metade: líquido não passa por ela enquanto
+está fechada. Cave um canal, mantenha fechada, e abra quando o corredor estiver
+cheio de goblins — o truque mais antigo do gênero, e impossível aqui até agora.
+Todas as comportas funcionam como uma alavanca só: `Shift+G`, ou **≡ menu →
+Ordens → Comportas**. Aberta aparece como aviso na página Aqui, porque aberta
+não é o estado seguro.
+
+Toda fortaleza pronta constrói a própria **cisterna** para isso — a rocha ao
+lado dos estoques, escavada e cheia, com o poço puxando de um lado e a comporta
+segurando o outro. O que significa que a alavanca, numa fortaleza recém-criada,
+inunda o próprio salão. É um aviso justo sobre para que serve a alavanca.
+
+## Vidas
+
+A página Lendas tem tudo o que aconteceu, em ordem. Isso é um registro, não uma
+história — a história é o que aconteceu com alguém.
+
+A página **Vidas** (`Tab` até ela, `↑ ↓` para percorrer) é um anão por vez: o
+ofício e o traço, os parentes, amigos e rivais, o que ele matou e fez, quanto
+tempo está aqui, a relíquia que empunha — e então a crônica, filtrada nas linhas
+que têm o nome dele. Os mortos estão na mesma lista, depois dos vivos, com como
+e quando; as linhas deles sobrevivem a eles, que é o sentido de manter uma
+crônica.
+
+Dois anos de "Casa cheia" deixam 24 de 26 vidas com algo escrito. Uma típica:
+
+```
+Doish Musgoseca e Kibeth Ferrovelha tornaram-se inseparáveis no ano 1.
+Doish Musgoseca e Riist Pedrafunda tornaram-se inseparáveis no ano 1.
+Doish Musgoseca perdeu o amigo Riist Pedrafunda no ano 1.
+Doish Musgoseca perdeu Udib Rochavelha, do seu próprio sangue, no ano 1.
+```
+
 ## Os mortos
 
 Quem cai fica onde caiu, e todo anão que passa por perto sente. Eles resolvem
@@ -600,6 +691,7 @@ make deep      a relíquia da tumba e a corte das profundezas
 make halls     a lareira, o cristal, a mesa de jogo e as armadilhas
 make presets   cada predefinição construída, conferida e jogada um ano
 make surfaces  o que o painel e a janelinha têm de concordar
+make lives     a crônica lida como a biografia de um anão
 make hostile   o que o save.py recusa, num $HOME descartável
 make validate  omarchy plugin validate .
 ```

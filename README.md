@@ -204,6 +204,96 @@ twenty-four.** A dwarf at the table does not look for work until the game is
 over, and at twenty-four the hold dropped to 10.9 dwarves and lost a fortress.
 Idleness spent on each other is free; idleness that ignores the larder is not.
 
+## The militia, and where it stands
+
+The militia had no orders. Every guard reacted to whatever came within nine
+cells of wherever they happened to be, so the hold's defence was wherever its
+soldiers were standing when the wave arrived — and once things started coming
+up from the deep, that was almost never the right place.
+
+A **guard post** (`k`, a block of stone) is how you say *hold here*. The squads
+sort themselves out: every post gets its share of the militia, nearest first,
+and a post left standing when a guard dies is filled by whoever is next. No
+post and nothing changes — the militia works and reacts, the way it always did.
+
+A posted guard:
+
+- **takes no work at all**, not even the player's digging. Letting them pick up
+  a hauling job meant they held the post a tenth of the time and were across
+  the fortress for the rest of it. The labour it costs is the price of the
+  order: post six dwarves and the hold is six workers short.
+- **does not chase** anything further than twelve cells from the post. Running
+  after a wolf six levels up is how the gate ends up empty.
+- **trains at a yard near the post**, or not at all.
+
+Measured over a two-day watch: they spend about a third of it standing at the
+post, a fifth walking back to it, and the rest eating, drinking and sleeping,
+which no order can do anything about.
+
+**What a post costs, over sixteen fortresses:**
+
+| posts | dwarves alive | mood |
+|---|---|---|
+| none | 13.7 | 75 |
+| one | **18.2** | 65 |
+| two | 16.6 | 64 |
+
+Four and a half more dwarves alive for ten points of mood — a militarised hold
+is a safer one and a glummer one, and the second post buys nothing the first
+one did not. That is the decision; the ready fortress ships with one.
+
+One thing had to be fixed to make posts safe at all: `work()` runs before
+`needJob()`, so a guard holding a job that never ends never eats or drinks
+again. Posting the militia put five deaths of thirst into sixteen fortresses
+that had none, and the job now releases on thirst, hunger, sleep or a path that
+ran out.
+
+A second post splits the militia in two, and that is the whole squad system:
+the gate and the stairwell, or the stairwell and the deep.
+
+## Water
+
+Water was scenery with one use: a thirsty dwarf walked to the edge of it and
+drank, which is how three of them once died of thirst on the wrong side of a
+regrown tree.
+
+A **well** (`n`) is built at the edge of water and drawn from where the hold
+lives. It is what keeps everyone alive the season the still runs dry, and
+drinking from it costs no mood, where drinking from a puddle costs −2.
+
+A **floodgate** (`z`) is the other half: liquid cannot pass it while it is
+shut. Dig a channel, keep it closed, and open it when the corridor is full of
+goblins — the oldest trick in this genre, and impossible here until now. All
+the gates work as one lever: `Shift+G`, or **≡ menu → Orders → Floodgates**.
+Open shows as a warning on the Here page, because open is not the safe state.
+
+Every ready hold builds its own **cistern** for this — the rock beside the
+stores, cut and filled, with the well drawing from one side and the gate
+holding the other. Which means the lever in a fresh fortress floods its own
+hall. That is a fair warning about what the lever is for.
+
+## Lives
+
+The Legends page has everything that ever happened, in order. That is a record,
+not a story — the story is what happened to somebody.
+
+The **Lives** page (`Tab` to it, `↑ ↓` to browse) is one dwarf at a time: their
+trade and trait, their kin, friends and rivals, what they have killed and made,
+how long they have been here, the relic they carry — and then the chronicle,
+filtered to the lines with their name in them. The dead are on the same list,
+after the living, with how and when; their lines outlive them, which is the
+point of keeping a chronicle at all.
+
+Two years of "Full house" leaves 24 of 26 lives with something written about
+them. A typical one reads:
+
+```
+Doish Musgoseca e Kibeth Ferrovelha tornaram-se inseparáveis no ano 1.
+Doish Musgoseca e Riist Pedrafunda tornaram-se inseparáveis no ano 1.
+Doish Musgoseca perdeu o amigo Riist Pedrafunda no ano 1.
+Doish Musgoseca perdeu Udib Rochavelha, do seu próprio sangue, no ano 1.
+```
+
 ## The dead
 
 Whoever falls stays where they fell, and every dwarf who walks past feels it.
@@ -628,6 +718,7 @@ make deep      the relic from the tomb and the court of the deep
 make halls     the hearth, the crystal column, the game table and the traps
 make presets   every preset built, checked against its blurb and played a year
 make surfaces  what the panel and the corner window have to agree on
+make lives     the chronicle read back as one dwarf's biography
 make hostile   what save.py refuses, in a throwaway $HOME
 make validate  omarchy plugin validate .
 ```

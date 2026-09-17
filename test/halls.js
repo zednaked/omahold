@@ -7,8 +7,9 @@
 const fs = require("fs"), path = require("path")
 const src = fs.readFileSync(path.join(__dirname, "..", "sim.js"), "utf8").replace(".pragma library", "")
 const S = new Function(src + `; return { newScenario, tick, dwarves, pop, addUnit, addItem, cache, cellLight, isLit,
-  B_HEARTH, B_CRYSTAL, B_GAMES, B_GRAVE, B_TORCH, B_TRAP, B_NONE, TRAP_CHARGES, BOND_FRIEND,
-  trapFires, trapCharges, armTrap, bondTotal, shiftBond, nearBuilding, buildName, idx, ix, iy, iz, N, W, H }`)()
+  B_HEARTH, B_CRYSTAL, B_GAMES, B_GRAVE, B_TORCH, B_TRAP, B_NONE, B_POST, B_WELL, B_FLOODGATE, T_WATER, T_OPEN,
+  TRAP_CHARGES, BOND_FRIEND, POST_REACH, trapFires, trapCharges, armTrap, bondTotal, shiftBond, nearBuilding,
+  buildName, canDesignate, rosterMilitia, spreadLiquids, touchesWater, idx, ix, iy, iz, dist, N, W, H, NN, DAY }`)()
 
 let passed = 0, failed = 0
 function check(cond, what) {
@@ -110,6 +111,119 @@ if (t2 >= 0 && t2 !== undefined) {
   dwarf.i = t2
   S.tick(w4)
   check(dwarf.hp >= hp - 1, "a dwarf walking over a trap is not spiked by it")
+}
+
+// --- the guard post: they hold it, and they stop working ----------------------
+const w5 = S.newScenario(7, 12, {})
+S.tick(w5)
+const post = S.cache(w5).posts[0]
+check(post >= 0 && post !== undefined, "the ready hold has a guard post")
+S.rosterMilitia(w5)
+const posted = S.dwarves(w5).filter(q => q.militia && q.post >= 0)
+check(posted.length > 0, "the militia is assigned to it (" + posted.length + " guards)")
+check(S.dwarves(w5).filter(q => !q.militia && q.post >= 0).length === 0, "nobody outside the militia is posted")
+// a whole day: they should spend it near the post, and never on a dig
+let atPost = 0, working = 0, samples = 0
+for (let k = 0; k < S.DAY * 2; k++) {
+  S.tick(w5)
+  if (k % 10) continue
+  for (const q of S.dwarves(w5)) {
+    if (!q.militia || !(q.post >= 0)) continue
+    samples++
+    if (S.dist(q.i, q.post) <= 4) atPost++
+    if (q.job && (q.job.k === "dig" || q.job.k === "haul" || q.job.k === "build")) working++
+  }
+}
+check(samples > 0 && atPost / samples > 0.2, "a guard spends their watch near the post (" + Math.round(100 * atPost / samples) + "%)")
+check(working === 0, "and takes no work while posted (" + working + " samples working)")
+
+// a second post splits the squads
+const spare = (function () {
+  for (let i = 0; i < S.NN; i++) if (w5.tile[i] === S.T_OPEN && w5.floor[i] !== 0 && w5.build[i] === 0 && S.dist(i, post) > 10) return i
+  return -1
+})()
+if (spare >= 0) {
+  w5.build[spare] = S.B_POST; w5.dirty = true
+  S.rosterMilitia(w5)
+  const spread = {}
+  for (const q of S.dwarves(w5)) if (q.militia && q.post >= 0) spread[q.post] = (spread[q.post] || 0) + 1
+  check(Object.keys(spread).length === 2, "two posts split the militia between them")
+}
+
+// A guard whose post became unreachable has to let go of the job: `work()` runs
+// before `needJob()`, so a job that never ends is a dwarf who never eats. This
+// one cost five deaths of thirst across sixteen fortresses.
+const w8 = S.newScenario(11, 12, {})
+S.tick(w8)
+S.rosterMilitia(w8)
+const stuck = S.dwarves(w8).filter(q => q.militia && q.post >= 0)[0]
+if (stuck) {
+  stuck.job = { k: "station", i: stuck.post }
+  stuck.path = null
+  stuck.i = w8.depot                    // far from the post, with no path
+  stuck.thirst = 90
+  let released = false
+  for (let k = 0; k < 60 && !released; k++) { S.tick(w8); if (!stuck.job || stuck.job.k !== "station") released = true }
+  check(released, "a guard who cannot reach their post lets go of the job")
+  let drank = false
+  for (let k = 0; k < 3000 && !drank; k++) { S.tick(w8); if (stuck.thirst < 30) drank = true }
+  check(drank, "and goes and drinks (thirst " + Math.round(stuck.thirst) + ")")
+}
+
+// --- the well: water without walking to the water ----------------------------
+const w6 = S.newScenario(7, 12, {})
+S.tick(w6)
+const wells = S.cache(w6).wells
+check(wells.length >= 1, "the ready hold has a well" + (wells.length ? "" : " (no water within reach on this map)"))
+if (wells.length) {
+  check(S.touchesWater(w6, wells[0]), "a well is built at the edge of water")
+  // and it cannot be built away from water
+  const dry = (function () {
+    for (let i = 0; i < S.NN; i++) if (w6.tile[i] === S.T_OPEN && w6.floor[i] !== 0 && w6.build[i] === 0 && !S.touchesWater(w6, i)) return i
+    return -1
+  })()
+  check(dry >= 0 && !S.canDesignate(w6, dry, "build", S.B_WELL), "and nowhere else")
+  // a thirsty dwarf uses it
+  const thirsty = S.dwarves(w6)[0]
+  thirsty.thirst = 90
+  thirsty.i = wells[0] + S.W        // start them beside it, as the hold would be
+  w6.items = w6.items.filter(it => it.t !== "booze")
+  w6.dirty = true
+  let used = false
+  for (let k = 0; k < 2000 && !used; k++) {
+    S.tick(w6)
+    if (thirsty.job && thirsty.job.k === "drinkwater" && thirsty.job.i >= 0) used = true
+  }
+  check(used, "a thirsty dwarf with no booze draws from the well")
+}
+
+// --- the floodgate: shut is rock, open is a channel ---------------------------
+// The hold's own cistern, gate and well, which is the arrangement the scenario
+// builds: the cistern touches both, so the gate is the only way out of it.
+const w7 = S.newScenario(7, 12, {})
+S.tick(w7)
+let gate = -1
+for (let i = 0; i < S.NN; i++) if (w7.build[i] === S.B_FLOODGATE) { gate = i; break }
+check(gate >= 0, "the ready hold has a floodgate on its cistern")
+if (gate >= 0) {
+  check(S.touchesWater(w7, gate), "the gate touches the water it holds back")
+  // Two identical worlds, one lever apart. Doing it in sequence on one world
+  // proved nothing: `spreadLiquids` only acts on even ticks, so with an odd
+  // tick every call returns immediately and the shut case passes because
+  // nothing anywhere ever moves.
+  function runGate(open) {
+    const gw = S.newScenario(7, 12, {})
+    S.tick(gw)
+    let g = -1
+    for (let i = 0; i < S.NN; i++) if (gw.build[i] === S.B_FLOODGATE) { g = i; break }
+    gw.tick = 2                       // even, or spreadLiquids does nothing
+    gw.gatesOpen = open; gw.dirty = true
+    gw.liquidBudget = { water: 600, magma: 0 }
+    for (let k = 0; k < 60000; k++) { S.spreadLiquids(gw); if (gw.tile[g] === S.T_WATER) return true }
+    return false
+  }
+  check(runGate(true), "an open floodgate lets the cistern through")
+  check(!runGate(false), "a shut one holds it back")
 }
 
 console.log("\n" + (passed + failed) + " checks, " + failed + " failed")

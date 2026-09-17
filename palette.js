@@ -83,6 +83,8 @@ function build(theme) {
     // the four a hold builds for itself: fire, cut crystal, a game table and
     // spikes under the floor
     bHearth: css(bred), bCrystal: css(bcyan), bGames: css(byellow), bTrap: css(red),
+    // a guard post reads as the militia does; a well and a shut floodgate as water
+    bPost: css(bwhite), bWell: css(bblue),
     bStair: css(mix(fg, bg, 0.2)), bBed: css(magenta), bTable: css(yellow), bFarm: ground(green, 0.6), bFarmRipe: css(bgreen), bStill: css(byellow), bWorkshop: css(cyan), bWall: ground(gray, 0.15), bWallGlyph: css(mix(fg, bg, 0.3)), bDoor: css(yellow), bStock: css(mix(fg, bg, 0.75)), bStatue: css(bwhite),
     desig: css(accent, 0.28), desigGlyph: css(accent), desigBad: css(red, 0.35), desigBadGlyph: css(bred), cursor: css(accent), select: css(accent, 0.18),
     night: css(mix(bg, blue, 0.15), 0.62), rain: css(bblue, 0.5), snowGlyph: css(bwhite, 0.7),
