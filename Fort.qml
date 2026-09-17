@@ -104,7 +104,25 @@ Item {
     var w = World.w, t = w.tile[i]
     switch (root.tool) {
       case "dig": return t === Sim.T_OPEN ? root.t("why.dig.open") : t === Sim.T_TREE ? root.t("why.dig.tree") : (t === Sim.T_WATER || t === Sim.T_MAGMA) ? root.t("why.dig.liquid") : root.t("why.dig.no")
-      case "stair": return root.t("why.stair")
+      case "stair": {
+        // "s" is the one tool with several different reasons to refuse, and the
+        // one where the refusal matters most: a level nobody can reach is a
+        // level of work that never starts. So say which reason it was.
+        if (t === Sim.T_OPEN && w.build[i] === Sim.B_STAIR) {
+          if (Sim.iz(i) === 0) return root.t("why.stair.bottom")
+          var under = i - Sim.N, ut = w.tile[under]
+          if (ut === Sim.T_MAGMA) return root.t("why.stair.magma")
+          if (ut === Sim.T_WATER) return root.t("why.stair.water")
+          if (ut === Sim.T_OPEN) return root.t("why.stair.open")
+          if (w.desig[under] === Sim.DG_STAIR) return root.t("why.stair.already")
+          return root.t("why.stair")
+        }
+        if (t === Sim.T_OPEN && w.floor[i] === Sim.F_NONE) return root.t("why.build.sky")
+        if (t === Sim.T_OPEN && w.build[i] !== Sim.B_NONE) return root.tf("why.build.taken", Sim.buildName(w.build[i]))
+        if (t === Sim.T_MAGMA || t === Sim.T_WATER) return root.t("why.dig.liquid")
+        if (t === Sim.T_TREE || t === Sim.T_FUNGUS || t === Sim.T_SHRUB) return root.t("why.dig.tree")
+        return root.t("why.stair")
+      }
       case "chop": return root.t("why.chop")
       case "build":
         if (t !== Sim.T_OPEN) return root.t("why.build.open")
@@ -192,14 +210,14 @@ Item {
       item(root.t("m.close"), root.t("m.close.sub"), "q", function () { closeMenu(); World.open = false })
     } else if (root.menuSection === "new") {
       title(root.t("m.new"), root.t("m.new.warn"))
-      for (k = 0; k < Sim.PRESETS.length; k++) (function (pr) { item(pr.name, pr.desc, String(k + 1), function () { World.newFromPreset(pr.id, 0, ""); closeMenu(); root.flash(pr.name + ": " + World.w.name) }, { wrap: true }) })(Sim.PRESETS[k])
+      for (k = 0; k < Sim.PRESETS.length; k++) (function (pr) { item(Sim.presetName(pr), Sim.presetDesc(pr), String(k + 1), function () { World.newFromPreset(pr.id, 0, ""); closeMenu(); root.flash(Sim.presetName(pr) + ": " + World.w.name) }, { wrap: true }) })(Sim.PRESETS[k])
       gap()
       item(root.t("m.custom"), root.t("m.custom.sub"), "p", function () { root.menuSection = "custom"; root.menuIndex = 0; rebuildMenu() })
       item(root.t("m.back"), "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
     } else if (root.menuSection === "custom") {
       var pr = null; for (k = 0; k < Sim.PRESETS.length; k++) if (Sim.PRESETS[k].id === root.customPreset) pr = Sim.PRESETS[k]
       title(root.t("m.custom.title"), root.t("m.custom.hint"))
-      item(root.t("m.preset"), pr ? pr.name : root.customPreset, "◂ ▸", null, { value: true, adjust: function (d) { var i = 0; for (var q = 0; q < Sim.PRESETS.length; q++) if (Sim.PRESETS[q].id === root.customPreset) i = q; i = (i + d + Sim.PRESETS.length) % Sim.PRESETS.length; root.customPreset = Sim.PRESETS[i].id; root.customCount = Sim.PRESETS[i].n; rebuildMenu() } })
+      item(root.t("m.preset"), pr ? Sim.presetName(pr) : root.customPreset, "◂ ▸", null, { value: true, adjust: function (d) { var i = 0; for (var q = 0; q < Sim.PRESETS.length; q++) if (Sim.PRESETS[q].id === root.customPreset) i = q; i = (i + d + Sim.PRESETS.length) % Sim.PRESETS.length; root.customPreset = Sim.PRESETS[i].id; root.customCount = Sim.PRESETS[i].n; rebuildMenu() } })
       item(root.t("m.dwarves"), String(root.customCount), "◂ ▸", null, { value: true, adjust: function (d) { root.customCount = Math.max(4, Math.min(24, root.customCount + d)); rebuildMenu() } })
       item(root.t("m.seed"), root.customSeed === "" ? root.t("m.seed.random") : root.customSeed, "0-9 ⌫", null, { value: true, seed: true })
       gap()

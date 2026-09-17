@@ -2140,7 +2140,13 @@ function trapFires(w, u) {
   } else announce(w, LF("msg.trap.hit", "Uma armadilha acertou {0}.", foeName(u)), 0)
   if (w.grow[i] <= 0) {
     removeBuilding(w, i, false)
-    announce(w, L("msg.trap.spent", "Uma armadilha se desmontou depois do terceiro golpe."), 0)
+    // The hold re-lays its own spikes. A corridor of traps that empties out
+    // over one siege and stays empty is a decoration, and asking the player to
+    // re-place each one by hand is the labour screen this game does without.
+    // Never on the last bar, though: the militia's axes come first.
+    if (countItems(w, "bar") >= 2 && designate(w, i, "build", B_TRAP))
+      announce(w, L("msg.trap.relay", "Uma armadilha se desmontou; os anões vão refazê-la."), 0)
+    else announce(w, L("msg.trap.spent", "Uma armadilha se desmontou depois do terceiro golpe."), 0)
   }
   return true
 }
@@ -3419,10 +3425,16 @@ function scenario(w, n, opts) {
   var stock1 = []
   for (dy = -3; dy <= 3; dy++) for (dx = 2; dx <= 6; dx++) if (dy !== 0) { var s1 = place(w, cx, cy, z1, dx, dy, B_STOCK); if (s1 >= 0) stock1.push(s1) }
   place(w, cx, cy, z1, -4, 0, B_TORCH); place(w, cx, cy, z1, 4, 0, B_TORCH); place(w, cx, cy, z1, -1, 0, B_TORCH); place(w, cx, cy, z1, 1, 0, B_TORCH)
-  // spikes in the entrance corridor, where everything that comes through the
-  // gate has to walk: three foes each and then they are scrap
-  place(w, cx, cy, z1, 0, -3, B_TRAP); place(w, cx, cy, z1, 0, -2, B_TRAP)
-  armTrap(w, idx(cx, cy - 3, z1)); armTrap(w, idx(cx, cy - 2, z1))
+  // Spikes in the entrance corridor, where everything that comes through the
+  // gate has to walk: three foes each and then they are scrap. How many is the
+  // preset's business — a garrison lines the corridor, a quiet valley needs one
+  // for the look of the thing.
+  var nTraps = opts.traps === undefined ? 2 : opts.traps
+  var trapSpots = [[0, -3], [0, -2], [-1, -3], [1, -3], [-1, -2], [1, -2], [-2, -3], [2, -3]]
+  for (k = 0; k < nTraps && k < trapSpots.length; k++) {
+    var tp = place(w, cx, cy, z1, trapSpots[k][0], trapSpots[k][1], B_TRAP)
+    if (tp >= 0) armTrap(w, tp)
+  }
   // level 2: dining hall, kitchen, still, statue
   carveRect(w, cx, cy, z2, -8, -4, 8, 4)
   var tx = [-6, -4, -2, 2, 4, 6]
@@ -3433,9 +3445,20 @@ function scenario(w, n, opts) {
   // it, a game table on each side of the fire, and a crystal column paid for
   // out of the jeweler's work. The ready hold is also the demonstration of
   // what can be built, so everything with an effect is in it somewhere.
-  place(w, cx, cy, z2, 0, -2, B_HEARTH)     // (0,0) is the staircase on every level
-  place(w, cx, cy, z2, -1, 2, B_GAMES); place(w, cx, cy, z2, 1, 2, B_GAMES)
-  place(w, cx, cy, z2, 8, 4, B_CRYSTAL)
+  // `halls` is how much of the hall was arranged rather than merely dug: 0 for
+  // a garrison that has not had time, 1 for a hold that has, 2 for one that has
+  // nothing else to worry about. (0,0) is the staircase on every level.
+  var halls = opts.halls === undefined ? 1 : opts.halls
+  if (halls >= 1) {
+    place(w, cx, cy, z2, 0, -2, B_HEARTH)
+    place(w, cx, cy, z2, -1, 2, B_GAMES); place(w, cx, cy, z2, 1, 2, B_GAMES)
+    place(w, cx, cy, z2, 8, 4, B_CRYSTAL)
+  }
+  if (halls >= 2) {
+    place(w, cx, cy, z2, -8, -4, B_HEARTH); place(w, cx, cy, z2, 8, -4, B_CRYSTAL)
+    place(w, cx, cy, z2, -1, -2, B_GAMES); place(w, cx, cy, z2, 1, -2, B_GAMES)
+    place(w, cx, cy, z3, 0, 4, B_HEARTH)   // one by the dormitory, for the wounded
+  }
   place(w, cx, cy, z2, -7, 0, B_TORCH); place(w, cx, cy, z2, 7, 0, B_TORCH)
   place(w, cx, cy, z2, -7, 4, B_TORCH); place(w, cx, cy, z2, 7, 4, B_TORCH)
   // level 3: dormitory west, industry east, training yard, stockpile for ore and bars
@@ -3501,6 +3524,40 @@ function scenario(w, n, opts) {
       else u.skills.craft = 4 + ri(w, 3)
     }
   }
+  // A shaft already cut to the threshold of the deep: down to level 2, which is
+  // iron and nothing awake, leaving the last level — the one with a 50% chance
+  // of waking something and the tomb in its rock — for the player to decide on.
+  // Cutting all the way down would spend the decision the preset exists for.
+  if (opts.deepShaft) {
+    // The showcase hold already carves down to its mine level, so the shaft
+    // usually only has to continue from there — and on a low embark it is
+    // already at level 2, which is why this walks down from wherever the
+    // staircase actually ended instead of assuming.
+    var dz = zm
+    while (dz > 2) {
+      var di = idx(cx, cy, dz - 1)
+      if (!solid(w.tile[di])) break        // a cavern or magma: stop above it
+      carve(w, di); w.build[di] = B_STAIR
+      dz--
+    }
+    // What the hold dug long ago has nothing left to wake in it: the point of
+    // this preset is the level below, which is untouched.
+    if (!w.woke) w.woke = {}
+    for (var wz = iz(w.depot); wz >= dz; wz--) w.woke[wz] = 1
+    w.deepest = dz
+  }
+  // A hold that came together as families. Kin are decided on arrival, so a
+  // preset that wants them has to say so: pairs of relatives, and half of those
+  // pairs already inseparable. It is the fastest way to see what a loss costs
+  // when it lands on somebody in particular.
+  if (opts.kin) {
+    var fam = dwarves(w)
+    for (k = 0; k + 1 < fam.length; k += 2) {
+      var a1 = fam[k], b1 = fam[k + 1]
+      a1.kin = (a1.kin || []).concat([b1.id]); b1.kin = (b1.kin || []).concat([a1.id])
+      if (k % 4 === 0) { bondMap(a1)[b1.id] = BOND_FRIEND + 5; bondMap(b1)[a1.id] = BOND_FRIEND + 5 }
+    }
+  }
   // Wave sizing for the showcase hold. The old curve (step 1.5, cap 12) wiped the
   // fortress in five seeds out of eight inside two years, which is a fine Dwarf
   // Fortress ending but a poor first impression for a preset named "ready".
@@ -3520,13 +3577,24 @@ function scenario(w, n, opts) {
 }
 function newScenario(seed, n, opts) { var w = newWorld(seed); return scenario(w, n, opts) }
 // Starting presets for the menu. `kind` classic = the plain embark.
+// The presets differ in more than how many goblins arrive: how much of the hall
+// was arranged, how many spikes are in the corridor, whether it came together
+// as families and whether the shaft already reaches the deep. Each one is a
+// different part of the game to look at first.
 var PRESETS = [
   { id: "classic", name: "Embarque clássico", desc: "Sete anões, uma carroça de suprimentos e uma colina. Do zero, como manda a tradição.", kind: "classic", n: 7 },
-  { id: "ready", name: "Fortaleza pronta", desc: "Doze anões com ofícios e uma fortaleza já escavada em quatro níveis. Ondas goblin a cada quinze dias.", kind: "scenario", n: 12, opts: { name: "Fortaleza pronta" } },
-  { id: "garrison", name: "Guarnição", desc: "Dez anões, seis na milícia. Ondas mais cedo e mais frequentes: um teste de defesa.", kind: "scenario", n: 10, opts: { name: "Guarnição", militia: 6, firstRaid: DAY * 3, raidEvery: DAY * 9, waveBase: 4, waveStep: 2, eliteFrom: 3, cap: 14 } },
-  { id: "peaceful", name: "Vale tranquilo", desc: "Fortaleza pronta, sem goblins nem lobos. Para ver a economia e os humores sem sangue.", kind: "scenario", n: 12, opts: { name: "Vale tranquilo", peaceful: true } },
-  { id: "siege", name: "Cerco", desc: "Oito anões, ondas grandes desde o segundo dia com veteranos. Ninguém espera que dure.", kind: "scenario", n: 8, opts: { name: "Cerco", militia: 4, firstRaid: DAY * 2, raidEvery: DAY * 7, waveBase: 5, waveStep: 2.5, eliteFrom: 2, cap: 16 } }
+  { id: "ready", name: "Fortaleza pronta", desc: "Doze anões com ofícios e uma fortaleza já escavada em quatro níveis, com lareira, mesas de jogo e estacas na entrada.", kind: "scenario", n: 12, opts: { name: "Fortaleza pronta" } },
+  { id: "garrison", name: "Guarnição", desc: "Dez anões, seis na milícia, e o corredor da entrada cheio de estacas. Ondas mais cedo e mais frequentes: um teste de defesa.", kind: "scenario", n: 10, opts: { name: "Guarnição", militia: 6, firstRaid: DAY * 3, raidEvery: DAY * 9, waveBase: 4, waveStep: 2, eliteFrom: 3, cap: 14, halls: 0, traps: 6 } },
+  { id: "peaceful", name: "Vale tranquilo", desc: "Fortaleza pronta, sem goblins nem lobos, e o salão inteiro arrumado: duas lareiras, dois cristais, quatro mesas de jogo. Para ver a economia e os humores sem sangue.", kind: "scenario", n: 12, opts: { name: "Vale tranquilo", peaceful: true, halls: 2, traps: 0 } },
+  { id: "kinfolk", name: "Casa cheia", desc: "Dezesseis anões que chegaram em família, metade deles inseparável, num salão completo. As histórias começam de véspera — e a primeira perda dói.", kind: "scenario", n: 16, opts: { name: "Casa cheia", kin: true, halls: 2, traps: 2, cap: 10 } },
+  { id: "depths", name: "Soleira das profundezas", desc: "Doze anões e um poço já cavado até o ferro. O último nível, onde algo dorme desde antes da fortaleza, fica para você decidir.", kind: "scenario", n: 12, opts: { name: "Soleira das profundezas", deepShaft: true, halls: 1, traps: 4, militia: 5 } },
+  { id: "siege", name: "Cerco", desc: "Oito anões, ondas grandes desde o segundo dia com veteranos, e estacas por todo o corredor. Ninguém espera que dure.", kind: "scenario", n: 8, opts: { name: "Cerco", militia: 4, firstRaid: DAY * 2, raidEvery: DAY * 7, waveBase: 5, waveStep: 2.5, eliteFrom: 2, cap: 16, halls: 0, traps: 8 } }
 ]
+// A preset's name and blurb are text like any other, so they go through the
+// table. The fallback is the Portuguese in the list above, which is how every
+// other string in the simulation works.
+function presetName(pr) { return pr ? L("preset." + pr.id + ".name", pr.name) : "" }
+function presetDesc(pr) { return pr ? L("preset." + pr.id + ".desc", pr.desc) : "" }
 function newFromPreset(seed, presetId, n) {
   var pr = null
   for (var k = 0; k < PRESETS.length; k++) if (PRESETS[k].id === presetId) pr = PRESETS[k]

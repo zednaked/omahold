@@ -68,13 +68,26 @@ Item {
             if (!w) return
             var c = root.cell, z = World.viewZ, N = Sim.N, g = p.g
             ctx.fillStyle = p.bg; ctx.fillRect(0, 0, width, height)
-            var sun = Sim.sunLevel(w), snow = w.weather === 2, RL = Sim.renderLight(w, w.tick), torchLight = RL.torch, fireLight = RL.fire
+            var sun = Sim.sunLevel(w), snow = w.weather === 2, RL = Sim.renderLight(w, w.tick), torchLight = RL.torch, fireLight = RL.fire, beaconLight = RL.beacon
             // Six-pixel cells cannot afford the subtle map palette: at this size the
             // brighter glyph colors are the fills, or the theme's soil is the background.
             var dimK = [1, 0.7, 0.45, 0.25]
+            var fog = World.fog
             for (var y = 0; y < Sim.H; y++) for (var x = 0; x < Sim.W; x++) {
-              var i = z * N + y * Sim.W + x, t = w.tile[i], f = w.floor[i], b = w.build[i], col = null, k = 0
+              var i0 = z * N + y * Sim.W + x, i = i0, t = w.tile[i], f = w.floor[i], b = w.build[i], col = null, k = 0
               while (t === Sim.T_OPEN && f === Sim.F_NONE && k < 3 && i - N >= 0) { i -= N; k++; t = w.tile[i]; f = w.floor[i]; b = w.build[i] }
+              // The corner window had no fog at all, so it showed the caverns,
+              // the gem seams and the magma the panel was still hiding — which
+              // makes the fog pointless, since the window is always on screen.
+              // Tested on `i`, the cell being drawn, not on `i0`: a gap on this
+              // level must not expose the unexplored one below it.
+              if (fog && !Sim.seenAt(w, i)) {
+                ctx.fillStyle = p.fog
+                ctx.fillRect(x * c, y * c, c, c)
+                if (Sim.hunch(w, i0)) { ctx.fillStyle = p.hunch; ctx.fillRect(x * c + 2, y * c + 2, c - 4, c - 4) }
+                if (w.desig[i0]) { ctx.fillStyle = Sim.isUnreachable(w, i0) ? p.desigBad : p.desig; ctx.fillRect(x * c, y * c, c, c) }
+                continue
+              }
               if (t !== Sim.T_OPEN) col = t === 1 ? g.soil : t === 2 ? g.stone : t === 3 ? g.ore : t === 4 ? g.gem : t === 5 ? g.tree : t === 6 ? g.water : t === 7 ? g.magma : t === 8 ? g.fungus : g.shrub
               else if (f !== Sim.F_NONE) {
                 var outdoor = z - k >= w.ground[y * Sim.W + x]
@@ -95,19 +108,25 @@ Item {
                 else if (b === Sim.B_TORCH) col = p.bTorch
                 else if (b === Sim.B_TRAINING) col = p.bTraining
                 else if (b === Sim.B_JEWELER) col = p.bJeweler
+                else if (b === Sim.B_HEARTH) col = p.bHearth
+                else if (b === Sim.B_CRYSTAL) col = p.bCrystal
+                else if (b === Sim.B_GAMES) col = p.bGames
+                else if (b === Sim.B_TRAP) col = p.bTrap
+                else if (b === Sim.B_GRAVE) col = p.bStatue
               }
-              if (k === 0 && b !== Sim.B_TORCH && t !== Sim.T_MAGMA) { var out2 = z - k >= w.ground[y * Sim.W + x], tl = torchLight[i], fl = fireLight[i]; var L = out2 ? Math.max(sun, tl, fl) : Math.max(tl, fl); col = Pal.lit(col, p, L, tl, fl, sun, out2, t !== Sim.T_OPEN || b === Sim.B_WALL) }
+              if (k === 0 && b !== Sim.B_TORCH && b !== Sim.B_HEARTH && t !== Sim.T_MAGMA) { var out2 = z - k >= w.ground[y * Sim.W + x], tl = Math.max(torchLight[i], beaconLight[i]), fl = fireLight[i]; var L = out2 ? Math.max(sun, tl, fl) : Math.max(tl, fl); col = Pal.lit(col, p, L, tl, fl, sun, out2, t !== Sim.T_OPEN || b === Sim.B_WALL) }
               if (!col) continue
               ctx.fillStyle = k ? Pal.dimmed(col, p.bgRgb, dimK[k]) : col
               ctx.fillRect(x * c, y * c, c, c)
               if (k === 0 && (t === 1 || t === 2 || t === 3 || t === 4 || b === Sim.B_WALL)) { ctx.fillStyle = Pal.edges(ctx.fillStyle, p).seam; ctx.fillRect(x * c, y * c, c, 1); ctx.fillRect(x * c, y * c, 1, c) }
-              if (w.desig[z * N + y * Sim.W + x]) { ctx.fillStyle = p.desig; ctx.fillRect(x * c, y * c, c, c) }
+              if (w.desig[i0]) { ctx.fillStyle = Sim.isUnreachable(w, i0) ? p.desigBad : p.desig; ctx.fillRect(x * c, y * c, c, c) }
             }
             // items: a dot in the middle of the cell; units: a square. Both dim with depth when seen from above.
             for (var q = 0; q < w.items.length; q++) {
               var it = w.items[q]
               if (it.by) continue
               var dk = Sim.depthBelow(w, it.i, z); if (dk < 0) continue
+              if (fog && !Sim.seenAt(w, it.i)) continue
               var icol = it.t === "food" ? p.itemFood : it.t === "booze" ? p.itemBooze : it.t === "log" ? p.itemLog : it.t === "gem" || it.t === "cutgem" || it.t === "jewel" || it.t === "artifact" ? p.itemGem : it.t === "craft" ? p.itemCraft : p.item
               ctx.fillStyle = dk ? Pal.dimmed(icol, p.bgRgb, dimK[dk]) : icol
               ctx.fillRect(Sim.ix(it.i) * c + 2, Sim.iy(it.i) * c + 2, c - 4, c - 4)
@@ -115,7 +134,8 @@ Item {
             for (var u = 0; u < w.units.length; u++) {
               var un = w.units[u], udk = Sim.depthBelow(w, un.i, z)
               if (udk < 0) continue
-              var ucol = un.k === "dwarf" ? (un.id === World.selectedId ? p.dwarfSel : p.dwarf) : un.k === "goblin" ? p.goblin : un.k === "wolf" ? p.wolf : un.k === "deer" ? p.deer : un.k === "kobold" ? p.kobold : p.merchant
+              if (fog && un.k !== "dwarf" && !Sim.seenAt(w, un.i)) continue
+              var ucol = un.k === "dwarf" ? (un.id === World.selectedId ? p.dwarfSel : p.dwarf) : un.k === "goblin" ? p.goblin : un.k === "wolf" ? p.wolf : un.k === "deer" ? p.deer : un.k === "kobold" ? p.kobold : un.k === "crawler" ? p.crawler : un.k === "sentinel" ? p.sentinel : un.k === "envoy" ? p.envoy : p.merchant
               ctx.fillStyle = udk ? Pal.dimmed(ucol, p.bgRgb, dimK[udk]) : ucol
               ctx.fillRect(Sim.ix(un.i) * c + 1, Sim.iy(un.i) * c + 1, c - 2, c - 2)
             }

@@ -67,11 +67,23 @@ traz uma legenda de cada glifo que o mapa desenha — `Ω` estátua, `‡` forja
 `Esc` (com nada para cancelar) ou o botão **≡ menu** abre o menu; `Esc` nele
 fecha o painel.
 
-- **Novo jogo**: Embarque clássico (7 anões, do zero), Fortaleza pronta (12,
-  ondas a cada 15 dias), Guarnição (10, seis na milícia, ondas cedo e
-  frequentes), Vale tranquilo (fortaleza pronta, sem inimigos), Cerco (8,
-  ondas grandes desde o dia 2). **Personalizado** escolhe predefinição, número
-  de anões (4–24) e semente numérica.
+- **Novo jogo**: sete predefinições, cada uma uma parte diferente do jogo para
+  olhar primeiro. Elas diferem em mais do que quantos goblins chegam: quanto do
+  salão foi arrumado, quantas estacas há no corredor, se a fortaleza se formou
+  em famílias e se o poço já alcança as profundezas.
+
+  | predefinição | anões | para que serve |
+  |---|---|---|
+  | **Embarque clássico** | 7 | do zero, como manda a tradição |
+  | **Fortaleza pronta** | 12 | quatro níveis escavados, lareira, mesas de jogo, estacas na entrada; ondas a cada 15 dias |
+  | **Guarnição** | 10 | seis na milícia, seis armadilhas, salão nenhum; ondas cedo e frequentes |
+  | **Vale tranquilo** | 12 | sem inimigos e o salão inteiro arrumado — duas lareiras, dois cristais, quatro mesas de jogo. A economia e os humores sem sangue |
+  | **Casa cheia** | 16 | todos chegaram em família, metade já inseparável. As histórias começam de véspera, e a primeira perda dói |
+  | **Soleira das profundezas** | 12 | o poço já está cavado até o ferro. O último nível — 50% de acordar algo, e a tumba na rocha dele — fica para você |
+  | **Cerco** | 8 | ondas grandes desde o segundo dia com veteranos, e estacas por todo o corredor. Ninguém espera que dure |
+
+  **Personalizado** escolhe predefinição, número de anões (4–24) e semente
+  numérica.
 - **Salvar / Carregar**: cinco slots com nome, predefinição, data do jogo,
   população e quando foi gravado; `x` duas vezes limpa um slot para reuso. O
   autosave (`world.json`) continua independente dos slots.
@@ -85,7 +97,7 @@ fecha o painel.
   painel aberto, blocos ou glifos, janelinha de canto, teto de população,
   inimigos ligados ou não, ondas goblin calmas / normais / brutais.
 
-IPC equivalente: `omarchy-shell omahold preset <classic|ready|garrison|peaceful|siege>`,
+IPC equivalente: `omarchy-shell omahold preset <classic|ready|garrison|peaceful|kinfolk|depths|siege>`,
 `saveSlot <n>`, `loadSlot <n>`, `slots`, `presets`.
 
 ## Ordens de oficina (`w`)

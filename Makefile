@@ -6,10 +6,12 @@
 #   make hostile   what save.py refuses, in a throwaway $HOME
 #   make deep      the relic from the tomb and the court of the deep
 #   make halls     the hearth, the crystal, the game table and the traps
+#   make presets   every preset built, checked against its blurb and played a year
+#   make surfaces  what the panel and the corner window have to agree on
 
-.PHONY: test sim i18n hostile deep halls validate
+.PHONY: test sim i18n hostile deep halls presets surfaces validate
 
-test: sim i18n deep halls hostile
+test: sim i18n deep halls presets surfaces hostile
 
 sim:
 	@echo "== simulation =="
@@ -28,6 +30,14 @@ deep:
 halls:
 	@echo "== halls =="
 	@node test/halls.js | tail -1
+
+presets:
+	@echo "== presets =="
+	@node test/presets.js | tail -1
+
+surfaces:
+	@echo "== surfaces =="
+	@node test/surfaces.js | tail -1
 
 hostile:
 	@echo "== save.py =="

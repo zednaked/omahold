@@ -70,11 +70,22 @@ built from the same tables the map uses, so it cannot drift out of date.
 `Esc` (with nothing to cancel) or the **≡ menu** button opens the menu; `Esc`
 in it closes the panel.
 
-- **New game**: Classic embark (7 dwarves, from nothing), Ready hold (12,
-  waves every 15 days), Garrison (10, six in the militia, waves early and
-  often), Quiet valley (a ready hold, no enemies), Siege (8, big waves from
-  day 2). **Custom** picks the preset, the number of dwarves (4–24) and a
-  numeric seed.
+- **New game**: seven presets, each one a different part of the game to look at
+  first. They differ in more than how many goblins arrive: how much of the hall
+  was arranged, how many spikes are in the corridor, whether the hold came
+  together as families, and whether the shaft already reaches the deep.
+
+  | preset | dwarves | what it is for |
+  |---|---|---|
+  | **Classic embark** | 7 | from nothing, as tradition demands |
+  | **Ready fortress** | 12 | four levels dug, a hearth, game tables, spikes at the gate; waves every 15 days |
+  | **Garrison** | 10 | six in the militia, six traps, no hall to speak of; waves early and often |
+  | **Quiet valley** | 12 | no enemies and the whole hall arranged — two hearths, two crystal columns, four game tables. The economy and the moods without blood |
+  | **Full house** | 16 | everyone arrived as families, half of them already inseparable. The stories start the night before, and the first loss hurts |
+  | **Threshold of the deep** | 12 | the shaft is already cut down to the iron. The last level — 50% to wake something, and the tomb in its rock — is left for you |
+  | **Siege** | 8 | big waves from day two with veterans, and spikes the length of the corridor. Nobody expects this to last |
+
+  **Custom** picks the preset, the number of dwarves (4–24) and a numeric seed.
 - **Save / Load**: five slots with the name, preset, in-game date, population
   and when it was written; `x` twice clears a slot for reuse. The autosave
   (`world.json`) stays independent of the slots.
@@ -89,7 +100,7 @@ in it closes the panel.
   or glyphs, the corner window, the population cap, enemies on or off, goblin
   waves calm / normal / brutal, and the language.
 
-The same over IPC: `omarchy-shell omahold preset <classic|ready|garrison|peaceful|siege>`,
+The same over IPC: `omarchy-shell omahold preset <classic|ready|garrison|peaceful|kinfolk|depths|siege>`,
 `saveSlot <n>`, `loadSlot <n>`, `slots`, `presets`.
 
 ## Workshop orders (`w`)
@@ -615,6 +626,8 @@ make sim       the simulation, headless
 make i18n      both languages, the fallback, and key parity
 make deep      the relic from the tomb and the court of the deep
 make halls     the hearth, the crystal column, the game table and the traps
+make presets   every preset built, checked against its blurb and played a year
+make surfaces  what the panel and the corner window have to agree on
 make hostile   what save.py refuses, in a throwaway $HOME
 make validate  omarchy plugin validate .
 ```
