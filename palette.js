@@ -60,6 +60,12 @@ function build(theme) {
     // terrain bodies (solid)
     soil: ground(yellow, 0.62), stone: ground(gray, 0.45), ore: ground(byellow, 0.35), gem: ground(bmag, 0.35),
     tree: ground(green, 0.35), treeGlyph: css(bgreen), fungus: ground(magenta, 0.45), fungusGlyph: css(bmag),
+    // unexplored rock: a shade off the background, so "not dug yet" reads
+    // differently from "outside the map"
+    fog: ground(gray, 0.06),
+    // the mark of a hunch: visible enough to aim a pick at, faint enough to
+    // read as a feeling rather than a fact
+    hunch: css(mix(fg, bg, 0.55)),
     water: ground(blue, 0.3), waterGlyph: css(bblue), magma: ground(red, 0.2), magmaGlyph: css(byellow),
     shrub: ground(green, 0.55), shrubGlyph: css(green),
     // floors (open)

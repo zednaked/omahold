@@ -33,6 +33,10 @@ Singleton {
   property int backgroundMs: 2000     // tick interval while nobody watches (0 = freeze)
   property int popCap: 20
   property bool glyphs: false         // pure-glyph rendering instead of blocks
+  // Unexplored rock is hidden, which is the default because finding the gem
+  // seam is the game. Turning it off shows the whole map, for anyone who would
+  // rather plan than discover.
+  property bool fog: true
   property int viewZ: 5
   property int followId: 0
   property int selectedId: 0
@@ -371,10 +375,11 @@ Singleton {
     if (o.enemies !== undefined) { root.enemies = !!o.enemies; if (root.w) root.w.peaceful = !root.enemies }
     if (o.speed !== undefined) root.speed = Number(o.speed)
     if (o.lang !== undefined && I18n.known(String(o.lang))) root.lang = String(o.lang)
+    if (o.fog !== undefined) root.fog = !!o.fog
     root.applyingOptions = false
   }
   function saveOptions() {
-    var o = { backgroundMs: root.backgroundMs, glyphs: root.glyphs, peek: root.peek, popCap: root.popCap, difficulty: root.difficulty, enemies: root.enemies, speed: root.speed, lang: root.lang }
+    var o = { backgroundMs: root.backgroundMs, glyphs: root.glyphs, peek: root.peek, popCap: root.popCap, difficulty: root.difficulty, enemies: root.enemies, speed: root.speed, lang: root.lang, fog: root.fog }
     root.queueWrite("options.json", JSON.stringify(o))
   }
   function setDifficulty(d, quiet) {
@@ -388,6 +393,7 @@ Singleton {
   // the engine's next evaluation, and applyingOptions flips inside one call
   onBackgroundMsChanged: if (root.ready && !root.applyingOptions) root.saveOptions()
   onGlyphsChanged: if (root.ready && !root.applyingOptions) root.saveOptions()
+  onFogChanged: { root.rev++; if (root.ready && !root.applyingOptions) root.saveOptions() }
   onPeekChanged: if (root.ready && !root.applyingOptions) root.saveOptions()
   onSpeedChanged: if (root.ready && !root.applyingOptions) root.saveOptions()
   onPopCapChanged: { if (root.w) root.w.popCap = root.popCap; if (root.ready && !root.applyingOptions) root.saveOptions() }

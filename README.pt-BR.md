@@ -142,6 +142,41 @@ fortaleza não tiver nenhum canto quieto e alcançável — tudo ocupado, ou o
 único espaço isolado sem escada — os mortos ficam no chão e isso aparece no
 humor de todos. As Lendas contam quantos foram sepultados.
 
+## O que a fortaleza sabe
+
+O mapa mostrava tudo. As cavernas, os veios de gema e os de minério estavam na
+tela antes de uma picareta os tocar, então cavar nunca era exploração — você já
+sabia para onde ir, e a única dúvida era se valia a caminhada.
+
+Agora a rocha não explorada é desenhada como não explorada. Uma célula passa a
+ser conhecida quando é cavada, quando está ao lado de algo cavado (a parede que
+se vê de dentro de um corredor) e quando um anão passa perto. Três coisas são
+conhecidas desde o início, porque esconder seria névoa por esporte: **tudo no
+nível do chão natural ou acima** (você vê o céu e a encosta onde desembarcou),
+**tudo que a fortaleza já alcança a pé**, e as paredes ao lado. Uma fortaleza
+pronta conhece os próprios quartos.
+
+No embarque isso deixa 11% do subsolo conhecido e **nenhum veio de gema, nenhum
+de minério e nenhum musgo de caverna na tela**.
+
+**Um pressentimento.** Seus anões percebem que há *algo* atrás da parede em
+frente — não o que é. Um `·` numa célula não explorada quer dizer que eles
+sentem algo uma célula adiante: um veio, minério ou uma caverna aberta. Só é
+perguntado às paredes que dão para algo conhecido, então um pressentimento é
+sempre sobre rocha em que alguém poderia bater com a picareta.
+
+Eles erram de propósito. Medido em quatro sementes: das paredes que têm algo
+atrás, eles sentem **75%**; e das dicas que dão, **16% não têm nada atrás**. Um
+pressentimento que nunca erra é só o mapa com passos a mais. A mesma marca vale
+para um veio de gema e para uma caverna, porque é de fato tudo o que eles
+sabem.
+
+A sensação não tremula: é decidida pela célula, não pelos dados, então a mesma
+parede dá o mesmo pressentimento até ser cavada.
+
+**`≡ menu → Opções → Rocha não explorada`** desliga tudo e mostra o mapa
+completo, veios e tudo, para quem preferir planejar a descobrir.
+
 ## O que dorme lá embaixo
 
 Cavar fundo só dava lucro. Cobre virava ferro virava aço, as gemas melhoravam,

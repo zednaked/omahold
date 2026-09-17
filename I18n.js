@@ -618,6 +618,10 @@ var STRINGS = {
     "msg.cutoff": "{0} cannot reach food or drink: cut off from the rest of the hold.",
     "lg.cutoff": "{0} was cut off in year {1}.",
     "p.cutoff": "CUT OFF: cannot reach food or drink",
+    "m.opt.fog": "Unexplored rock",
+    "m.opt.fog.on": "hidden — a dot marks a hunch",
+    "m.opt.fog.off": "shown — the whole map, seams and all",
+    "h.leg.fog": "· something is felt past this wall, and they are wrong about one in six",
     // what sleeps below
     "msg.deep.quiet": "Level {0} is open. The silence down here is a different silence.",
     "msg.deep.wake": "Something wakes on level {0}, asleep since before this hold.",
@@ -1303,6 +1307,10 @@ var STRINGS = {
     "msg.cutoff": "{0} não alcança comida nem bebida: está isolado do resto da fortaleza.",
     "lg.cutoff": "{0} ficou isolado no ano {1}.",
     "p.cutoff": "ISOLADO: não alcança comida nem bebida",
+    "m.opt.fog": "Rocha não explorada",
+    "m.opt.fog.on": "escondida — um ponto marca um pressentimento",
+    "m.opt.fog.off": "à mostra — o mapa inteiro, veios e tudo",
+    "h.leg.fog": "· sentem algo atrás desta parede, e erram uma em seis",
     // what sleeps below
     "msg.deep.quiet": "Nível {0} aberto. O silêncio aqui embaixo é diferente.",
     "msg.deep.wake": "Algo desperta no nível {0}, adormecido desde antes desta fortaleza.",

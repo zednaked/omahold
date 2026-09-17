@@ -226,7 +226,7 @@ function newWorld(seed) {
     v: 1, seed: seed >>> 0, rs: seed >>> 0, tick: 0,
     tile: new Uint8Array(NN), floor: new Uint8Array(NN), build: new Uint8Array(NN),
     desig: new Uint8Array(NN), dbuild: new Uint8Array(NN), grow: new Uint8Array(NN),
-    ground: new Uint8Array(N),
+    seen: new Uint8Array(NN), ground: new Uint8Array(N),
     items: [], units: [], nextId: 1,
     log: [], legends: [], artifacts: [], dead: [],
     name: "", wealth: 0, alerts: 0, popCap: 20, graveyard: -1, done: {}, legendary: 0, siege: 0, pressure: 0, woke: {}, stirred: 0, tomb: 0, baron: 0, demand: null, demandSince: 0, siegeSince: 0,
@@ -240,6 +240,7 @@ function newWorld(seed) {
   }
   w.name = fortName(w)
   generate(w)
+  seedSeen(w)
   return w
 }
 
@@ -915,6 +916,7 @@ function step(w, u) {
   var nx = u.path[u.pi]
   if (!passableFor(w, nx, u)) { u.path = null; return -1 }
   u.i = nx; u.pi++
+  if (u.k === "dwarf") markSeen(w, u.i)
   if (u.carry) { var c = itemById(w, u.carry); if (c) c.i = u.i }
   if (u.pi >= u.path.length) { u.path = null; return 1 }
   return 0
@@ -1055,6 +1057,7 @@ function finishDig(w, u, i, stair) {
   w.tile[i] = T_OPEN
   // greed has a price now: opening floor on a level nobody had reached may
   // wake what has been asleep down there since before the hold
+  markSeen(w, i)
   var zNow = iz(i)
   w.deepest = Math.min(zBefore, zNow)
   if (zNow < zBefore) maybeWake(w, zNow)
@@ -2282,6 +2285,101 @@ function wearOut(w, u, slot) {
 
 // The last dwarf is dead. Losing is fun, but the world should stop pretending
 // there is a fortress here: no more waves, caravans, thieves or migrants.
+// ---- what the hold knows ----------------------------------------------------
+// The map used to show everything: the caverns, the gem seams and the ore
+// veins were all on screen before a single pick touched them, so digging was
+// never exploration — you already knew where to go, and the only question was
+// whether it was worth the walk.
+//
+// `w.seen` is one byte per cell: what the hold has actually laid eyes on. A
+// cell becomes known when it is dug, when it is next to something dug (the
+// wall you can see from inside a corridor), and when a dwarf walks near it.
+//
+// Three things are known from the start, because hiding them would be fog for
+// its own sake: everything at or above the natural ground (you can see the
+// sky, and the hillside you embarked on), everything already excavated (a
+// ready hold knows its own rooms), and everything beside it.
+function seenAt(w, i) {
+  if (!w.seen) return true
+  if (w.seen[i]) return true
+  // at or above the surface there is nothing to discover
+  return iz(i) >= w.ground[i % N]
+}
+function markSeen(w, i, r) {
+  if (!w.seen) return
+  var x = ix(i), y = iy(i), z = iz(i), rad = r || 1
+  for (var dy = -rad; dy <= rad; dy++) for (var dx = -rad; dx <= rad; dx++) {
+    var nx = x + dx, ny = y + dy
+    if (!inb(nx, ny, z)) continue
+    w.seen[idx(nx, ny, z)] = 1
+  }
+  // and the floor below an open cell, and the ceiling above: standing in a
+  // room you can tell there is rock over your head
+  if (z > 0) w.seen[i - N] = 1
+  if (z < D - 1) w.seen[i + N] = 1
+}
+// What the dwarves think is behind the wall in front of them, and it is
+// sometimes wrong.
+//
+// Only asked of unexplored cells that touch something known — the rock face
+// you are standing at, not the whole map — so a hunch is always about a wall
+// somebody could put a pick to. It looks one cell past the face: a gem seam, a
+// vein, or the moss of an open cavern.
+//
+// The result is decided by `hash(i)`, not by the dice, so it does not flicker
+// between frames: the same wall gives the same feeling until it is dug. They
+// notice what is there seven times in ten, and about one wall in twenty-five
+// feels promising with nothing behind it at all. Being wrong is the point —
+// a hunch that is never wrong is just the map with extra steps.
+function hunch(w, i) {
+  if (!w.seen || w.seen[i]) return 0
+  var z = iz(i)
+  if (z >= w.ground[i % N]) return 0
+  if (!solid(w.tile[i])) return 0
+  var x = ix(i), y = iy(i)
+  // must be at the face of something known
+  var atFace = false
+  if (x > 0 && w.seen[i - 1]) atFace = true
+  else if (x < W - 1 && w.seen[i + 1]) atFace = true
+  else if (y > 0 && w.seen[i - W]) atFace = true
+  else if (y < H - 1 && w.seen[i + W]) atFace = true
+  else if (z < D - 1 && w.seen[i + N]) atFace = true
+  if (!atFace) return 0
+  // one cell past the face, in the four directions
+  var worth = 0
+  for (var d = 0; d < 4; d++) {
+    var nx = x + (d === 0 ? -1 : d === 1 ? 1 : 0), ny = y + (d === 2 ? -1 : d === 3 ? 1 : 0)
+    if (!inb(nx, ny, z)) continue
+    var j = idx(nx, ny, z)
+    var t = w.tile[j]
+    if (t === T_GEM) { worth = 2; break }
+    if (t === T_ORE) worth = Math.max(worth, 1)
+    else if (t === T_OPEN && w.floor[j] !== F_NONE && !w.seen[j]) worth = Math.max(worth, 1)
+  }
+  var h = hash(i) % 100
+  if (worth) return h < 70 ? worth : 0
+  // 1 in 100, not 4: the false positive lands on every wall at the face, of
+  // which there are many, while the true one lands on the few that have
+  // something behind them. At 4% the hints were 56% wrong — noise, not a
+  // hunch.
+  return h < 1 ? 1 : 0
+}
+
+// Everything the hold can be said to know on the day it starts.
+function seedSeen(w) {
+  w.seen = new Uint8Array(NN)
+  // the sky and the hillside: nothing to discover there
+  for (var i = 0; i < NN; i++) if (iz(i) >= w.ground[i % N]) w.seen[i] = 1
+  // and whatever the hold can already walk to, plus the walls around it.
+  // Marking *every* open cell instead put 28 of 100 gem seams on screen at
+  // embark, because the caverns on level 1 are generated open and enormous —
+  // and a cavern nobody has reached is exactly the thing worth discovering.
+  if (w.depot >= 0) {
+    var reach = reachableFrom(w, [w.depot], null)
+    for (var j = 0; j < NN; j++) if (reach[j]) markSeen(w, j)
+  }
+}
+
 // ---- what sleeps below ------------------------------------------------------
 // Digging down only ever paid: copper became iron became steel, the gems got
 // better, and the magma milestone waited at the bottom. The only thing that
@@ -2922,6 +3020,7 @@ function scenario(w, n, opts) {
   w.preset = opts.name || "Fortaleza pronta"
   w.popCap = Math.max(w.popCap, n + 6)
   w.liquidBudget = { water: 60, magma: 30 }
+  seedSeen(w)
   w.dirty = true; w.wealth = computeWealth(w)
   w.log = []; w.legends = []
   announce(w, LF("msg.scenario", "{0}: {1} já está escavada e guarnecida por {2} anões ({3} na milícia).{4}", w.preset || L("preset.scenario", "Cenário"), w.name, n, militia, w.scenario ? LF("msg.scenario.raid", " A primeira onda goblin vem em {0} dias.", Math.round(w.scenario.nextRaid / DAY)) : L("msg.scenario.peace", " Não há inimigos neste vale.")), 1)
@@ -3047,7 +3146,7 @@ function deserialize(json) {
   if (!o || o.v !== 1) return null
   var w = newWorldEmpty()
   for (var k in o) {
-    if (k === "tile" || k === "floor" || k === "build" || k === "desig" || k === "dbuild" || k === "grow" || k === "ground") w[k] = unrle(o[k], k === "ground" ? N : NN)
+    if (k === "tile" || k === "floor" || k === "build" || k === "desig" || k === "dbuild" || k === "grow" || k === "seen" || k === "ground") w[k] = unrle(o[k], k === "ground" ? N : NN)
     else w[k] = o[k]
   }
   w.claim = new Int32Array(NN); w.unreach = {}; w.dirty = true
@@ -3056,6 +3155,7 @@ function deserialize(json) {
   var st = w.stats || (w.stats = {})
   for (var sk = 0; sk < STAT_KEYS.length; sk++) if (typeof st[STAT_KEYS[sk]] !== "number") st[STAT_KEYS[sk]] = 0
   if (!w.orders) w.orders = []
+  if (!w.seen || !w.seen.length) seedSeen(w)   // a save from before the fog knows what it has dug
   if (typeof w.graveyard !== "number") w.graveyard = -1
   if (!w.done) w.done = {}
   if (typeof w.legendary !== "number") w.legendary = 0
@@ -3086,7 +3186,7 @@ function deserialize(json) {
 }
 function newWorldEmpty() {
   return { v: 1, seed: 0, rs: 0, tick: 0, tile: new Uint8Array(NN), floor: new Uint8Array(NN), build: new Uint8Array(NN), desig: new Uint8Array(NN),
-    dbuild: new Uint8Array(NN), grow: new Uint8Array(NN), ground: new Uint8Array(N), items: [], units: [], nextId: 1, log: [], legends: [], artifacts: [],
+    dbuild: new Uint8Array(NN), grow: new Uint8Array(NN), seen: new Uint8Array(NN), ground: new Uint8Array(N), items: [], units: [], nextId: 1, log: [], legends: [], artifacts: [],
     dead: [], orders: [], graveyard: -1, done: {}, legendary: 0, siege: 0, pressure: 0, woke: {}, stirred: 0, tomb: 0, baron: 0, demand: null, demandSince: 0, siegeSince: 0, name: "", wealth: 0, alerts: 0, popCap: 20, liquidBudget: { water: 60, magma: 30 }, caravan: null, raid: null, lockdown: false, depot: -1,
     weather: 0, stats: newStats(), fallen: false, claim: null, unreach: {}, lastMoodTick: 0 }
 }

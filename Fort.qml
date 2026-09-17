@@ -246,6 +246,7 @@ Item {
       item(root.t("m.opt.popcap"), String(World.popCap), "◂ ▸", null, { value: true, adjust: function (d) { var caps = [12, 20, 30, 40]; var i = caps.indexOf(World.popCap); if (i < 0) i = 1; i = (i + d + caps.length) % caps.length; World.popCap = caps[i]; rebuildMenu() } })
       item(root.t("m.opt.enemies"), root.t(World.enemies ? "m.opt.enemies.yes" : "m.opt.enemies.no"), "◂ ▸", null, { value: true, adjust: function () { World.setEnemies(!World.enemies); rebuildMenu() } })
       item(root.t("m.opt.waves"), root.t(World.difficulty === "calma" ? "m.opt.waves.calm" : World.difficulty === "brutal" ? "m.opt.waves.brutal" : "m.opt.waves.normal"), "◂ ▸", null, { value: true, adjust: function (d) { var ds = ["calma", "normal", "brutal"]; var i = ds.indexOf(World.difficulty); i = (i + d + 3) % 3; World.setDifficulty(ds[i]); rebuildMenu() } })
+      item(root.t("m.opt.fog"), root.t(World.fog ? "m.opt.fog.on" : "m.opt.fog.off"), "◂ ▸", null, { value: true, wrap: true, adjust: function () { World.fog = !World.fog; rebuildMenu() } })
       item(root.t("m.opt.lang"), World.langName(), "◂ ▸", null, { value: true, adjust: function () { World.cycleLang(); root.flash(root.tf("fl.lang", World.langName())); rebuildMenu() } })
       gap()
       item(root.t("m.back"), "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
@@ -537,6 +538,7 @@ Item {
       }
       if (legRow) out.push({ t: legRow, c: "", wrap: true })
       out.push({ t: "  ☺ " + root.t("h.leg.dwarf") + "   g " + root.t("unit.goblin") + "   w " + root.t("unit.wolf") + "   d " + root.t("unit.deer") + "   k " + root.t("unit.kobold") + "   c " + root.t("h.leg.deep") + "   S " + root.t("h.leg.sentinel"), c: "", wrap: true })
+      if (World.fog) out.push({ t: "  " + root.t("h.leg.fog"), c: "", wrap: true })
       out.push({ t: root.t("h.leg.note"), c: "muted", wrap: true })
       out.push({ t: "", c: "" })
       out.push({ t: root.t("h.tail"), c: "muted", wrap: true })
@@ -784,8 +786,23 @@ Item {
                 var mode = World.viewMode
                 function bright(i, isOut) { var L = isOut ? Math.max(sun, torchLight[i], fireLight[i]) : Math.max(torchLight[i], fireLight[i]); return isOut ? 0.22 + 0.78 * L : 0.36 + 0.64 * L }
                 // pass 1: terrain
+                var fog = World.fog
                 for (var y = 0; y < HH; y++) for (var x = 0; x < WW; x++) {
                   var i0 = z * N + y * WW + x, i = i0, t = w.tile[i], f = w.floor[i], b = w.build[i], k = 0
+                  // unexplored rock is drawn as unexplored, not as what it
+                  // happens to be: the gem seam is a discovery, not a label
+                  if (fog && !Sim.seenAt(w, i0)) {
+                    ctx.fillStyle = root.pal.fog
+                    ctx.fillRect(x * c, y * c, c, c)
+                    // a hunch: they can tell there is *something* past this
+                    // face, not what it is. Same mark for a gem seam and for
+                    // an open cavern, because that is all they know.
+                    if (Sim.hunch(w, i0)) {
+                      ctx.fillStyle = root.pal.hunch
+                      ctx.fillText("·", x * c + half, y * c + half + 1)
+                    }
+                    continue
+                  }
                   while (t === Sim.T_OPEN && f === Sim.F_NONE && k < 3 && i - N >= 0) { i -= N; k++; t = w.tile[i]; f = w.floor[i]; b = w.build[i] }
                   var fill = null, glyph = null, gcol = null, jit = Sim.hash(i) & 3
                   if (t !== Sim.T_OPEN) {
@@ -878,6 +895,7 @@ Item {
                   var it = w.items[q]; if (it.by) continue
                   var dk = Sim.depthBelow(w, it.i, z); if (dk < 0) continue
                   var bb = w.build[it.i]; if (bb && bb !== Sim.B_STOCK) continue
+                  if (fog && !Sim.seenAt(w, it.i)) continue
                   // a plain record: stashing the depth on the item itself put render
                   // state (`_dk`) into every item, and serialize() copies w.items whole
                   if (!itemAt[it.i] || it.t === "artifact") itemAt[it.i] = { t: it.t, i: it.i, dk: dk }
@@ -889,6 +907,7 @@ Item {
                 for (var u = 0; u < w.units.length; u++) {
                   var un = w.units[u], udk = Sim.depthBelow(w, un.i, z)
                   if (udk < 0) continue
+                  if (fog && un.k !== "dwarf" && !Sim.seenAt(w, un.i)) continue
                   var col = un.k === "dwarf" ? (un.mood_state === "berserk" ? p.urgent : un.mood_state ? p.kobold : p.dwarf) : un.k === "goblin" ? p.goblin : un.k === "wolf" ? p.wolf : un.k === "deer" ? p.deer : un.k === "kobold" ? p.kobold : un.k === "crawler" ? p.crawler : un.k === "sentinel" ? p.sentinel : p.merchant
                   if (un.id === World.selectedId) { ctx.fillStyle = p.select; ctx.fillRect(Sim.ix(un.i) * c, Sim.iy(un.i) * c, c, c); col = p.dwarfSel }
                   if (udk) col = Pal.dimmed(col, p.bgRgb, p.dim[udk])

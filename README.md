@@ -147,6 +147,43 @@ if the hold has no quiet reachable corner — everything occupied, or the only
 isolated space with no stairs — the dead stay on the floor and it shows in
 everyone's mood. The Legends page counts how many were buried.
 
+## What the hold knows
+
+The map used to show everything. The caverns, the gem seams and the ore veins
+were all on screen before a single pick touched them, so digging was never
+exploration — you already knew where to go, and the only question was whether
+it was worth the walk.
+
+Now unexplored rock is drawn as unexplored. A cell becomes known when it is
+dug, when it is beside something dug (the wall you can see from inside a
+corridor), and when a dwarf walks near it. Three things are known from the
+start, because hiding them would be fog for its own sake: **everything at or
+above the natural ground** (you can see the sky and the hillside you embarked
+on), **everything the hold can already walk to**, and the walls beside it. A
+ready hold knows its own rooms.
+
+At embark that leaves 11% of the underground known, and **no gem seam, no vein
+and no cavern moss on screen at all**.
+
+**A hunch.** Your dwarves can tell there is *something* past the wall in front
+of them — not what it is. A `·` on an unexplored cell means they feel
+something one cell further in: a seam, a vein, or an open cavern. It is asked
+only of walls that face somewhere known, so a hunch is always about rock
+somebody could put a pick to.
+
+They are wrong on purpose. Measured over four seeds: of the walls with
+something behind them they feel **75%**, and of the hunches they have **16%
+have nothing behind them at all**. A hunch that is never wrong is just the map
+with extra steps. The same mark is used for a gem seam and for a cavern,
+because that is genuinely all they know.
+
+The feeling does not flicker: it is decided by the cell, not by the dice, so
+the same wall gives the same hunch until it is dug.
+
+**`≡ menu → Options → Unexplored rock`** turns the whole thing off and shows
+the map complete, seams and all, for anyone who would rather plan than
+discover.
+
 ## What sleeps below
 
 Digging down used to only ever pay. Copper became iron became steel, the gems
