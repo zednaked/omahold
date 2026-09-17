@@ -118,13 +118,19 @@ function L(key, fallback) {
   if (!I18N) return fallback !== undefined ? fallback : key
   return I18N.t(I18N_LANG, key)
 }
-function LF(key, fallback, a, b, c, d) {
+// Five slots, not four. The scoreboard passes five and `{4}` was reaching the
+// chronicle unsubstituted: "1 artefato(s), {4} onda(s) repelida(s)".
+function LF(key, fallback) {
+  var n = arguments.length
   if (!I18N) {
-    var s = fallback !== undefined ? fallback : key, args = [a, b, c, d]
-    for (var k = 0; k < args.length; k++) if (args[k] !== undefined) s = s.split("{" + k + "}").join(String(args[k]))
+    var s = fallback !== undefined ? fallback : key
+    for (var k = 2; k < n; k++) if (arguments[k] !== undefined) s = s.split("{" + (k - 2) + "}").join(String(arguments[k]))
     return s
   }
-  return I18N.tf(I18N_LANG, key, a, b, c, d)
+  // hand the whole list through: I18N.tf takes however many it is given
+  var a = [I18N_LANG, key]
+  for (var q = 2; q < n; q++) a.push(arguments[q])
+  return I18N.tf.apply(null, a)
 }
 function LP(n, oneKey, manyKey, oneFall, manyFall) {
   if (!I18N) return n + " " + (n === 1 ? oneFall : manyFall)
@@ -1119,6 +1125,18 @@ function spreadLiquids(w) {
 
 // ---- needs ------------------------------------------------------------------
 function needJob(w, u) {
+  // A dwarf who is desperate and cannot reach a single drop while the cellar
+  // is full is cut off, and the player has no way of knowing. Three of them
+  // died of thirst in a real hold with 59 drinks in a stockpile six cells
+  // away, and the game said nothing at all. It says something now.
+  if ((u.thirst > 95 || u.hunger > 95) && !u.cutoff && w.tick > DAY) {
+    var has = countItems(w, "booze") + countItems(w, "food") + countItems(w, "meal")
+    if (has > 0 && !freeItemReachable(w, u)) {
+      u.cutoff = w.tick
+      announce(w, LF("msg.cutoff", "{0} não alcança comida nem bebida: está isolado do resto da fortaleza.", u.name), 2)
+      legend(w, LF("lg.cutoff", "{0} ficou isolado no ano {1}.", u.name, date(w).year))
+    }
+  }
   if (u.thirst > 65) {
     var b = freeItem(w, "booze", u.i, u, true)
     if (b && go(w, u, function (c) { return c === b.i }, b.i)) { b.res = u.id; setJob(w, u, { k: "drink", i: b.i, item: b.id, prog: 0 }); return true }
@@ -1137,6 +1155,19 @@ function needJob(w, u) {
   }
   return false
 }
+// Is there anything to eat or drink this dwarf can actually walk to? Only asked
+// when one of them is already desperate, so the path search is rare.
+function freeItemReachable(w, u) {
+  var types = ["booze", "meal", "food"]
+  for (var t = 0; t < types.length; t++) {
+    var it = freeItem(w, types[t], u.i, u, true)
+    if (it && pathTo(w, u, it.i, 4000)) return true
+  }
+  // water counts: standing next to the stream is a drink. `findPath` rather
+  // than `go`, which would assign the path and quietly send them walking.
+  if (findPath(w, u.i, function (c) { return touchesWater(w, c) }, nearestTile(w, u.i, T_WATER), u, 4000)) return true
+  return false
+}
 function claimBed(w, u) {
   var taken = {}
   for (var k = 0; k < w.units.length; k++) if (w.units[k].k === "dwarf" && w.units[k].bed >= 0) taken[w.units[k].bed] = true
@@ -1149,6 +1180,20 @@ function touchesTile(w, c, tt) {
   return (x > 0 && w.tile[c - 1] === tt) || (x < W - 1 && w.tile[c + 1] === tt) || (y > 0 && w.tile[c - W] === tt) || (y < H - 1 && w.tile[c + W] === tt)
 }
 function touchesWater(w, c) { return touchesTile(w, c, T_WATER) }
+function unitAt(w, i) {
+  for (var k = 0; k < w.units.length; k++) if (w.units[k].i === i) return w.units[k]
+  return null
+}
+// How many of the four sides can be walked from here. Two or fewer means this
+// cell is a corridor, and closing it can isolate whatever is behind it.
+function openNeighbours(w, i) {
+  var n = 0, x = ix(i), y = iy(i)
+  if (x > 0 && passable(w, i - 1)) n++
+  if (x < W - 1 && passable(w, i + 1)) n++
+  if (y > 0 && passable(w, i - W)) n++
+  if (y < H - 1 && passable(w, i + W)) n++
+  return n
+}
 function nearestTile(w, from, tt) {
   var c = cache(w), list = tt === T_WATER ? c.water : tt === T_SHRUB ? c.shrubs : null
   if (list) { var n = nearestOf(list, from); return n < 0 ? from : n }
@@ -2513,9 +2558,23 @@ function dayStart(w, d) {
   // deer replenish, trees regrow
   var deer = 0; for (var u = 0; u < w.units.length; u++) if (w.units[u].k === "deer") deer++
   if (deer < 3 && chance(w, 0.3)) { var dsp = edgeSurface(w); if (dsp >= 0) addUnit(w, "deer", dsp) }
+  // Trees grow back next to trees — but never on top of somebody, and never
+  // into the last way out of somewhere.
+  //
+  // Both guards are here because a real hold died of it: three dwarves ended
+  // up walled into a six-cell pocket of grass, one of them standing *inside* a
+  // tree that had grown on their own square, with 59 drinks and 131 food in a
+  // stockpile they could no longer reach. They did not fail to look for water.
+  // They were fenced in by the scenery, and nothing in the game said so.
   for (var t = 0; t < 6; t++) {
     var x = ri(w, W), y = ri(w, H), i = surfaceIdx(w, x, y)
-    if (w.tile[i] === T_OPEN && w.floor[i] === F_GRASS && w.build[i] === B_NONE && w.desig[i] === DG_NONE && touchesTile(w, i, T_TREE) && chance(w, 0.5)) { w.tile[i] = T_TREE; w.dirty = true }
+    if (w.tile[i] !== T_OPEN || w.floor[i] !== F_GRASS || w.build[i] !== B_NONE || w.desig[i] !== DG_NONE) continue
+    if (!touchesTile(w, i, T_TREE) || !chance(w, 0.5)) continue
+    if (unitAt(w, i)) continue
+    // a cell with two or fewer ways out of it is a corridor, and a tree there
+    // can cut a hold in half
+    if (openNeighbours(w, i) <= 2) continue
+    w.tile[i] = T_TREE; w.dirty = true
   }
 }
 // wave 0: an ordinary ambush sized by wealth. wave >= 1: the scenario's

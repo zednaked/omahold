@@ -404,6 +404,7 @@ Item {
           var sk = Object.keys(sel.skills).filter(function (s) { return sel.skills[s] > 0 }).sort(function (a, b) { return sel.skills[b] - sel.skills[a] }).slice(0, 4)
           out.push({ t: root.tf("p.skills", sk.length ? sk.map(function (s) { return Sim.skillName(s) + " " + sel.skills[s] }).join(", ") : root.t("p.skills.none")), c: "muted", wrap: true })
           if (sel.likes) out.push({ t: root.tf("p.prefers", Sim.workName(sel.likes), Sim.workName(sel.dislikes)), c: "muted", wrap: true })
+          if (sel.cutoff) out.push({ t: root.t("p.cutoff"), c: "urgent", wrap: true })
           if (sel.avoid && (sel.avoidUntil || 0) > w.tick) out.push({ t: root.tf("p.frustrated.off", Sim.workName(sel.avoid)), c: "warn", wrap: true })
           else if ((sel.frust || 0) > 0) out.push({ t: root.tf("p.frustrated", sel.frust), c: "warn" })
           out.push({ t: root.tf("p.now", Sim.jobName(sel), Sim.iz(sel.i), World.followId === sel.id ? root.t("p.following") : ""), c: "", wrap: true })

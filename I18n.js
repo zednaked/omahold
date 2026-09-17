@@ -47,12 +47,15 @@ function t(lang, key) {
   return key
 }
 
-// `{0}`…`{4}` in the string, filled in order.
-function tf(lang, key, a, b, c, d, e) {
-  var s = t(lang, key), args = [a, b, c, d, e]
-  for (var k = 0; k < args.length; k++) {
-    if (args[k] === undefined) continue
-    s = s.split("{" + k + "}").join(String(args[k]))
+// `{0}`, `{1}`, … filled in order, however many there are. Fixed slots were a
+// trap: the string with six placeholders (the workshop counts) and the one
+// with five (the reckoning) both reached the screen with the last `{n}`
+// unsubstituted, because the function only took five.
+function tf(lang, key) {
+  var s = t(lang, key)
+  for (var k = 2; k < arguments.length; k++) {
+    if (arguments[k] === undefined) continue
+    s = s.split("{" + (k - 2) + "}").join(String(arguments[k]))
   }
   return s
 }
@@ -612,6 +615,9 @@ var STRINGS = {
     "sun.dusk": " · dusk",
     "bar.loading2": "loading the world…",
 
+    "msg.cutoff": "{0} cannot reach food or drink: cut off from the rest of the hold.",
+    "lg.cutoff": "{0} was cut off in year {1}.",
+    "p.cutoff": "CUT OFF: cannot reach food or drink",
     // what sleeps below
     "msg.deep.quiet": "Level {0} is open. The silence down here is a different silence.",
     "msg.deep.wake": "Something wakes on level {0}, asleep since before this hold.",
@@ -1294,6 +1300,9 @@ var STRINGS = {
     "sun.dusk": " · entardecer",
     "bar.loading2": "carregando o mundo…",
 
+    "msg.cutoff": "{0} não alcança comida nem bebida: está isolado do resto da fortaleza.",
+    "lg.cutoff": "{0} ficou isolado no ano {1}.",
+    "p.cutoff": "ISOLADO: não alcança comida nem bebida",
     // what sleeps below
     "msg.deep.quiet": "Nível {0} aberto. O silêncio aqui embaixo é diferente.",
     "msg.deep.wake": "Algo desperta no nível {0}, adormecido desde antes desta fortaleza.",

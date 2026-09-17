@@ -66,5 +66,22 @@ if (wide.length) {
   if (wide.length > 6) console.log(`  … e mais ${wide.length - 6}`)
 }
 
+// 6. nenhuma mensagem chega à tela com um {n} sem substituir. Isto não se vê
+// estaticamente — depende de quantos argumentos cada chamada passa — então
+// roda o jogo e olha o que foi escrito. Foi assim que o placar apareceu na
+// crônica de uma fortaleza real como "1 artefato(s), {4} onda(s) repelida(s)".
+const S2 = load("sim.js", "newScenario, setI18n, tick, YEAR, dwarves")
+for (const lang of ["en", "pt"]) {
+  S2.setI18n(I18n, lang)
+  const w2 = S2.newScenario(11, 12)
+  for (let k = 0; k < S2.YEAR * 2; k++) S2.tick(w2)
+  const holes = []
+  for (const e of w2.log) if (/\{\d\}/.test(e.m)) holes.push(e.m)
+  for (const g of w2.legends) if (/\{\d\}/.test(g.m)) holes.push(g.m)
+  for (const d of w2.dead) if (/\{\d\}/.test(d.how)) holes.push(d.how)
+  for (const u of S2.dwarves(w2)) for (const th of u.thoughts) if (/\{\d\}/.test(th.m)) holes.push(th.m)
+  ok(holes.length === 0, `[${lang}] ${holes.length} mensagem(ns) com {n} sem substituir: ${holes.slice(0, 2).join(" | ")}`)
+}
+
 console.log(`\n${en_keys.length} chaves em cada idioma · ${fails} falha(s)`)
 process.exit(fails ? 1 : 0)
