@@ -2313,10 +2313,12 @@ function markSeen(w, i, r) {
     if (!inb(nx, ny, z)) continue
     w.seen[idx(nx, ny, z)] = 1
   }
-  // and the floor below an open cell, and the ceiling above: standing in a
-  // room you can tell there is rock over your head
-  if (z > 0) w.seen[i - N] = 1
-  if (z < D - 1) w.seen[i + N] = 1
+  // Nothing vertical. Marking the cell below — "you can see the floor under
+  // your feet" — meant walking around on the surface revealed the entire layer
+  // of rock beneath it: 40% of one level and 80% of another were on screen
+  // before anyone dug, which is the upper level bleeding into the fog of the
+  // one below. Standing in a room tells you nothing about what the rock above
+  // or below you is made of.
 }
 // What the dwarves think is behind the wall in front of them, and it is
 // sometimes wrong.

@@ -789,21 +789,26 @@ Item {
                 var fog = World.fog
                 for (var y = 0; y < HH; y++) for (var x = 0; x < WW; x++) {
                   var i0 = z * N + y * WW + x, i = i0, t = w.tile[i], f = w.floor[i], b = w.build[i], k = 0
-                  // unexplored rock is drawn as unexplored, not as what it
-                  // happens to be: the gem seam is a discovery, not a label
-                  if (fog && !Sim.seenAt(w, i0)) {
+                  // An open cell with no floor shows the level below through
+                  // the gap, so `i` can end up several levels down from `i0`.
+                  while (t === Sim.T_OPEN && f === Sim.F_NONE && k < 3 && i - N >= 0) { i -= N; k++; t = w.tile[i]; f = w.floor[i]; b = w.build[i] }
+                  // The fog has to be tested on the cell actually being drawn,
+                  // which is `i`, not on the one being looked at. Testing `i0`
+                  // let a known gap on an upper level expose the unexplored
+                  // level underneath it — you could see past the caverns
+                  // through any hole above them.
+                  if (fog && !Sim.seenAt(w, i)) {
                     ctx.fillStyle = root.pal.fog
                     ctx.fillRect(x * c, y * c, c, c)
-                    // a hunch: they can tell there is *something* past this
-                    // face, not what it is. Same mark for a gem seam and for
-                    // an open cavern, because that is all they know.
+                    // a hunch is about the wall on *this* level, so it is
+                    // asked of i0; over a gap it returns nothing, which is
+                    // right — there is no wall there to have a feeling about
                     if (Sim.hunch(w, i0)) {
                       ctx.fillStyle = root.pal.hunch
                       ctx.fillText("·", x * c + half, y * c + half + 1)
                     }
                     continue
                   }
-                  while (t === Sim.T_OPEN && f === Sim.F_NONE && k < 3 && i - N >= 0) { i -= N; k++; t = w.tile[i]; f = w.floor[i]; b = w.build[i] }
                   var fill = null, glyph = null, gcol = null, jit = Sim.hash(i) & 3
                   if (t !== Sim.T_OPEN) {
                     switch (t) {
