@@ -1057,7 +1057,7 @@ function finishDig(w, u, i, stair) {
   w.tile[i] = T_OPEN
   // greed has a price now: opening floor on a level nobody had reached may
   // wake what has been asleep down there since before the hold
-  markSeen(w, i)
+  revealRoom(w, i)
   var zNow = iz(i)
   w.deepest = Math.min(zBefore, zNow)
   if (zNow < zBefore) maybeWake(w, zNow)
@@ -2365,6 +2365,39 @@ function hunch(w, i) {
   // something behind them. At 4% the hints were 56% wrong — noise, not a
   // hunch.
   return h < 1 ? 1 : 0
+}
+
+// Breaking into an open space shows you the space. A pick that comes through
+// the wall of a cavern reveals the cavern — the floor you can see across and
+// the walls around it — not one square with a staircase in it.
+//
+// Flood fill over open floor on that level, from the cell just dug, with a
+// budget: a cavern can run the width of the map and a dwarf standing at one
+// end cannot see the other. 240 cells is roughly a chamber you could take in
+// at a glance, and more than any room a player digs on purpose.
+function revealRoom(w, i) {
+  if (!w.seen) return
+  if (w.tile[i] !== T_OPEN || w.floor[i] === F_NONE) { markSeen(w, i); return }
+  var stack = [i], seen = {}, budget = 240
+  seen[i] = true
+  while (stack.length && budget > 0) {
+    var c = stack.pop()
+    budget--
+    markSeen(w, c)
+    var x = ix(c), y = iy(c), z = iz(c)
+    var nbs = []
+    if (x > 0) nbs.push(c - 1)
+    if (x < W - 1) nbs.push(c + 1)
+    if (y > 0) nbs.push(c - W)
+    if (y < H - 1) nbs.push(c + W)
+    for (var k = 0; k < nbs.length; k++) {
+      var j = nbs[k]
+      if (seen[j]) continue
+      seen[j] = true
+      // walk on floor; walls get marked by markSeen and stop the fill
+      if (w.tile[j] === T_OPEN && w.floor[j] !== F_NONE) stack.push(j)
+    }
+  }
 }
 
 // Everything the hold can be said to know on the day it starts.

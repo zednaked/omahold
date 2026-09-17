@@ -165,6 +165,13 @@ ready hold knows its own rooms.
 At embark that leaves 11% of the underground known, and **no gem seam, no vein
 and no cavern moss on screen at all**.
 
+Breaking into an open space shows you the space. A pick that comes through the
+wall of a cavern reveals the cavern — the floor you can see across and the
+walls around it — rather than one square with a staircase in it. It is capped
+at 240 cells, because a cavern can run the width of the map and a dwarf
+standing at one end cannot see the other; a chamber you dug yourself is always
+well inside that.
+
 **A hunch.** Your dwarves can tell there is *something* past the wall in front
 of them — not what it is. A `·` on an unexplored cell means they feel
 something one cell further in: a seam, a vein, or an open cavern. It is asked

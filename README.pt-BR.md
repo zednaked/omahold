@@ -159,6 +159,13 @@ pronta conhece os próprios quartos.
 No embarque isso deixa 11% do subsolo conhecido e **nenhum veio de gema, nenhum
 de minério e nenhum musgo de caverna na tela**.
 
+Romper para dentro de um espaço aberto mostra o espaço. Uma picareta que
+atravessa a parede de uma caverna revela a caverna — o chão que se vê de ponta
+a ponta e as paredes em volta — em vez de um quadradinho com uma escada dentro.
+O limite é 240 células, porque uma caverna pode atravessar o mapa e um anão
+numa ponta não vê a outra; uma sala que você mesmo cavou fica sempre bem
+abaixo disso.
+
 **Um pressentimento.** Seus anões percebem que há *algo* atrás da parede em
 frente — não o que é. Um `·` numa célula não explorada quer dizer que eles
 sentem algo uma célula adiante: um veio, minério ou uma caverna aberta. Só é
