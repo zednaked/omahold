@@ -10,7 +10,7 @@ const fs = require("fs"), path = require("path")
 const src = fs.readFileSync(path.join(__dirname, "..", "sim.js"), "utf8").replace(".pragma library", "")
 const S = new Function(src + `; return { newFromPreset, tick, PRESETS, presetName, presetDesc, cache, dwarves, pop,
   digDepth, iz, bondTotal, isKin, BOND_FRIEND, YEAR, DAY, setI18n, countItems, dwarves, touchesWater,
-  B_FLOODGATE, NN, rosterMilitia }`)()
+  B_FLOODGATE, NN, rosterMilitia, reachableFrom, openNeighbours, ix, iy }`)()
 const I18n = (function () {
   const isrc = fs.readFileSync(path.join(__dirname, "..", "I18n.js"), "utf8").replace(".pragma library", "")
   return new Function(isrc + "; return { t, tf, plural, table, inSeason, STRINGS, TABLES }")()
@@ -97,8 +97,27 @@ for (const pr of S.PRESETS) {
   }
   // and it survives being played
   let threw = null
-  try { for (let k = 0; k < S.YEAR; k++) S.tick(w) } catch (e) { threw = e }
+  const stranded = new Set()
+  try {
+    for (let k = 0; k < S.YEAR; k++) {
+      S.tick(w)
+      // Nobody may end up unable to reach the hold. Two migrants in sixteen
+      // fortresses used to land in a pocket in the treeline and die of thirst
+      // there, with the "cut off" warning firing correctly and helplessly.
+      //
+      // The test is reachability, not free neighbours: the surface is uneven,
+      // so a dwarf on a slope can have no passable neighbour on their own
+      // level and still walk anywhere they like.
+      if (k % 200 === 0) {
+        const reach = S.reachableFrom(w, [w.depot])
+        for (const u of S.dwarves(w)) if (!reach[u.i]) stranded.add(u.name)
+      }
+    }
+  } catch (e) { threw = e }
   check(!threw, label + " plays a year without throwing" + (threw ? ": " + threw.message : ""))
+  check(stranded.size === 0, label + " leaves nobody cut off from the hold" + (stranded.size ? " — " + [...stranded].join(", ") : ""))
+  const thirsted = (w.dead || []).filter(d => /sede|thirst/.test(d.how)).length
+  check(thirsted === 0, label + " loses nobody to thirst in its first year (" + thirsted + ")")
 }
 
 console.log("\n" + (passed + failed) + " checks, " + failed + " failed")

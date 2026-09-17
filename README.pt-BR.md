@@ -250,6 +250,53 @@ ou por um caminho que acabou.
 Um segundo posto divide a milícia em dois, e esse é todo o sistema de
 esquadrões: o portão e a escadaria, ou a escadaria e as profundezas.
 
+## Descendo
+
+Descer precisa de escada nas **duas pontas**: uma no nível que você deixa e um
+degrau no chão onde você chega. `s` numa escada construída quer dizer *desça um
+nível*, e encomenda o que for preciso na célula de baixo —
+
+- **rocha**: é escavada, e a escada prevalece mesmo que já houvesse uma
+  escavação encomendada ali. Desenhar a sala do nível de baixo antes de abrir a
+  descida é a forma natural de jogar, e recusar isso em silêncio deixava o
+  nível inteiro inalcançável.
+- **chão aberto de caverna**: o degrau é *construído* nele, por um anão que
+  trabalha da escada de cima. Sem isso não havia jeito nenhum de chegar a uma
+  caverna logo abaixo de um poço — a escada ficava em cima dela e não levava a
+  lugar nenhum, e o `s` recusava a ordem por não ter o que cavar.
+- **magma ou água**: recusado, e ele diz qual. Cavar ali inunda a fortaleza; o
+  nível 0 é o do magma, então um poço normalmente para no 1.
+
+Toda recusa diz o motivo na linha de status — qual delas é importa, porque um
+nível que ninguém alcança é trabalho que nunca começa. Se quatro ou mais
+designações ficarem encalhadas mesmo assim, a fortaleza avisa no amanhecer e
+nomeia o nível.
+
+`make stairs` são dezoito verificações exatamente sobre isso, porque cada caso
+acima veio de um relato de jogador.
+
+### Morrer de sede, de três jeitos
+
+Cada um destes veio de um relato de jogador e depois de uma medição, e nenhum
+era o anão deixando de procurar água:
+
+- **A onda vence a sede.** `fightOrFlee` roda antes de `needJob`, então cinco
+  dos oito anões que chegaram a sede 125 fizeram isso com goblins na fortaleza,
+  lutando e fugindo por dias com a adega cheia a vinte células. Passando de 115
+  de sede ou fome a necessidade agora vence — a não ser que haja inimigo ao
+  alcance do braço, porque aí não há como beber.
+- **Chegar num beco.** `edgeSurface` confere que o ponto de chegada tem caminho
+  até o portão, mas os migrantes se espalham até duas células dele, e numa
+  borda arborizada algumas são becos. Dois migrantes em dezesseis fortalezas
+  caíram num e morreram lá. `nearFree` agora exige caminho até a fortaleza.
+- **O cenário se fechando.** Uma árvore que rebrota não pode tirar a última
+  saída da célula **vizinha**, não só da sua própria — o bug original emparedou
+  três anões em seis células de grama com 59 bebidas que não alcançavam mais.
+
+Dezesseis fortalezas agora não perdem **ninguém** de sede em dois anos, e o
+`make presets` falha se qualquer predefinição perder um no primeiro ano ou
+deixar alguém sem acesso à fortaleza.
+
 ## Água
 
 A água era cenário com um uso: um anão com sede andava até a beira dela e
@@ -727,6 +774,7 @@ make presets   cada predefinição construída, conferida e jogada um ano
 make surfaces  o que o painel e a janelinha têm de concordar
 make lives     a crônica lida como a biografia de um anão
 make artifacts sobre o que é um humor estranho, e o que ele grava no objeto
+make stairs    descer, que já quebrou três vezes
 make hostile   o que o save.py recusa, num $HOME descartável
 make validate  omarchy plugin validate .
 ```

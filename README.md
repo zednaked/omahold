@@ -251,6 +251,53 @@ ran out.
 A second post splits the militia in two, and that is the whole squad system:
 the gate and the stairwell, or the stairwell and the deep.
 
+## Going down
+
+Descending needs a staircase at **both ends**: one on the level you leave and a
+step on the floor you arrive at. `s` on a built staircase means *go one level
+deeper*, and it orders whatever is needed on the cell below —
+
+- **rock**: it is cut, and the stair takes the cell over even if a dig was
+  already pending there. Drawing the room on the level below before cutting the
+  descent is the natural way to play, and refusing it silently left the whole
+  level unreachable.
+- **an open cavern floor**: the step is *built* on it, by a dwarf working from
+  the staircase above. Without this there was no way at all to reach a cavern
+  directly under a shaft — the staircase stood over it and went nowhere, and
+  `s` refused the order for having nothing to dig.
+- **magma or water**: refused, and it says which. Cutting into it floods the
+  fortress; level 0 is the magma level, so a shaft usually stops at 1.
+
+Every refusal names its reason in the status line — which one it is matters,
+because a level nobody can reach is a level of work that never starts. If four
+or more designations end up stranded anyway, the hold says so at dawn and names
+the level.
+
+`make stairs` is eighteen checks over exactly this, because every case above
+was a player report.
+
+### Dying of thirst, three ways
+
+Every one of these came out of a player report and then a measurement, and none
+of them were the dwarves failing to look for water:
+
+- **A wave beats hunger.** `fightOrFlee` runs before `needJob`, so five of the
+  eight dwarves who ever reached thirst 125 did it with goblins in the
+  fortress, fighting and fleeing for days with a full cellar twenty cells away.
+  Past thirst or hunger 115 the need now wins — unless there is a foe within
+  arm's reach, because there is no drinking past that.
+- **Arriving in a pocket.** `edgeSurface` checks the arrival point has a path
+  to the gate, but migrants spread up to two cells off it, and on a wooded edge
+  some of those are dead ends. Two migrants in sixteen fortresses landed in one
+  and died there. `nearFree` now requires a path to the hold.
+- **The scenery closing in.** A regrown tree must not take the last way out of
+  the cell beside it, not just of its own cell — the original bug walled three
+  dwarves into six cells of grass with 59 drinks they could no longer reach.
+
+Sixteen fortresses now lose **nobody** to thirst in two years, and `make
+presets` fails if any preset loses one in its first year or leaves anybody cut
+off from the hold.
+
 ## Water
 
 Water was scenery with one use: a thirsty dwarf walked to the edge of it and
@@ -756,6 +803,7 @@ make presets   every preset built, checked against its blurb and played a year
 make surfaces  what the panel and the corner window have to agree on
 make lives     the chronicle read back as one dwarf's biography
 make artifacts what a strange mood is about, and what it puts on the object
+make stairs    going down, which has broken three times
 make hostile   what save.py refuses, in a throwaway $HOME
 make validate  omarchy plugin validate .
 ```

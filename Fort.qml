@@ -115,8 +115,11 @@ Item {
           var under = i - Sim.N, ut = w.tile[under]
           if (ut === Sim.T_MAGMA) return root.t("why.stair.magma")
           if (ut === Sim.T_WATER) return root.t("why.stair.water")
-          if (ut === Sim.T_OPEN) return root.t("why.stair.open")
-          if (w.desig[under] === Sim.DG_STAIR) return root.t("why.stair.already")
+          if (w.desig[under] === Sim.DG_STAIR || w.build[under] === Sim.B_STAIR) return root.t("why.stair.already")
+          // an open floor below is no longer a refusal: "s" orders the step
+          // built on it. What is left is a cell with no floor at all.
+          if (ut === Sim.T_OPEN && w.floor[under] === Sim.F_NONE) return root.t("why.stair.open")
+          if (w.build[under] !== Sim.B_NONE) return root.tf("why.build.taken", Sim.buildName(w.build[under]))
           return root.t("why.stair")
         }
         if (t === Sim.T_OPEN && w.floor[i] === Sim.F_NONE) return root.t("why.build.sky")

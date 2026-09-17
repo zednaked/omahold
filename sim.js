@@ -412,13 +412,31 @@ function edgeSurface(w) {
   }
   return -1
 }
+// A free cell near `c`, and — this is the part that was missing — one that
+// leads somewhere. A passable cell with no passable neighbour is a one-cell
+// prison, and on a wooded edge there are plenty: two migrants in sixteen
+// fortresses arrived in one and died of thirst in sight of a full cellar, with
+// the hold's own "cut off" warning firing correctly and helplessly.
+//
+// Falls back to a walled cell only if nothing better exists in the radius,
+// because arriving somewhere is still better than not arriving.
 function nearFree(w, c, r) {
+  var fallback = -1
   for (var t = 0; t < 30; t++) {
     var x = ix(c) + ri(w, 2 * r + 1) - r, y = iy(c) + ri(w, 2 * r + 1) - r
     if (!inb(x, y, 0)) continue
-    var i = surfaceIdx(w, x, y); if (passable(w, i)) return i
+    var i = surfaceIdx(w, x, y)
+    if (!passable(w, i)) continue
+    if (fallback < 0) fallback = i
+    // and it has to lead to the hold. `edgeSurface` checks the arrival point,
+    // but this spreads the group up to two cells off it, and on a wooded edge
+    // a couple of those are pockets with no way out: two migrants in sixteen
+    // fortresses landed in one and died of thirst with the cellar full and the
+    // hold's "cut off" warning firing correctly and helplessly.
+    if (w.depot < 0) return i
+    if (findPath(w, i, function (q) { return dist(q, w.depot) <= 2 }, w.depot, null, 4000)) return i
   }
-  return c
+  return fallback >= 0 ? fallback : c
 }
 
 // ---- entities ---------------------------------------------------------------
@@ -624,11 +642,24 @@ function canDesignate(w, i, tool, bt) {
     case "dig": return solid(t) && t !== T_TREE && t !== T_SHRUB && t !== T_FUNGUS
     case "stair":
       // On a built staircase "s" means "go one level deeper", so what matters
-      // is the rock below. A dig already pending there must not refuse the
+      // is the cell below. A dig already pending there must not refuse the
       // order: drawing a room on the level below before cutting the descent is
       // the natural way to play, and refusing silently left the whole level
       // unreachable with no way to fix it. The stair takes that cell over.
-      if (t === T_OPEN && w.build[i] === B_STAIR) return iz(i) > 0 && solid(w.tile[i - N]) && w.tile[i - N] !== T_TREE && w.tile[i - N] !== T_FUNGUS && w.desig[i - N] !== DG_STAIR
+      //
+      // The cell below does not have to be rock. Descending needs a stair at
+      // both ends (see `neighbors`), so a staircase standing over an open
+      // cavern floor went nowhere and "s" refused it for having nothing to
+      // dig — which left no way at all to reach a cavern directly below a
+      // shaft. Now it orders the step built on that floor, and the dwarf who
+      // builds it works from the staircase above (see `workSpots`).
+      if (t === T_OPEN && w.build[i] === B_STAIR) {
+        if (iz(i) <= 0) return false
+        var un = i - N, ut = w.tile[un]
+        if (w.desig[un] === DG_STAIR || w.build[un] === B_STAIR) return false
+        if (solid(ut)) return ut !== T_TREE && ut !== T_FUNGUS
+        return ut === T_OPEN && w.floor[un] !== F_NONE && w.build[un] === B_NONE
+      }
       return (solid(t) && t !== T_TREE && t !== T_FUNGUS && t !== T_SHRUB) || (t === T_OPEN && w.floor[i] !== F_NONE && w.build[i] === B_NONE)
     case "chop": return t === T_TREE || t === T_FUNGUS || t === T_SHRUB
     case "build":
@@ -651,8 +682,12 @@ function designate(w, i, tool, bt) {
   // "s" on a floor means "dig a staircase down from here": mark the cell and
   // the rock under it in one go, so a single order makes a working descent
   if (d === DG_STAIR && w.tile[i] === T_OPEN && iz(i) > 0) {
-    var under = i - N
-    if (solid(w.tile[under]) && w.tile[under] !== T_TREE && w.tile[under] !== T_FUNGUS && w.tile[under] !== T_SHRUB && w.desig[under] !== DG_STAIR) { w.desig[under] = DG_STAIR; w.dbuild[under] = 0; delete w.unreach[under]; w.dirty = true }
+    var under = i - N, ut2 = w.tile[under]
+    var cuttable = solid(ut2) && ut2 !== T_TREE && ut2 !== T_FUNGUS && ut2 !== T_SHRUB
+    var buildable = ut2 === T_OPEN && w.floor[under] !== F_NONE && w.build[under] === B_NONE
+    if ((cuttable || buildable) && w.desig[under] !== DG_STAIR && w.build[under] !== B_STAIR) {
+      w.desig[under] = DG_STAIR; w.dbuild[under] = 0; delete w.unreach[under]; w.dirty = true
+    }
     if (w.build[i] === B_STAIR) return true   // already a stair here: the order was "go deeper"
   }
   if (w.desig[i] === d && (d !== DG_BUILD || w.dbuild[i] === bt)) return false
@@ -3367,6 +3402,18 @@ function dayStart(w, d) {
     // a cell with two or fewer ways out of it is a corridor, and a tree there
     // can cut a hold in half
     if (openNeighbours(w, i) <= 2) continue
+    // And it must not take the last way out from a neighbour who is standing
+    // there. The guard above protects the cell the tree grows in; this one
+    // protects whoever is beside it — the dwarf whose only exit it would be.
+    var boxedIn = false
+    for (var nq = 0; nq < 4 && !boxedIn; nq++) {
+      var nx3 = x + [1, -1, 0, 0][nq], ny3 = y + [0, 0, 1, -1][nq]
+      if (!inb(nx3, ny3, iz(i))) continue
+      var ni3 = idx(nx3, ny3, iz(i))
+      if (!passable(w, ni3)) continue
+      if (openNeighbours(w, ni3) <= 1 || (unitAt(w, ni3) && openNeighbours(w, ni3) <= 2)) boxedIn = true
+    }
+    if (boxedIn) continue
     w.tile[i] = T_TREE; w.dirty = true
   }
 }
@@ -3543,7 +3590,15 @@ function actDwarf(w, u) {
       u.job = mj
     }
   }
-  if (w.hostiles > 0 && fightOrFlee(w, u)) return
+  // Thirst and hunger beat the militia's instincts once they are close to
+  // killing. Five of the eight dwarves who ever reached thirst 125 did it with
+  // goblins in the fortress: `fightOrFlee` runs before `needJob`, so they
+  // fought and fled for days with a full cellar twenty cells away. A foe
+  // within arm's reach still comes first — there is no drinking past that —
+  // but a wave somewhere in the hold no longer outranks dying of thirst.
+  var desperate = u.thirst > 115 || u.hunger > 115
+  var cornered = desperate && !!nearestUnit(w, u.i, function (o) { return o !== u && hostile(o) }, 2)
+  if (w.hostiles > 0 && (!desperate || cornered) && fightOrFlee(w, u)) return
   if (u.job && u.job.k === "fight") dropJob(w, u)
   if (u.job && u.job.k === "arm") {
     if (u.path) { if (step(w, u) < 0) dropJob(w, u); return }

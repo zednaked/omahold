@@ -10,10 +10,11 @@
 #   make surfaces  what the panel and the corner window have to agree on
 #   make lives     the chronicle read back as one dwarf's biography
 #   make artifacts what a strange mood is about, and what it puts on the object
+#   make stairs    going down, which has broken three times
 
-.PHONY: test sim i18n hostile deep halls presets surfaces lives artifacts validate
+.PHONY: test sim i18n hostile deep halls presets surfaces lives artifacts stairs validate
 
-test: sim i18n deep halls presets surfaces lives artifacts hostile
+test: sim i18n deep halls presets surfaces lives artifacts stairs hostile
 
 sim:
 	@echo "== simulation =="
@@ -48,6 +49,10 @@ lives:
 artifacts:
 	@echo "== artifacts =="
 	@node test/artifacts.js | tail -1
+
+stairs:
+	@echo "== stairs =="
+	@node test/stairs.js | tail -1
 
 hostile:
 	@echo "== save.py =="
