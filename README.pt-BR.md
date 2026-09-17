@@ -302,6 +302,14 @@ sementes (`node test/scenario.js <semente> 2`), 12 anões repelem as 11 ondas,
 perdem uns 9 e terminam com uns 16 — os migrantes repõem mais do que os goblins
 levam. Trancar as portas (`L`) muda tudo: goblins não passam e vão embora.
 
+As ondas também respondem ao **resultado** da anterior: repelir um ataque sem
+perder ninguém faz a próxima vir maior, e perder dois anões ou mais alivia a
+pressão — no máximo dois goblins para cada lado, e nunca além do teto da
+própria predefinição. Dimensionar a onda por quão bem defendida a fortaleza
+*parece* era a outra leitura disso, e é a errada: puniria a preparação, e a
+milícia que você treinou e as portas que você pendurou não comprariam nada.
+Responder ao resultado se lê de dentro: você venceu fácil, então vieram mais.
+
 Se ainda assim o último anão morrer, a fortaleza **cai**: o painel marca `caiu`,
 as Lendas registram o fim e o mundo para de gerar ondas, caravanas e migrantes.
 Perder é divertido, mas uma ruína não fica anunciando vitórias.

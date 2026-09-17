@@ -223,7 +223,7 @@ function newWorld(seed) {
     ground: new Uint8Array(N),
     items: [], units: [], nextId: 1,
     log: [], legends: [], artifacts: [], dead: [],
-    name: "", wealth: 0, alerts: 0, popCap: 20, graveyard: -1, done: {}, legendary: 0, siege: 0, baron: 0, demand: null, demandSince: 0, siegeSince: 0,
+    name: "", wealth: 0, alerts: 0, popCap: 20, graveyard: -1, done: {}, legendary: 0, siege: 0, pressure: 0, baron: 0, demand: null, demandSince: 0, siegeSince: 0,
     liquidBudget: { water: 60, magma: 30 },
     caravan: null, raid: null, lockdown: false, depot: -1,
     weather: 0,   // 0 clear, 1 rain, 2 snow
@@ -2405,10 +2405,25 @@ function dayStart(w, d) {
 }
 // wave 0: an ordinary ambush sized by wealth. wave >= 1: the scenario's
 // escalating waves - more goblins, then elites with better gear.
+//
+// On top of that, `w.pressure`: the goblins answer the *result* of the last
+// attack, not the defence they can see. Repelling one without losing anybody
+// sends a bigger one next time; losing two or more dwarves takes the pressure
+// back off. Sizing the wave by how well defended a hold looks was the obvious
+// reading of "scale with the real defence" and is the wrong one — it punishes
+// preparation, so the militia you drilled and the doors you hung buy nothing.
+// Answering the outcome is legible from the inside: you won easily, so more
+// came.
 function spawnRaid(w, d, wave) {
   var gs = edgeSurface(w); if (gs < 0) return false
   var sc = w.scenario || {}, mul = w.waveMul || 1
-  var n = wave > 0 ? Math.min(sc.cap || 12, Math.round(((sc.base || 3) + Math.floor(wave * (sc.step || 1.5))) * mul)) : Math.max(1, Math.round((2 + Math.min(5, Math.floor(w.wealth / 900)) + ri(w, 2)) * mul))
+  // Capped at +2, and never past the preset's own cap. At +4 and with the cap
+  // lifted, clean wins compounded into waves the hold could not answer and
+  // fifteen fortresses in sixteen fell: positive feedback on a schedule this
+  // tight runs away. The pressure now only gets you to the ceiling faster.
+  var press = Math.max(-2, Math.min(2, w.pressure || 0))
+  var n = wave > 0 ? Math.min(sc.cap || 12, Math.round(((sc.base || 3) + Math.floor(wave * (sc.step || 1.5))) * mul) + press) : Math.max(1, Math.round((2 + Math.min(5, Math.floor(w.wealth / 900)) + ri(w, 2)) * mul) + press)
+  n = Math.max(1, n)
   var eliteFrom = sc.eliteFrom || 4
   for (var g = 0; g < n; g++) { var gob = addUnit(w, "goblin", nearFree(w, gs, 2)); if (wave >= eliteFrom && g % 3 === 0) { gob.elite = true; gob.hp = 9; gob.maxhp = 9 } }
   w.raid = { since: w.tick, n: n, wave: wave, lost: 0 }
@@ -2472,6 +2487,9 @@ function raidTick(w) {
   } else w.siegeSince = 0
   if (n === 0) {
     w.stats.repelled = (w.stats.repelled || 0) + 1
+    // won it clean: they come back heavier. Bled for it: they ease off.
+    if (!w.raid.lost) w.pressure = Math.min(2, (w.pressure || 0) + 1)
+    else if (w.raid.lost >= 2) w.pressure = Math.max(-2, (w.pressure || 0) - 1)
     announce(w, LF("msg.repelled", "{0}{1} resiste{2}", w.raid.wave ? LF("msg.repelled.wave", "Onda {0} repelida. ", w.raid.wave) : L("msg.repelled.ambush", "A emboscada terminou. "), w.name, w.raid.lost ? LF("msg.repelled.losses", ", com {0}.", LP(w.raid.lost, "n.loss.one", "n.loss.many", "baixa", "baixas")) : L("msg.repelled.none", " sem baixas.")), 1)
     legend(w, LF("lg.repelled", "{0} repelida{1}", w.raid.wave ? LF("lg.wave", "Onda {0}", w.raid.wave) : L("lg.ambush", "Emboscada"), w.raid.lost ? LF("lg.repelled.losses", " ({0}).", LP(w.raid.lost, "n.lost.one", "n.lost.many", "anão perdido", "anões perdidos")) : L("msg.repelled.none", " sem baixas.")))
     w.raid = null
@@ -2870,6 +2888,7 @@ function deserialize(json) {
   if (typeof w.siege !== "number") w.siege = 0
   if (typeof w.siegeSince !== "number") w.siegeSince = 0
   if (typeof w.baron !== "number") w.baron = 0
+  if (typeof w.pressure !== "number") w.pressure = 0
   if (typeof w.demandSince !== "number") w.demandSince = 0
   if (w.demand === undefined) w.demand = null
   // units carrying items keep their claims; jobs are dropped so no stale paths survive
@@ -2891,7 +2910,7 @@ function deserialize(json) {
 function newWorldEmpty() {
   return { v: 1, seed: 0, rs: 0, tick: 0, tile: new Uint8Array(NN), floor: new Uint8Array(NN), build: new Uint8Array(NN), desig: new Uint8Array(NN),
     dbuild: new Uint8Array(NN), grow: new Uint8Array(NN), ground: new Uint8Array(N), items: [], units: [], nextId: 1, log: [], legends: [], artifacts: [],
-    dead: [], orders: [], graveyard: -1, done: {}, legendary: 0, siege: 0, baron: 0, demand: null, demandSince: 0, siegeSince: 0, name: "", wealth: 0, alerts: 0, popCap: 20, liquidBudget: { water: 60, magma: 30 }, caravan: null, raid: null, lockdown: false, depot: -1,
+    dead: [], orders: [], graveyard: -1, done: {}, legendary: 0, siege: 0, pressure: 0, baron: 0, demand: null, demandSince: 0, siegeSince: 0, name: "", wealth: 0, alerts: 0, popCap: 20, liquidBudget: { water: 60, magma: 30 }, caravan: null, raid: null, lockdown: false, depot: -1,
     weather: 0, stats: newStats(), fallen: false, claim: null, unreach: {}, lastMoodTick: 0 }
 }
 function rle(a) {

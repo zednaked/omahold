@@ -324,6 +324,14 @@ with no intervention, across eight seeds (`node test/scenario.js <seed> 2`),
 replace more than the goblins take. Locking the doors (`L`) changes
 everything: goblins cannot pass and go home.
 
+Waves also answer the **result** of the last one: repelling an attack without
+losing anybody sends a bigger one next time, and losing two or more dwarves
+takes the pressure back off, up to two goblins either way and never past the
+preset's own cap. Sizing the wave by how well defended the hold *looks* was
+the other reading of this, and it is the wrong one — it punishes preparation,
+so the militia you drilled and the doors you hung would buy nothing. Answering
+the outcome is legible from the inside: you won easily, so more came.
+
 If the last dwarf dies anyway, the hold **falls**: the panel marks it, the
 Legends page records the end, and the world stops sending waves, caravans and
 migrants. Losing is fun, but a ruin should not keep announcing victories.
