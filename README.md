@@ -22,6 +22,25 @@ omarchy plugin add https://github.com/zednaked/omahold.git --enable
 cp -r . ~/.config/omarchy/plugins/zed.omahold && omarchy-shell shell rescanPlugins && omarchy plugin enable zed.omahold
 ```
 
+**Para remover:**
+
+```
+omarchy plugin disable zed.omahold
+omarchy plugin remove zed.omahold
+# ou, à mão:
+rm -rf ~/.config/omarchy/plugins/zed.omahold
+# a fortaleza salva fica fora da pasta do plugin; para levá-la também:
+rm -rf ~/.local/state/omarchy/omahold
+```
+
+O plugin não escreve em `shell.json` nem em nenhuma configuração sua — quem o
+coloca na barra é o `omarchy plugin enable` ou a sua mão.
+
+**Dependências:** QML puro, sem binário e sem rede, mais `python3` — usado só
+para o acesso ao disco (`save.py`), pelas razões de segurança explicadas em
+[Onde a fortaleza é gravada](#onde-a-fortaleza-é-gravada). Os próprios scripts
+do Omarchy já usam `python3`, então isto não acrescenta nada à máquina.
+
 ## Três superfícies
 
 | Onde | O quê |
@@ -229,8 +248,30 @@ omarchy-shell omahold newWorld "" # ou uma semente numérica
 Opções inline na entrada do widget em `~/.config/omarchy/shell.json`:
 `{ "id": "zed.omahold", "backgroundMs": 2000, "popCap": 20, "peek": false }`.
 
-O mundo é salvo em `~/.local/state/omarchy/omahold/world.json` a cada 90 s e
-ao fechar o painel; sobrevive a reinícios do shell.
+## Onde a fortaleza é gravada
+
+O mundo fica em `~/.local/state/omarchy/omahold/world.json`, salvo a cada 90 s
+e ao fechar o painel; sobrevive a reinícios do shell. Os cinco slots, o índice
+deles e as opções ficam no mesmo diretório, em modo 700, e cada arquivo em 600.
+
+Tudo isso passa por um único lugar: `save.py`, sempre chamado como
+`/usr/bin/python3 -I save.py <modo> <caminhos relativos ao $HOME>`, com
+ambiente fechado e sem bit de execução. Antes eram três caminhos diferentes —
+`sh -c 'cat …'` para ler, `FileView` para gravar e `rm -f` para limpar um slot
+— e nenhum deles conseguia checar o arquivo e depois tocar naquele mesmo
+arquivo. É o que a revisão de segurança do marketplace barrou duas vezes no
+[omarchy-ganja](https://github.com/zednaked/omarchy-ganja): em shell cada
+comando resolve o caminho de novo, então checar e usar são duas resoluções e o
+que foi checado pode ser trocado no meio.
+
+O helper desce do `$HOME` componente por componente com `openat` +
+`O_NOFOLLOW`, valida cada diretório no próprio descritor, e mantém esse
+descritor pela leitura, pela gravação, pelo `fsync` e pelo `renameat`. Recusa
+o que não for arquivo regular seu com um único link, tem teto de 1 MiB e prazo
+de cinco segundos, e só consegue nomear os sete arquivos do próprio plugin.
+`python3 test/hostile.py` roda os casos hostis num `$HOME` temporário — FIFO,
+symlink no meio do caminho, hardlink, save de 2 MiB, temporário plantado,
+nome fora da lista: 40 verificações.
 
 ## O que está simulado, e o que não está
 

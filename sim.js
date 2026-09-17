@@ -40,6 +40,15 @@ var TORCH_RADIUS = 4.5   // cells; light fades linearly to nothing at this dista
 // ---- designations -----------------------------------------------------------
 var DG_NONE = 0, DG_DIG = 1, DG_STAIR = 2, DG_CHOP = 3, DG_BUILD = 4
 
+// The key each building is looked up by, so a label change is a translation
+// and not a rename.
+var BUILD_KEY = {}
+BUILD_KEY[1] = "stair"; BUILD_KEY[2] = "bed"; BUILD_KEY[3] = "table"; BUILD_KEY[4] = "farm"
+BUILD_KEY[5] = "still"; BUILD_KEY[6] = "workshop"; BUILD_KEY[7] = "wall"; BUILD_KEY[8] = "door"
+BUILD_KEY[9] = "stock"; BUILD_KEY[10] = "statue"; BUILD_KEY[11] = "kitchen"; BUILD_KEY[12] = "smelter"
+BUILD_KEY[13] = "forge"; BUILD_KEY[14] = "torch"; BUILD_KEY[15] = "training"; BUILD_KEY[16] = "jeweler"
+BUILD_KEY[17] = "grave"
+
 var BUILD_INFO = {}
 BUILD_INFO[B_BED]      = { name: "cama",       mat: "log",   value: 10, work: 18 }
 BUILD_INFO[B_TABLE]    = { name: "mesa",       mat: "log",   value: 10, work: 18 }
@@ -83,6 +92,44 @@ var WEAR = { pick: 50, axe: 35, weapon: 60, armor: 20 }
 var WORK_CATS = ["mine", "wood", "farm", "build", "craft", "brew", "fight", "haul"]
 var WORK_NAME = { mine: "a mineração", wood: "a lenha", farm: "a lavoura", build: "a construção",
                   craft: "a oficina", brew: "a cervejaria", fight: "o treino", haul: "o transporte" }
+
+// ---- language ---------------------------------------------------------------
+// The simulation runs under QML and under node (test/run.js), so it cannot
+// import I18n.js the way a .qml file does: World.qml injects it instead, and
+// the tests do the same. With nothing injected every label falls back to the
+// Portuguese it was written in, which keeps `node test/run.js` readable with
+// no wiring at all.
+//
+// The ids stay Portuguese - `w.date().seasonName` is "outono", a trait is
+// "teimoso" - because they are what the save and the game logic compare. Only
+// the display goes through here.
+var I18N = null, I18N_LANG = "pt"
+function setI18n(mod, lang) { I18N = mod || null; if (lang) I18N_LANG = lang }
+function setLang(lang) { I18N_LANG = lang || "pt" }
+function curLang() { return I18N_LANG }
+function L(key, fallback) {
+  if (!I18N) return fallback !== undefined ? fallback : key
+  return I18N.t(I18N_LANG, key)
+}
+function LF(key, fallback, a, b, c, d) {
+  if (!I18N) {
+    var s = fallback !== undefined ? fallback : key, args = [a, b, c, d]
+    for (var k = 0; k < args.length; k++) if (args[k] !== undefined) s = s.split("{" + k + "}").join(String(args[k]))
+    return s
+  }
+  return I18N.tf(I18N_LANG, key, a, b, c, d)
+}
+function LP(n, oneKey, manyKey, oneFall, manyFall) {
+  if (!I18N) return n + " " + (n === 1 ? oneFall : manyFall)
+  return I18N.plural(I18N_LANG, n, oneKey, manyKey)
+}
+function seasonName(id) { return L("season." + id, id) }
+function seasonIn(id) { return L("season.in." + id, (id === "primavera" ? "na " : "no ") + id) }
+function itemName(t) { return L("item." + t, ITEM_NAME[t] || t) }
+function workName(c) { return L("work." + c, WORK_NAME[c] || c) }
+function skillName(sk) { return L("skill." + sk, SKILL_NAME[sk] || sk) }
+function traitName(tr) { return L("trait." + tr, tr) }
+function buildName(b) { return L("build." + BUILD_KEY[b], (BUILD_INFO[b] || {}).name || "") }
 
 var SKILLS = ["mine", "wood", "farm", "build", "craft", "fight", "brew"]
 var SKILL_NAME = { mine: "mineração", wood: "lenha", farm: "lavoura", build: "construção", craft: "artesanato", fight: "luta", brew: "cervejaria" }
@@ -900,9 +947,9 @@ function wellDone(w, u, cat) {
 function skillTitle(u) {
   var best = "", bl = -1
   for (var k in u.skills) if (u.skills[k] > bl) { bl = u.skills[k]; best = k }
-  var pre = bl >= 12 ? "Lendário " : bl >= 8 ? "Mestre " : bl >= 4 ? "" : "Aprendiz de "
+  var pre = bl >= 12 ? L("title.legendary", "Lendário ") : bl >= 8 ? L("title.master", "Mestre ") : bl >= 4 ? "" : L("title.apprentice", "Aprendiz de ")
   var names = { mine: "minerador", wood: "lenhador", farm: "fazendeiro", build: "pedreiro", craft: "artesão", fight: "guerreiro", brew: "cervejeiro" }
-  return bl <= 0 ? "camponês" : pre + names[best]
+  return bl <= 0 ? L("title.peasant", "camponês") : pre + L("title." + best, names[best])
 }
 
 // Pick the nearest designation this dwarf could plausibly do.
@@ -1150,6 +1197,7 @@ var ORDER_SPEC = {
 }
 var ORDER_KINDS = ["booze", "meal", "bar", "pick", "axe", "weapon", "armor", "craft", "metalcraft", "cutgem", "jewel"]
 
+function orderName(what) { var sp = ORDER_SPEC[what]; return L("order." + what, sp ? sp.name : what) }
 function orderList(w) { if (!w.orders) w.orders = []; return w.orders }
 function buildingsFor(w, b) {
   var c = cache(w)
@@ -2495,30 +2543,39 @@ function depthBelow(w, i, z) {
 function isStranded(w, i) { return !!w.desig[i] && !desigOk(w)[i] }
 function isUnreachable(w, i) { return isStranded(w, i) }
 function countUnreachable(w) { var n = 0, ds = cache(w).desigs, ok = desigOk(w); for (var k = 0; k < ds.length; k++) if (ds[k] && !ok[ds[k]]) n++; return n }
+var TILE_KEY = { 1: "soil", 2: "stone", 3: "ore", 4: "gem", 5: "tree", 6: "water", 7: "magma", 8: "fungus", 9: "shrub" }
+var FLOOR_KEY = { 0: "none", 1: "soil", 2: "stone", 3: "grass", 4: "moss" }
+var TILE_PT = { 1: "solo", 2: "rocha", 3: "veio de minério", 4: "gemas na rocha", 5: "árvore", 6: "água", 7: "magma", 8: "cogumelo gigante", 9: "arbusto" }
+var FLOOR_PT = { 0: "céu aberto", 1: "chão de terra", 2: "chão de pedra", 3: "grama", 4: "musgo de caverna" }
 function tileName(w, i) {
   var t = w.tile[i], f = w.floor[i], b = w.build[i]
-  var names = { 1: "solo", 2: "rocha", 3: "veio de minério", 4: "gemas na rocha", 5: "árvore", 6: "água", 7: "magma", 8: "cogumelo gigante", 9: "arbusto" }
-  if (t !== T_OPEN) return names[t]
-  var fl = { 0: "céu aberto", 1: "chão de terra", 2: "chão de pedra", 3: "grama", 4: "musgo de caverna" }[f]
-  if (b) return BUILD_INFO[b].name + (b === B_FARM ? (w.grow[i] >= 200 ? " (madura)" : w.grow[i] > 0 ? " (crescendo)" : " (vazia)") : "") + " · " + fl
+  if (t !== T_OPEN) return L("tile." + TILE_KEY[t], TILE_PT[t])
+  var fl = L("floor." + FLOOR_KEY[f], FLOOR_PT[f])
+  if (b) return buildName(b) + (b === B_FARM ? (w.grow[i] >= 200 ? L("farm.ripe", " (madura)") : w.grow[i] > 0 ? L("farm.growing", " (crescendo)") : L("farm.empty", " (vazia)")) : "") + " · " + fl
   return fl
 }
+var JOB_PT = { dig: "cavando", digstair: "cavando escada", chop: "cortando", build: "construindo", plant: "plantando", harvest: "colhendo",
+  brew: "fermentando", craft: "criando", haul: "carregando", eat: "comendo", forage: "coletando", drink: "bebendo", drinkwater: "bebendo água",
+  sleep: "dormindo", fight: "lutando", arm: "pegando arma", mood: "humor estranho", flee: "fugindo", idle: "ocioso",
+  equip: "equipando", train: "treinando", cook: "cozinhando", smelt: "fundindo", forge: "forjando", cut: "lapidando", setgem: "fazendo joia",
+  bury: "sepultando os mortos" }
 function jobName(u) {
-  if (!u.job) return u.mood_state === "melancholy" ? "melancólico" : u.mood_state === "berserk" ? "enlouquecido" : "ocioso"
-  var j = u.job
-  var n = { dig: j.stair ? "cavando escada" : "cavando", chop: "cortando", build: "construindo", plant: "plantando", harvest: "colhendo",
-    brew: "fermentando", craft: "criando", haul: "carregando", eat: "comendo", forage: "coletando", drink: "bebendo", drinkwater: "bebendo água",
-    sleep: "dormindo", fight: "lutando", arm: "pegando arma", mood: "humor estranho", flee: "fugindo",
-    equip: "equipando", train: "treinando", cook: "cozinhando", smelt: "fundindo", forge: "forjando", cut: "lapidando", setgem: "fazendo joia" }[j.k] || j.k
-  if (j.k === "forge" && j.product) n += " " + ITEM_NAME[j.product]
-  if (j.k === "build") n += " " + BUILD_INFO[j.bt].name
+  if (!u.job) return u.mood_state === "melancholy" ? L("mood.melancholy", "melancólico") : u.mood_state === "berserk" ? L("mood.berserk", "furioso") : L("job.idle", "ocioso")
+  var j = u.job, key = j.k === "dig" && j.stair ? "digstair" : j.k
+  var n = L("job." + key, JOB_PT[key] || j.k)
+  if (j.k === "forge" && j.product) n += " " + itemName(j.product)
+  if (j.k === "build") n += " " + buildName(j.bt)
   return n
 }
 function moodWord(u) {
-  if (u.mood_state === "melancholy") return "melancólico"
-  if (u.mood_state === "berserk") return "furioso"
-  if (u.mood_state === "strange") return "possuído"
-  return u.mood >= 75 ? "extasiado" : u.mood >= 55 ? "contente" : u.mood >= 35 ? "ok" : u.mood >= 18 ? "infeliz" : "miserável"
+  if (u.mood_state === "melancholy") return L("mood.melancholy", "melancólico")
+  if (u.mood_state === "berserk") return L("mood.berserk", "furioso")
+  if (u.mood_state === "strange") return L("mood.strange", "possuído")
+  if (u.mood >= 75) return L("mood.ecstatic", "extasiado")
+  if (u.mood >= 55) return L("mood.content", "contente")
+  if (u.mood >= 35) return L("mood.ok", "ok")
+  if (u.mood >= 18) return L("mood.unhappy", "infeliz")
+  return L("mood.miserable", "miserável")
 }
 function summary(w) {
   var ds = dwarves(w), mood = 0, militia = 0

@@ -55,6 +55,40 @@ Singleton {
   property bool enemies: true
   readonly property string colorsPath: (Quickshell.env("XDG_STATE_HOME") || (home + "/.local/state")) + "/omarchy/current/theme/colors.toml"
 
+  // ---- the disk ---------------------------------------------------------------
+  // Everything that touches a file goes through save.py, always invoked as
+  // `/usr/bin/python3 -I save.py <mode> <relative paths>`. This used to be
+  // `Process` running `sh -c 'mkdir -p "$1"; cat "$2" …'` plus `FileView` for
+  // writes plus `execDetached(["rm", "-f", …])` for clearing a slot — three
+  // different ways in, none of which could check the file it was about to
+  // touch and then touch that same file. The marketplace security review
+  // blocked omarchy-ganja twice over exactly that (issue #6530): in shell each
+  // command resolves the path again, so a check and a use are two resolutions
+  // and what was checked can be exchanged in between. The guarantees are in
+  // save.py's header; `test/hostile.py` is the proof, 40 checks.
+  //
+  // `-I` is isolated mode: the interpreter ignores PYTHON*, the user site and
+  // the script's own directory on sys.path.
+  readonly property string helper: String(Qt.resolvedUrl("save.py")).replace("file://", "")
+
+  // The helper only works inside $HOME, which is its root of trust: every
+  // component below it is opened from a descriptor of the one above. An
+  // XDG_STATE_HOME pointing outside $HOME falls back to the default location
+  // rather than losing the guarantee.
+  readonly property string relDir: {
+    var h = root.home, sd = root.stateDir
+    if (h && sd.indexOf(h + "/") === 0) return sd.substring(h.length + 1)
+    return ".local/state/omarchy/omahold"
+  }
+
+  // Closed environment: the child inherits nothing from the bar's shell. HOME
+  // goes because it is the helper's root of trust; PATH because a process
+  // needs one.
+  readonly property var helperEnv: ({ "PATH": "/usr/bin:/bin", "HOME": root.home })
+
+  // The last reason a write was refused, cleared by the next good one.
+  property string saveError: ""
+
   readonly property bool watched: root.open || root.peek
 
   signal ticked()
@@ -155,58 +189,124 @@ Singleton {
     root.worldReplaced()
   }
 
+  // Three files in one read, because the panel needs all three at startup and
+  // three processes would be three chances to be raced.
+  property string loaded: ""
   Process {
     id: loader
     running: true
-    // the paths arrive as $1..$4, so a quote or a space in $HOME cannot become script
-    command: ["sh", "-c", "mkdir -p \"$1\"; cat \"$2\" 2>/dev/null; printf '\\036'; cat \"$3\" 2>/dev/null; printf '\\036'; cat \"$4\" 2>/dev/null",
-              "omahold", root.stateDir, root.optionsPath, root.slotsPath, root.savePath]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var parts = String(text).split(String.fromCharCode(30))
-        try { if (parts[0] && parts[0].trim()) root.applyOptions(JSON.parse(parts[0]), true) } catch (e) { console.warn("omahold: options unreadable", e) }
-        root.optionsLoaded = true
-        root.mergeWidgetSettings()
-        try { if (parts[1] && parts[1].trim()) root.slots = JSON.parse(parts[1]) } catch (e2) { console.warn("omahold: slots index unreadable", e2) }
-        var t = parts[2] || ""
-        if (t.trim().length > 0) root.adopt(t)
-        else root.newWorld()
+    command: ["/usr/bin/python3", "-I", root.helper, "read", root.relDir, "options.json", "slots.json", "world.json"]
+    clearEnvironment: true
+    environment: root.helperEnv
+    stderr: StdioCollector { id: loaderErr; waitForEnd: true }
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.loaded = String(text) }
+    onExited: (exitCode, exitStatus) => {
+      if (exitCode !== 0) {
+        // A refusal is not an empty disk. Treating it as one would start a new
+        // fortress and let the next autosave write over the save the helper
+        // just refused to read — which is the whole reason save.py tells the
+        // two apart instead of answering "no save" to both.
+        root.loadError = String(loaderErr.text).trim() || ("exit " + exitCode)
+        console.warn("omahold: load refused:", root.loadError)
+        return
       }
+      var parts = root.loaded.split(String.fromCharCode(30))
+      try { if (parts[0] && parts[0].trim()) root.applyOptions(JSON.parse(parts[0]), true) } catch (e) { console.warn("omahold: options unreadable", e) }
+      root.optionsLoaded = true
+      root.mergeWidgetSettings()
+      try { if (parts[1] && parts[1].trim()) root.slots = JSON.parse(parts[1]) } catch (e2) { console.warn("omahold: slots index unreadable", e2) }
+      var t = parts[2] || ""
+      if (t.trim().length > 0) root.adopt(t)
+      else root.newWorld()
     }
   }
-  // one writer per file: FileView writes to a fixed path
-  FileView { id: slotsFile; path: root.slotsPath; printErrors: false; preload: false }
-  FileView { id: optionsFile; path: root.optionsPath; printErrors: false; preload: false }
-  FileView { id: slot1; path: root.stateDir + "/slot-1.json"; printErrors: false; preload: false }
-  FileView { id: slot2; path: root.stateDir + "/slot-2.json"; printErrors: false; preload: false }
-  FileView { id: slot3; path: root.stateDir + "/slot-3.json"; printErrors: false; preload: false }
-  FileView { id: slot4; path: root.stateDir + "/slot-4.json"; printErrors: false; preload: false }
-  FileView { id: slot5; path: root.stateDir + "/slot-5.json"; printErrors: false; preload: false }
-  function slotWriter(n) { return [null, slot1, slot2, slot3, slot4, slot5][n] || null }
+
+  // One writer, one file at a time, with a queue: saving a slot writes the
+  // slot and the index, and an autosave can land while either is in flight.
+  property var writeQueue: []
+  property string pendingName: ""
+  property string pendingText: ""
+
+  function queueWrite(name, text) {
+    if (!name || !text) return
+    var q = root.writeQueue.slice()
+    // One pending write per file: a newer world supersedes an older one that
+    // has not gone out yet, instead of both being written in order.
+    for (var k = 0; k < q.length; k++) if (q[k].name === name) { q.splice(k, 1); break }
+    q.push({ name: name, text: text })
+    root.writeQueue = q
+    root.pumpWrites()
+  }
+  function pumpWrites() {
+    if (writer.running || root.writeQueue.length === 0) return
+    var q = root.writeQueue.slice(), job = q.shift()
+    root.writeQueue = q
+    root.pendingName = job.name
+    root.pendingText = job.text
+    // Assigning `true` to something already `true` is not a transition and
+    // emits nothing, so stdin would stay closed from the previous round and
+    // the write would never reach the helper. It is reopened here, every time.
+    writer.stdinEnabled = true
+    writer.running = true
+  }
+
+  Process {
+    id: writer
+    stdinEnabled: true
+    command: ["/usr/bin/python3", "-I", root.helper, "write", root.relDir, root.pendingName]
+    clearEnvironment: true
+    environment: root.helperEnv
+    onStarted: {
+      writer.write(root.pendingText)
+      writer.stdinEnabled = false     // this is what closes stdin
+    }
+    stderr: StdioCollector { id: writerErr; waitForEnd: true }
+    onExited: (exitCode, exitStatus) => {
+      if (exitCode !== 0) {
+        root.saveError = String(writerErr.text).trim() || ("exit " + exitCode)
+        console.warn("omahold: write refused:", root.saveError)
+      } else if (root.saveError !== "") root.saveError = ""
+      root.pumpWrites()
+    }
+  }
 
   function saveSlot(n) {
-    var f = slotWriter(n); if (!f || !root.w) return false
-    try { f.setText(Sim.serialize(root.w)) } catch (e) { console.warn("omahold: slot save failed", e); return false }
+    if (!root.w || n < 1 || n > 5) return false
+    root.queueWrite("slot-" + n + ".json", Sim.serialize(root.w))
     var meta = Sim.slotMeta(root.w)
     var next = JSON.parse(JSON.stringify(root.slots || {})); next[String(n)] = meta
     root.slots = next
-    try { slotsFile.setText(JSON.stringify(next)) } catch (e2) {}
+    root.queueWrite("slots.json", JSON.stringify(next))
     return true
   }
   function clearSlot(n) {
+    if (n < 1 || n > 5) return
     var next = JSON.parse(JSON.stringify(root.slots || {})); delete next[String(n)]
     root.slots = next
-    try { slotsFile.setText(JSON.stringify(next)) } catch (e) {}
-    Quickshell.execDetached(["rm", "-f", root.stateDir + "/slot-" + n + ".json"])
+    root.queueWrite("slots.json", JSON.stringify(next))
+    root.removingSlot = n
+    remover.running = true
   }
+  property int removingSlot: 0
+  Process {
+    id: remover
+    command: ["/usr/bin/python3", "-I", root.helper, "remove", root.relDir, "slot-" + root.removingSlot + ".json"]
+    clearEnvironment: true
+    environment: root.helperEnv
+  }
+
   property int loadingSlot: 0
+  property string loadedSlot: ""
   Process {
     id: slotReader
-    command: ["sh", "-c", "cat \"$1\" 2>/dev/null", "omahold", root.stateDir + "/slot-" + root.loadingSlot + ".json"]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: { var t = String(text); if (t.trim().length > 0) { root.adopt(t); root.save() } else console.warn("omahold: slot empty") }
+    command: ["/usr/bin/python3", "-I", root.helper, "read", root.relDir, "slot-" + root.loadingSlot + ".json"]
+    clearEnvironment: true
+    environment: root.helperEnv
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.loadedSlot = String(text) }
+    onExited: (exitCode, exitStatus) => {
+      if (exitCode !== 0) { console.warn("omahold: slot read refused"); return }
+      if (root.loadedSlot.trim().length > 0) { root.adopt(root.loadedSlot); root.save() }
+      else console.warn("omahold: slot empty")
     }
   }
   function loadSlot(n) { if (!root.slots || !root.slots[String(n)]) return false; root.loadingSlot = n; slotReader.running = true; return true }
@@ -248,7 +348,7 @@ Singleton {
   }
   function saveOptions() {
     var o = { backgroundMs: root.backgroundMs, glyphs: root.glyphs, peek: root.peek, popCap: root.popCap, difficulty: root.difficulty, enemies: root.enemies, speed: root.speed }
-    try { optionsFile.setText(JSON.stringify(o)) } catch (e) {}
+    root.queueWrite("options.json", JSON.stringify(o))
   }
   function setDifficulty(d, quiet) {
     root.difficulty = d
@@ -265,17 +365,11 @@ Singleton {
   onSpeedChanged: if (root.ready && !root.applyingOptions) root.saveOptions()
   onPopCapChanged: { if (root.w) root.w.popCap = root.popCap; if (root.ready && !root.applyingOptions) root.saveOptions() }
 
-  FileView {
-    id: saveFile
-    path: root.savePath
-    printErrors: false
-    // never read through this one; the loader above does that once
-    preload: false
-  }
   property int savedRev: -1
   function save() {
     if (!root.w) return
-    try { saveFile.setText(Sim.serialize(root.w)); root.savedRev = root.rev } catch (e) { console.warn("omahold: save failed", e) }
+    root.queueWrite("world.json", Sim.serialize(root.w))
+    root.savedRev = root.rev
   }
   // frozen in the background, or paused for an hour: nothing changed, nothing to write
   Timer { interval: 90000; running: root.ready; repeat: true; onTriggered: if (root.rev !== root.savedRev) root.save() }

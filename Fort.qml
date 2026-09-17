@@ -195,13 +195,13 @@ Item {
       item("Voltar", "", "Esc", function () { root.menuSection = "new"; root.menuIndex = 0; rebuildMenu() })
     } else if (root.menuSection === "save") {
       title("Salvar em slot", "Enter grava por cima · x duas vezes limpa o slot")
-      for (k = 1; k <= 5; k++) (function (n) { item(slotLabel(n), slotsMeta[String(n)] ? "" : "", String(n), function () { if (World.saveSlot(n)) { root.flash("salvo no slot " + n); rebuildMenu() } else root.flash("não consegui salvar") }, { slot: n, empty: !slotsMeta[String(n)] }) })(k)
+      for (k = 1; k <= 5; k++) (function (n) { item(slotLabel(n), slotsMeta[String(n)] ? "" : "", String(n), function () { if (World.saveSlot(n)) { root.flash("salvo no slot " + n); rebuildMenu() } else root.flash("não consegui salvar") }, { slot: n, empty: !slotsMeta[String(n)], wrap: true }) })(k)
       gap()
       item("Voltar", "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
     } else if (root.menuSection === "load") {
       title("Carregar slot", "o mundo atual é substituído · x duas vezes limpa o slot")
       var any = false
-      for (k = 1; k <= 5; k++) (function (n) { if (!slotsMeta[String(n)]) return; any = true; item(slotLabel(n), "", String(n), function () { if (World.loadSlot(n)) { closeMenu(); root.flash("carregando o slot " + n) } }, { slot: n }) })(k)
+      for (k = 1; k <= 5; k++) (function (n) { if (!slotsMeta[String(n)]) return; any = true; item(slotLabel(n), "", String(n), function () { if (World.loadSlot(n)) { closeMenu(); root.flash("carregando o slot " + n) } }, { slot: n, wrap: true }) })(k)
       if (!any) rows.push({ kind: "note", t: "Nenhum slot gravado ainda." })
       gap()
       item("Voltar", "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
