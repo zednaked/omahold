@@ -5,7 +5,7 @@
   "version": "0.4.0",
   "author": "ZeD",
   "license": "MIT",
-  "description": "A tiny dwarven hold that lives inside the shell: a 48x30x8 world with z-levels, seven dwarves with needs, moods and skills, digging, farming, brewing, strange moods and artifacts, caravans, goblin ambushes, floods and magma. Drawn in the colors of the active theme. Ticks slowly while you work and at full speed when you look. Bar widget, a corner window to keep an eye on it, and a fullscreen overlay to give orders: omarchy-shell omahold toggle",
+  "description": "A miniature dwarf fortress in your bar. Eight z-levels of dwarves who take the orders you file but reach for the trade they love, ruin work when they are tired, and bury their dead in a corner they pick themselves. Dig deep for better metal; six milestones make the hold legendary. English or Portuguese, in your theme's colors.",
   "kinds": ["service", "bar-widget", "overlay"],
   "keepLoaded": true,
   "entryPoints": {
