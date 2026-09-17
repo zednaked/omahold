@@ -2368,8 +2368,14 @@ function hunch(w, i) {
 }
 
 // Everything the hold can be said to know on the day it starts.
+// Bumped when the rule for what counts as known changes, so a save written
+// under the old rule can be re-seeded instead of carrying the old mistake
+// forever. Version 1 marked the cell below every visited one, which exposed
+// the whole layer of rock under the surface.
+var SEEN_V = 2
 function seedSeen(w) {
   w.seen = new Uint8Array(NN)
+  w.seenV = SEEN_V
   // the sky and the hillside: nothing to discover there
   for (var i = 0; i < NN; i++) if (iz(i) >= w.ground[i % N]) w.seen[i] = 1
   // and whatever the hold can already walk to, plus the walls around it.
@@ -3157,7 +3163,10 @@ function deserialize(json) {
   var st = w.stats || (w.stats = {})
   for (var sk = 0; sk < STAT_KEYS.length; sk++) if (typeof st[STAT_KEYS[sk]] !== "number") st[STAT_KEYS[sk]] = 0
   if (!w.orders) w.orders = []
-  if (!w.seen || !w.seen.length) seedSeen(w)   // a save from before the fog knows what it has dug
+  // A save from before the fog, or from before the rule changed, is re-seeded
+  // from what the hold can walk to — so everything it actually dug stays
+  // known, and only the walls glimpsed in passing have to be seen again.
+  if (!w.seen || !w.seen.length || w.seenV !== SEEN_V) seedSeen(w)
   if (typeof w.graveyard !== "number") w.graveyard = -1
   if (!w.done) w.done = {}
   if (typeof w.legendary !== "number") w.legendary = 0
