@@ -13,6 +13,8 @@
 #   make stairs    going down, which has broken three times
 #   make trade     the caravan, and the deal the player builds with it
 #   make court     the infirmary, the pen and the crown
+#
+# A check on something the world rolls for reads several seeds: test/seeds.js.
 
 .PHONY: test sim i18n hostile deep halls presets surfaces lives artifacts stairs trade court validate
 
