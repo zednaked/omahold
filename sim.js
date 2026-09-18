@@ -769,6 +769,12 @@ function removeBuilding(w, i, byPlayer) {
 // cells per idle dwarf per tick was most of the cost of a tick.
 function cache(w) {
   if (w.cache && !w.dirty) return w.cache
+  // What could not be reached is a fact about the map, so it expires when the
+  // map changes, not three days later: a finished staircase, a wall pulled
+  // down or a door unlocked opens work that the list still says is hopeless.
+  // The timer in `tick` stays as the floor under it, for the world that sits
+  // still - a hold with nothing being built changes nothing for hours.
+  if (w.unreach) w.unreach = {}
   var c = { stills: [], shops: [], farms: [], beds: [], stocks: [], tables: [], statues: [], shrubs: [], water: [], desigs: [],
             kitchens: [], smelters: [], forges: [], torches: [], trainings: [], jewelers: [], graves: [],
             hearths: [], crystals: [], games: [], traps: [], beacons: [], posts: [], wells: [], hospital: [], pens: [] }
