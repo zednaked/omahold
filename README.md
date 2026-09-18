@@ -6,6 +6,8 @@
 
 ![The Omahold panel: one level of the map, the sidebar and the chronicle](preview.png)
 
+![Digging out the Hall of Mungo: orders given, corridors cut, a new room raised](salao.gif)
+
 An Omarchy plugin: a world of 48×30 cells with 8 levels of depth (z-levels),
 seven dwarves with hunger, thirst, sleep, mood and trades, digging, farming,
 brewing, crafting, strange moods and artifacts, migrants, caravans, goblin

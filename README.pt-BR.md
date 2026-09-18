@@ -6,6 +6,8 @@
 
 ![O painel do Omahold: mapa de um nível, barra lateral e crônica](preview.png)
 
+![Escavando o Salão de Mungo: ordens dadas, corredores abertos, uma sala nova erguida](salao.gif)
+
 Um plugin do Omarchy: um mundo de 48×30 células com 8 níveis de profundidade
 (z-levels), sete anões com fome, sede, sono, humor e ofícios, escavação,
 lavoura, cervejaria, artesanato, humores estranhos e artefatos, migrantes,
