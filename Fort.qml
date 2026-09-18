@@ -784,7 +784,9 @@ Item {
       readonly property int pad: Style.space(14)
       readonly property int sideMin: Style.space(350)
       readonly property int headH: Style.space(34)
-      readonly property int logH: Style.space(118)
+      // five announcements, the strip of keys and the air between them; what
+      // is left over goes to the map's cell, so this is the map's budget too
+      readonly property int logH: Style.space(96)
       // the desktop left showing around the card - none of it in full screen
       readonly property int frame: World.full ? Style.space(8) : Style.space(60)
       readonly property int cell: Math.max(8, Math.floor(Math.min((width - frame - sideMin - pad * 3) / Sim.W, (height - frame - headH - logH - pad * 4) / Sim.H)))
@@ -965,7 +967,12 @@ Item {
                 var c = win.cell, N = Sim.N, WW = Sim.W, HH = Sim.H, z = root.vz, glyphs = World.glyphs
                 ctx.fillStyle = p.bg; ctx.fillRect(0, 0, width, height)
                 if (!w) return
-                var fpx = Math.round(c * 0.82)
+                // The glyph is a whole number of pixels, so 0.82 of the cell
+                // lands differently at each cell size: at 13 it rounded up to
+                // 11 (0.85 of the cell) and at 16 down to 13 (0.81), which is
+                // why a bigger grid could come out with smaller symbols in it.
+                // 0.86 rounds into 0.85-0.875 at every size the map uses.
+                var fpx = Math.round(c * 0.86)
                 ctx.font = fpx + "px '" + root.mono + "'"
                 ctx.textAlign = "center"; ctx.textBaseline = "middle"
                 var sun = Sim.sunLevel(w), snow = w.weather === 2, rain = w.weather === 1
@@ -1389,13 +1396,25 @@ Item {
               color: Util.alpha(Color.popups.text, 0.45)
               text: "OMAHOLD · by ZeD"
             }
-            Flow {
+            // The keys are a strip, not a paragraph. Wrapping them onto a
+            // second row cost the log a line and pushed the whole footer up;
+            // when the card is too narrow to hold them at full size the strip
+            // is scaled down instead, which reads as one line at any width.
+            Item {
               id: hints
-              anchors { left: parent.left; right: parent.right; rightMargin: Style.space(150); bottom: parent.bottom }
-              spacing: Style.space(10)
-              KeyHint { key: "d"; label: root.t("tool.dig") } KeyHint { key: "s"; label: root.t("tool.stair") } KeyHint { key: "c"; label: root.t("tool.chop") } KeyHint { key: "b"; label: root.t("tool.build") }
-              KeyHint { key: "x"; label: root.t("hint.cancel") } KeyHint { key: "r"; label: root.t("hint.remove") } KeyHint { key: "< >"; label: root.t("hint.levels") } KeyHint { key: "Enter"; label: root.t("hint.apply") }
-              KeyHint { key: root.t("key.space"); label: root.t("hint.pause") } KeyHint { key: "] ["; label: root.t("hint.dwarves") } KeyHint { key: "?"; label: root.t("hint.help") } KeyHint { key: "Esc"; label: root.t("hint.menu") }
+              anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+              readonly property real fit: Math.min(1, (width - Style.space(150)) / Math.max(1, hintRow.implicitWidth))
+              height: Math.ceil(hintRow.implicitHeight * fit)
+              Row {
+                id: hintRow
+                y: hints.height - height
+                transformOrigin: Item.BottomLeft
+                scale: hints.fit
+                spacing: Style.space(10)
+                KeyHint { key: "d"; label: root.t("tool.dig") } KeyHint { key: "s"; label: root.t("tool.stair") } KeyHint { key: "c"; label: root.t("tool.chop") } KeyHint { key: "b"; label: root.t("tool.build") }
+                KeyHint { key: "x"; label: root.t("hint.cancel") } KeyHint { key: "r"; label: root.t("hint.remove") } KeyHint { key: "< >"; label: root.t("hint.levels") } KeyHint { key: "Enter"; label: root.t("hint.apply") }
+                KeyHint { key: root.t("key.space"); label: root.t("hint.pause") } KeyHint { key: "] ["; label: root.t("hint.dwarves") } KeyHint { key: "?"; label: root.t("hint.help") } KeyHint { key: "Esc"; label: root.t("hint.menu") }
+              }
             }
           }
 
