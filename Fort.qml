@@ -1262,8 +1262,15 @@ Item {
                       y: parent.selRow ? 2 : 0
                       width: (tailText.visible ? Math.min(implicitWidth, side.width * 0.62) : side.width) - x
                       font.family: root.mono; font.pixelSize: Style.font.bodySmall
-                      wrapMode: modelData.wrap ? Text.Wrap : Text.NoWrap
-                      elide: modelData.wrap ? Text.ElideNone : Text.ElideRight
+                      // A line with a tail is a two-column row and has to stay
+                      // on one line; every other line wraps unless it says
+                      // otherwise. It used to be the reverse - wrap only where
+                      // someone remembered to ask - and a sentence that grew,
+                      // or a translation 30% longer, lost its end to an
+                      // ellipsis with no way to read it.
+                      readonly property bool wraps: modelData.wrap !== undefined ? !!modelData.wrap : !modelData.tail
+                      wrapMode: wraps ? Text.Wrap : Text.NoWrap
+                      elide: wraps ? Text.ElideNone : Text.ElideRight
                       color: modelData.c === "accent" ? Color.accent : modelData.c === "urgent" ? Color.urgent : modelData.c === "muted" ? Util.alpha(Color.popups.text, 0.6)
                            : modelData.c === "warn" ? Qt.tint(Color.popups.text, Util.alpha(Color.urgent, 0.55)) : modelData.c === "good" ? Qt.tint(Color.popups.text, Util.alpha(Color.accent, 0.5)) : Color.popups.text
                       text: modelData.t
