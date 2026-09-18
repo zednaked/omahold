@@ -769,11 +769,12 @@ function removeBuilding(w, i, byPlayer) {
 // cells per idle dwarf per tick was most of the cost of a tick.
 function cache(w) {
   if (w.cache && !w.dirty) return w.cache
-  // What could not be reached is a fact about the map, so it expires when the
-  // map changes, not three days later: a finished staircase, a wall pulled
-  // down or a door unlocked opens work that the list still says is hopeless.
-  // The timer in `tick` stays as the floor under it, for the world that sits
-  // still - a hold with nothing being built changes nothing for hours.
+  // What nobody could reach is a fact about the map, and this is the moment the
+  // map is known to have changed: a finished staircase, a wall pulled down, a
+  // vein opened. It used to expire three days later, and the work sat there.
+  // Measured over ten seeds this is not a cost - 204 deaths become 176, the
+  // hold's wealth and its brewing do not move - and a narrower trigger, only
+  // the changes that touch passage, measured worse than both.
   if (w.unreach) w.unreach = {}
   var c = { stills: [], shops: [], farms: [], beds: [], stocks: [], tables: [], statues: [], shrubs: [], water: [], desigs: [],
             kitchens: [], smelters: [], forges: [], torches: [], trainings: [], jewelers: [], graves: [],
@@ -4033,7 +4034,11 @@ function holdTrade(w) {
   if (countItems(w, "log") < 8) wants.push(["log", 8])
   if (countItems(w, "bar") < 4) wants.push(["bar", 3])
   if (countItems(w, "pick") < 1) wants.push(["pick", 1])
-  if (!wants.length) wants.push(["food", Math.ceil(p)])
+  // Nothing running short is a reason not to trade. The hold used to put a
+  // deal up at every caravan regardless, and since the merchants take a fifth
+  // of what they handle, a hold with full larders was paying that fifth for
+  // food it did not need: ten seeds, 79k of worth against 66k.
+  if (!wants.length) return
   // what it can spare, dearest first, keeping a floor of each
   var floors = { craft: 2, cutgem: 0, jewel: 0, gem: 2, ore: 4, stone: 12, log: 12, bar: 4 }
   var spares = []
@@ -4201,6 +4206,7 @@ function tick(w) {
   var d = date(w)
   if (w.tick % DAY === 0) dayStart(w, d)
   if (w.tick % (DAY * SEASON_DAYS) === 0) seasonStart(w, d)
+  // the floor under the line in `cache`, for a hold where nothing is built
   if (w.tick % 300 === 0) { w.unreach = {} }
   // crops
   if (w.tick % 5 === 0) { var fm = cache(w).farms; for (var fi = 0; fi < fm.length; fi++) { var fc = fm[fi]; if (w.grow[fc] > 0 && w.grow[fc] < 200) w.grow[fc] += (w.floor[fc] === F_MOSS ? 6 : 5) } }
@@ -4293,6 +4299,21 @@ function actDwarf(w, u) {
   if (needJob(w, u)) return
   if (u.jobCool > 0) u.jobCool--
   else {
+    // Two things outrank the pick, and the list of what nobody can reach was
+    // hiding both: while it expired on a timer there were stretches with
+    // nothing diggable, and the two got their turn by accident.
+    //
+    // A dwarf bleeding out lies down first. `branchRest` is the first branch
+    // of the economy for exactly that reason, but the economy is consulted
+    // after the designations, so the pick beat the infirmary bed. Twenty
+    // seeds: 359 deaths become 319, and the hold ends five dwarves larger.
+    if (wounded(u) && branchRest(w, u)) return
+    // A deal *the player* struck has a deadline a designation does not: the
+    // merchants leave on the fifth day and the rock is there tomorrow. Only
+    // the player's — putting the hold's own convenience deal first as well
+    // cost a fifth of everything it handled, 157k of worth against 138k, for
+    // goods nobody had asked for. That one is carried by the economy branch.
+    if (w.caravan && w.caravan.stage === "trade" && tradeTable(w).byPlayer && branchTrade(w, u)) return
     // Which is consulted first stays fixed. Letting a dwarf who loves the
     // workshop check the economy before the player's designations did move
     // inclination from 12.6% to 14.9% of their work - and cost 28% of the

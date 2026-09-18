@@ -513,6 +513,13 @@ Item {
       if (w.desig[i]) {
         out.push({ t: root.tf("p.desig", ({ 1: root.t("tool.dig"), 2: root.t("tool.stair"), 3: root.t("tool.chop"), 4: root.tf("fl.build", Sim.buildName(w.dbuild[i])) })[w.desig[i]]), c: "" })
         if (Sim.isUnreachable(w, i)) out.push({ t: root.t("p.noway"), c: "warn", wrap: true })
+        // Red on the map has two causes and they need different answers from
+        // the player: dig a way in, or make the material. Saying which is the
+        // difference between a plan and a guess.
+        else if (w.desig[i] === 4) {
+          var bmat = (Sim.BUILD_INFO[w.dbuild[i]] || {}).mat
+          if (bmat && Sim.countItems(w, bmat) === 0) out.push({ t: root.tf("p.desig.nomat", Sim.itemName(bmat)), c: "warn", wrap: true })
+        }
       }
       var nbad = Sim.countUnreachable(w)
       if (nbad > 0) out.push({ t: root.tf("p.desig.red", nbad), c: "warn", wrap: true })

@@ -79,8 +79,10 @@ function camped(seed) {
 {
   const w = camped(11)
   const tr = S.tradeTable(w)
-  for (let k = 0; k < 3; k++) S.tradeOffer(w, "craft", 1)
-  S.tradeWant(w, "food", 8)
+  // the player's deal, which is what the trade page files: the hold's own
+  // convenience deal is carried by the economy, this one outranks the pick
+  for (let k = 0; k < 3; k++) S.tradeOffer(w, "craft", 1, true)
+  S.tradeWant(w, "food", 8, true)
   check(S.tradeAccepts(w), "a deal they accept is on the table")
   const foodBefore = S.countItems(w, "food"), craftBefore = S.countItems(w, "craft")
   let owedLeft = Object.keys(S.tradeOwed(w)).length
