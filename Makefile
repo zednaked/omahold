@@ -12,10 +12,11 @@
 #   make artifacts what a strange mood is about, and what it puts on the object
 #   make stairs    going down, which has broken three times
 #   make trade     the caravan, and the deal the player builds with it
+#   make court     the infirmary, the pen and the crown
 
-.PHONY: test sim i18n hostile deep halls presets surfaces lives artifacts stairs trade validate
+.PHONY: test sim i18n hostile deep halls presets surfaces lives artifacts stairs trade court validate
 
-test: sim i18n deep halls presets surfaces lives artifacts stairs trade hostile
+test: sim i18n deep halls presets surfaces lives artifacts stairs trade court hostile
 
 sim:
 	@echo "== simulation =="
@@ -58,6 +59,10 @@ stairs:
 trade:
 	@echo "== trade =="
 	@node test/trade.js | tail -1
+
+court:
+	@echo "== infirmary, pen, crown =="
+	@node test/court2.js | tail -1
 
 hostile:
 	@echo "== save.py =="

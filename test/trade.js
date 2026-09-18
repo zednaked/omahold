@@ -143,9 +143,11 @@ function camped(seed) {
   S.tradeOffer(w, "craft", 1)
   S.tradeWant(w, "bar", 40)                    // wildly over the margin
   check(!S.tradeAccepts(w), "a greedy table is refused")
-  const before = S.countItems(w, "craft")
+  // measured on the deliveries, not on the stock: a working fortress makes and
+  // uses crafts while the clock runs
+  const tr = S.tradeTable(w)
   for (let k = 0; k < 600; k++) S.tick(w)
-  check(S.countItems(w, "craft") === before, "and nobody carries anything to the camp")
+  check(Object.keys(tr.delivered || {}).length === 0, "and nobody carries anything to the camp")
 }
 
 // --- they leave on the fifth day, paying for what arrived ---------------------

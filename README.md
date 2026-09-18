@@ -355,6 +355,85 @@ about: the founding for most, a relative for a hold of families, the deep for
 one that has already dug to it. A classic embark starts with no history, which
 is the point of a classic embark.
 
+## The caravan, and the deal
+
+The caravan was the one friendly visitor in the game and it was an automaton:
+it took up to four things it picked itself and left food in a fixed ratio, so
+crafts and jewels were worth only the wealth they added.
+
+Now it is a deal with two sides. **≡ menu → Orders → Caravan** puts your goods
+on the table and names what you want back; they weigh both at their own prices
+and take it if what they give is worth no more than **four fifths** of what
+they take. Dwarves then carry the offer to the camp like any other hauling job,
+and **nothing moves until the whole offer has arrived** — which is what makes it
+a decision rather than a button. They leave on the fifth day and pay for
+whatever got there in time.
+
+**If you say nothing, the hold trades for itself.** Same principle as the
+morning work orders: it sells what is piling up above a floor and asks for what
+is running out — food under 60% of the larder cap, drink, logs, bars, a pick —
+and scales the ask back until the merchants would take it. The moment you touch
+the table it is yours, including clearing it to nothing on purpose.
+
+## The king comes up
+
+The lost king was a name in the envoy's sentence: *"in the name of king
+so-and-so"*. A hold that pays its tribute is a hold worth visiting, so
+twenty-five days later he climbs out of the deep himself, with two of his
+guard, and stays six days. While he is in the hall everyone talks about it.
+
+What he makes of the visit depends on what he finds:
+
+- a hold that **grew** since the tribute gets a named weapon from his own
+  smith — grade 4, above steel, below the tomb's relic;
+- one that **held its ground** gets his word, and the protection of his people;
+- one that **fell apart** gets a look, and they feel it.
+
+## Wounds
+
+A wound was a number that went back up on its own, so being hurt cost time and
+nothing else. Below **a third** of their hit points a dwarf is *wounded*: they
+work at half speed, and they do not heal at all on their own.
+
+They need an **infirmary bed** (`i`) to lie in and somebody to tend them — any
+dwarf will do, faster if they have the hands for it. Tending mends 3 or more
+hit points and builds a tie between the two of them, because being looked after
+is not nothing. The Here page names whoever is down, and says if there is
+nowhere to put them.
+
+Left alone a bad wound closes at **four days a hit point**, which is slow
+enough that an infirmary is worth building and not so slow that a hold without
+one is condemned. Not healing at all was tried first and cost two dwarves a
+fortress: the classic embark never has a bed.
+
+## Animals
+
+A **pen** (`a`) is the cheapest way to have something in the fortress that is
+nobody's job. The caravan brings livestock to a hold that has somewhere to put
+them: goats, which stand on grass or moss and give the kitchen something that
+is not the farm, and cats, which wander off, turn up beside whoever is standing
+still, and get themselves adopted.
+
+Every animal has a name. When one dies the hold notices, and whoever kept it
+grieves — the grief system was already there, and an animal is the cheapest
+thing in this game that can be loved.
+
+## The capital
+
+"Legendary" used to be the end: six milestones, a scoreboard, and then the
+fortress kept running with nothing left to reach for. A hold that has done
+everything is not finished, it is **promoted**.
+
+The Mountainhomes recognise it as a **capital** and send the crown. The baron is
+raised to king and the barony falls vacant; the population cap goes up by eight,
+because everyone wants to live where the king lives; and everyone gets **+10**
+mood for living somewhere that matters. If the king dies, the hold crowns
+another — the only succession in the game.
+
+And the goblins start treating it as what it is. **Forty-eight days after the
+crown**, announced twenty days ahead, they come for it with everything at once:
+the royal siege. Holding that is the last thing this game asks of you.
+
 ## Lives
 
 The Legends page has everything that ever happened, in order. That is a record,
@@ -804,6 +883,8 @@ make surfaces  what the panel and the corner window have to agree on
 make lives     the chronicle read back as one dwarf's biography
 make artifacts what a strange mood is about, and what it puts on the object
 make stairs    going down, which has broken three times
+make trade     the caravan, and the deal the player builds with it
+make court     the infirmary, the pen and the crown
 make hostile   what save.py refuses, in a throwaway $HOME
 make validate  omarchy plugin validate .
 ```

@@ -35,7 +35,7 @@ var B_NONE = 0, B_STAIR = 1, B_BED = 2, B_TABLE = 3, B_FARM = 4, B_STILL = 5,
     B_WORKSHOP = 6, B_WALL = 7, B_DOOR = 8, B_STOCK = 9, B_STATUE = 10,
     B_KITCHEN = 11, B_SMELTER = 12, B_FORGE = 13, B_TORCH = 14, B_TRAINING = 15, B_JEWELER = 16,
     B_GRAVE = 17, B_HEARTH = 18, B_CRYSTAL = 19, B_GAMES = 20, B_TRAP = 21, B_POST = 22,
-    B_WELL = 23, B_FLOODGATE = 24
+    B_WELL = 23, B_FLOODGATE = 24, B_HOSPITAL = 25, B_PEN = 26
 var TORCH_RADIUS = 4.5   // cells; light fades linearly to nothing at this distance
 var BEACON_RADIUS = 7    // a hearth or a crystal column lights a whole hall
 
@@ -51,7 +51,7 @@ BUILD_KEY[9] = "stock"; BUILD_KEY[10] = "statue"; BUILD_KEY[11] = "kitchen"; BUI
 BUILD_KEY[13] = "forge"; BUILD_KEY[14] = "torch"; BUILD_KEY[15] = "training"; BUILD_KEY[16] = "jeweler"
 BUILD_KEY[17] = "grave"; BUILD_KEY[18] = "hearth"; BUILD_KEY[19] = "crystal"
 BUILD_KEY[20] = "games"; BUILD_KEY[21] = "trap"; BUILD_KEY[22] = "post"
-BUILD_KEY[23] = "well"; BUILD_KEY[24] = "floodgate"
+BUILD_KEY[23] = "well"; BUILD_KEY[24] = "floodgate"; BUILD_KEY[25] = "hospital"; BUILD_KEY[26] = "pen"
 
 var BUILD_INFO = {}
 BUILD_INFO[B_BED]      = { name: "cama",       mat: "log",   value: 10, work: 18 }
@@ -84,6 +84,21 @@ var TRAP_CHARGES = 3     // spikes bend; three foes and the thing is scrap
 // and it is the only order the militia takes.
 BUILD_INFO[B_POST]     = { name: "posto de guarda", mat: "stone", value: 12, work: 20 }
 var POST_REACH = 12     // how far from their post a guard will chase something
+// A wound was a number that went back up on its own, so being hurt cost nothing
+// but time and nobody ever did anything about it. Now a bad one festers: below
+// a third of their hit points a dwarf is *wounded*, works at half speed, and
+// heals nothing on their own — somebody has to put them in a hospital bed and
+// tend them. The fortress that never builds one keeps burying people who were
+// only badly hurt.
+BUILD_INFO[B_HOSPITAL] = { name: "leito de enfermaria", mat: "log", value: 14, work: 20 }
+var WOUND_AT = 0.34     // fraction of max hp below which a dwarf is wounded
+var TEND_WORK = 26      // how long tending one takes
+// A pen holds animals, and animals are the cheapest way for a fortress to have
+// something in it that is nobody's job. A goat eats grass and gives milk that
+// the kitchen turns into meals; a cat walks around and gets adopted, which
+// matters because the hold already knows how to grieve.
+BUILD_INFO[B_PEN]      = { name: "cercado",     mat: "log",   value: 12, work: 18 }
+var PEN_MAX = 4         // animals one pen supports
 // Water was scenery with one use: a thirsty dwarf walked to the edge of it and
 // drank, which is how three of them once died of thirst on the wrong side of a
 // regrown tree. A well is drawn from where the hold lives instead, and it is
@@ -206,6 +221,7 @@ function hash(i) { var x = (i * 2654435761) >>> 0; x ^= x >>> 13; x = Math.imul(
 // ---- names ------------------------------------------------------------------
 var SYL_A = ["Ur", "Ka", "Do", "Zas", "Mo", "Er", "On", "To", "Lo", "Ri", "Sod", "Id", "Ath", "Bem", "Kib", "Ned", "Ol", "Rak", "Ud", "Vab"]
 var SYL_B = ["ist", "dol", "dok", "it", "muz", "ib", "ul", "sid", "kud", "sen", "el", "ral", "am", "os", "eth", "ish", "an", "ur", "lem", "ok"]
+var BEAST_NAMES = ["Fuligem", "Barril", "Pedrinha", "Sino", "Nabo", "Trovão", "Pingo", "Bota", "Cinza", "Migalha", "Tocha", "Nuvem"]
 var SUR_A = ["Pedra", "Ferro", "Barba", "Machado", "Rocha", "Cerveja", "Fogo", "Neve", "Ouro", "Cinza", "Martelo", "Bronze", "Sal", "Trovão", "Musgo"]
 var SUR_B = ["dura", "fria", "funda", "velha", "forte", "torta", "rubra", "longa", "viva", "negra", "clara", "brava", "muda", "alta", "seca"]
 var FORT_A = ["Salão", "Martelo", "Portão", "Poço", "Trono", "Sino", "Espelho", "Muralha", "Forja", "Escudo"]
@@ -470,7 +486,7 @@ function addItem(w, type, i, grade) {
 }
 function addUnit(w, kind, i) {
   var hp = { dwarf: 12, goblin: 5, deer: 5, wolf: 5, kobold: 4, merchant: 10, crawler: 7, sentinel: 16, envoy: 14,
-             king: 30, kingsguard: 20 }[kind] || 6
+             king: 30, kingsguard: 20, goat: 6, cat: 4 }[kind] || 6
   var u = { id: w.nextId++, k: kind, i: i, hp: hp, maxhp: hp, path: null, pi: 0, job: null, born: w.tick, cool: 0, wait: 0 }
   w.units.push(u); return u
 }
@@ -728,7 +744,7 @@ function cache(w) {
   if (w.cache && !w.dirty) return w.cache
   var c = { stills: [], shops: [], farms: [], beds: [], stocks: [], tables: [], statues: [], shrubs: [], water: [], desigs: [],
             kitchens: [], smelters: [], forges: [], torches: [], trainings: [], jewelers: [], graves: [],
-            hearths: [], crystals: [], games: [], traps: [], beacons: [], posts: [], wells: [] }
+            hearths: [], crystals: [], games: [], traps: [], beacons: [], posts: [], wells: [], hospital: [], pens: [] }
   var minG = 255, maxG = 0
   for (var gq = 0; gq < N; gq++) { var gv = w.ground[gq]; if (gv < minG) minG = gv; if (gv > maxG) maxG = gv }
   c.minGround = minG; c.maxGround = maxG
@@ -744,6 +760,8 @@ function cache(w) {
       else if (b === B_GAMES) c.games.push(i); else if (b === B_TRAP) c.traps.push(i)
       else if (b === B_POST) c.posts.push(i)
       else if (b === B_WELL) c.wells.push(i)
+      else if (b === B_HOSPITAL) c.hospital.push(i)
+      else if (b === B_PEN) c.pens.push(i)
       else if (b === B_JEWELER) c.jewelers.push(i)
       else if (b === B_GRAVE) c.graves.push(i)
     }
@@ -1022,7 +1040,8 @@ function consumeCarried(w, u) { if (!u.carry) return; var id = u.carry; u.carry 
 function removeItem(w, id) { for (var k = 0; k < w.items.length; k++) if (w.items[k].id === id) { w.items[k].gone = true; w.items.splice(k, 1); return } }
 
 function skillMul(u, s) {
-  var m = 1 + 0.12 * (u.skills[s] || 0) * (u.trait === "preguiçoso" ? 0.7 : 1)
+  // everything a badly wounded dwarf does takes twice as long
+  var m = (1 + 0.12 * (u.skills[s] || 0) * (u.trait === "preguiçoso" ? 0.7 : 1)) * woundMul(u)
   if (s === "mine" && u.tool === "pick") m *= 1.6
   if (s === "wood" && u.tool === "axe") m *= 1.6
   return m
@@ -1779,6 +1798,8 @@ function branchHaul(w, u) {
 // The branches in their default order, with the kind of work each one is, so
 // a leaning can move it up or down the list.
 var BRANCHES = [
+  { cat: "",      fn: branchRest },     // the badly hurt lie down
+  { cat: "haul",  fn: branchTend },     // and somebody sees to them
   { cat: "fight", fn: branchStation },  // a guard with a post holds it
   { cat: "haul",  fn: branchBury },  // the dead first: everyone walks past them
   { cat: "",      fn: branchMourn }, // then whoever cannot work for grieving
@@ -2029,6 +2050,31 @@ function work(w, u) {
       if (u.thirst > 65 || u.hunger > 65 || u.sleep > 75) { dropJob(w, u); return }
       if (!u.path && dist(u.i, j.i) > 2) { dropJob(w, u); return }
       if (dist(u.i, j.i) <= 2) { if (chance(w, 0.02)) thought(w, u, L("th.station", "montou guarda no posto"), 1); dropJob(w, u) }
+      return
+    case "rest":
+      if (w.build[j.i] !== B_HOSPITAL) { dropJob(w, u); return }
+      if (u.i !== j.i) { if (!u.path) dropJob(w, u); return }
+      j.prog++
+      // Lying down alone does not mend a bad wound — that is what the tending
+      // is for. It keeps them from making it worse, and keeps them findable.
+      if (!wounded(u)) { thought(w, u, L("th.mended", "levantou do leito curado"), 5); dropJob(w, u) }
+      return
+    case "tend":
+      var pat = unitById(w, j.who)
+      if (!pat || w.build[j.i] !== B_HOSPITAL || !wounded(pat)) { dropJob(w, u); return }
+      if (dist(u.i, j.i) > 1) { if (!u.path) dropJob(w, u); return }
+      j.prog += skillMul(u, "craft")
+      if (j.prog >= TEND_WORK) {
+        pat.hp = Math.min(pat.maxhp, pat.hp + 3 + Math.floor(u.skills.craft / 3))
+        pat.tended = w.tick + DAY
+        w.stats.tended = (w.stats.tended || 0) + 1
+        gainSkill(w, u, "craft", 1)
+        thought(w, u, LF("th.tended", "cuidou de {0}", first(pat.name)), 3)
+        thought(w, pat, LF("th.was.tended", "foi cuidado por {0}", first(u.name)), 4)
+        shiftBond(w, u, pat, 5)
+        announce(w, LF("msg.tended", "{0} cuidou de {1} na enfermaria.", u.name, pat.name), 0)
+        dropJob(w, u)
+      }
       return
     case "trade":
       if (j.stage === "fetch") {
@@ -2322,6 +2368,137 @@ function strangeMoodWork(w, u) {
       dropJob(w, u)
     }
   }
+}
+
+// ---- livestock --------------------------------------------------------------
+// The hold had deer to hunt and nothing to keep. A pen and a couple of goats
+// give the kitchen something that is not the farm, and a cat gives somebody
+// something to lose — the grief system already exists, and an animal is the
+// cheapest thing in the game that can be loved.
+function penSpot(w) {
+  var pens = cache(w).pens
+  if (!pens.length) return -1
+  return pens[ri(w, pens.length)]
+}
+function livestock(w) {
+  var n = 0
+  for (var k = 0; k < w.units.length; k++) if (w.units[k].k === "goat" || w.units[k].k === "cat") n++
+  return n
+}
+// Goats eat, and what they give is milk the kitchen can cook. A pen with grass
+// or moss under it feeds them; one cut into bare stone does not.
+function penTick(w, d) {
+  var pens = cache(w).pens
+  if (!pens.length) return
+  var beasts = livestock(w)
+  // a caravan season brings stock to a hold that has somewhere to put it
+  if (beasts < pens.length * PEN_MAX && w.caravan && w.caravan.stage === "trade" && chance(w, 0.5)) {
+    var sp = penSpot(w)
+    if (sp >= 0) {
+      var kind = chance(w, 0.75) ? "goat" : "cat"
+      var a = addUnit(w, kind, nearFree(w, sp, 1))
+      a.name = pick(w, tbl("BEAST", BEAST_NAMES))
+      a.home = sp
+      announce(w, LF("msg.beast.came", "Os mercadores trouxeram {0}, {1}.", beastName(kind), a.name), 1)
+    }
+  }
+  // milk, from goats standing on something that grows
+  var milked = 0
+  for (var q = 0; q < w.units.length; q++) {
+    var g = w.units[q]
+    if (g.k !== "goat") continue
+    var fl = w.floor[g.i]
+    if (fl !== F_GRASS && fl !== F_MOSS) continue
+    if (!chance(w, 0.5)) continue
+    addItem(w, "food", nearFree(w, g.home >= 0 ? g.home : g.i, 2))
+    milked++
+  }
+  if (milked) w.stats.milked = (w.stats.milked || 0) + milked
+}
+function beastName(kind) { return L("unit." + kind, kind === "goat" ? "cabra" : "gato") }
+// Animals wander near their pen; a cat wanders wherever it likes and turns up
+// next to whoever is standing still, which is how it gets adopted.
+function actBeast(w, u) {
+  // Once every four ticks, staggered by id. A goat does not need to decide
+  // anything sixty times a minute, and every draw an animal makes shifts the
+  // whole rng stream — with them deciding every tick the hold lost two dwarves
+  // per fortress to nothing but rerolled combat.
+  if ((w.tick & 3) !== (u.id & 3)) return
+  if (u.wait > 0) { u.wait--; return }
+  u.wait = 6 + ri(w, 14)
+  if (u.k === "cat") {
+    var ds = dwarves(w)
+    if (ds.length && chance(w, 0.5)) {
+      var who = ds[ri(w, ds.length)]
+      if (go(w, u, function (c) { return adjacent(c, who.i) }, who.i, 900)) {
+        // being followed around by a cat is one of the few unearned good
+        // things that happen in this game
+        if (adjacent(u.i, who.i) && chance(w, 0.25)) {
+          thought(w, who, LF("th.cat", "foi seguido por {0} a manhã toda", u.name), 3)
+          if (!u.owner) { u.owner = who.id; announce(w, LF("msg.cat.adopt", "{0} adotou {1}.", who.name, u.name), 0) }
+        }
+        step(w, u)
+        return
+      }
+    }
+  }
+  var home = (typeof u.home === "number" && u.home >= 0) ? u.home : w.depot
+  if (dist(u.i, home) > 6) { if (go(w, u, function (c) { return c === home }, home, 900)) step(w, u); return }
+  var n = neighbors(w, u.i, u, nb)
+  if (n > 0 && chance(w, 0.6)) u.i = nb[ri(w, n)]
+}
+// A death in the pen lands on whoever kept it.
+function beastDied(w, u, how) {
+  var nm = u.name || beastName(u.k)
+  announce(w, LF("msg.beast.died", "{0} morreu.", nm), 1)
+  var ds = dwarves(w)
+  for (var k = 0; k < ds.length; k++) {
+    var o = ds[k]
+    if (u.owner === o.id) { thought(w, o, LF("th.beast.mine", "perdeu {0}", nm), -8); o.grief = (o.grief || 0) + 1 }
+    else if (dist(o.i, u.i) < 8) thought(w, o, LF("th.beast.lost", "perdeu {0}, da fortaleza", nm), -2)
+  }
+  if (u.owner) legend(w, LF("lg.beast", "{0}, da fortaleza, morreu no ano {1}.", nm, date(w).year))
+}
+
+// ---- wounds -----------------------------------------------------------------
+function wounded(u) { return u.k === "dwarf" && u.hp <= Math.ceil(u.maxhp * WOUND_AT) }
+// Work done by someone who should be lying down.
+function woundMul(u) { return wounded(u) ? 0.5 : 1 }
+// A free hospital bed, and whether anybody is in it.
+function hospitalFor(w, u) {
+  var beds = cache(w).hospital
+  for (var k = 0; k < beds.length; k++) {
+    var b = beds[k]
+    if (w.claim[b] && w.claim[b] !== u.id) continue
+    return b
+  }
+  return -1
+}
+// Going to lie down. A wounded dwarf does this instead of working, which is
+// the whole cost of the wound: the hold is short a pair of hands until
+// somebody has tended them.
+function branchRest(w, u) {
+  if (!wounded(u) || u.hp >= u.maxhp) return false
+  if (u.job && u.job.k === "rest") return false
+  var bed = hospitalFor(w, u)
+  if (bed < 0) return false
+  if (dist(u.i, bed) > 1 && !go(w, u, function (q) { return q === bed }, bed, 2000)) return false
+  setJob(w, u, { k: "rest", i: bed, claims: true, prog: 0 })
+  return true
+}
+// Tending someone who is lying there. Anybody can do it; it goes faster for
+// whoever has the hands for it.
+function branchTend(w, u) {
+  var beds = cache(w).hospital
+  if (!beds.length) return false
+  for (var k = 0; k < beds.length; k++) {
+    var b = beds[k], p = unitAt(w, b)
+    if (!p || p === u || p.k !== "dwarf" || !wounded(p) || p.tended > w.tick) continue
+    if (!go(w, u, function (q) { return q === b || adjacent(q, b) }, b, 1500)) continue
+    setJob(w, u, { k: "tend", i: b, who: p.id, prog: 0 })
+    return true
+  }
+  return false
 }
 
 // ---- traps ------------------------------------------------------------------
@@ -3409,6 +3586,9 @@ function nobleTick(w, d) {
 // stop at), but the Legends page carries the date it was earned, and the
 // scoreboard is written then instead of only when everyone is dead.
 var MILESTONES = ["artifact", "wealth", "pop", "repelled", "depths", "years"]
+// Not one of the six: this one only exists once the six are done, which is why
+// it is counted apart. It is the answer to "and then what".
+function royalHeld(w) { return !!(w.royalCame && !w.raid && !w.fallen && w.tick > w.royalCame + DAY) }
 function milestoneMet(w, id) {
   if (id === "artifact") return w.stats.artifacts >= 1
   if (id === "wealth") return w.wealth >= 6000
@@ -3435,6 +3615,69 @@ function checkMilestones(w) {
     w.legendary = w.tick
     announce(w, LF("msg.legendary.hold", "{0} é uma fortaleza lendária. As Montanhas-Lar cantam o seu nome.", w.name), 2)
     legend(w, LF("lg.legendary", "{0} tornou-se lendária no ano {1}.", w.name, date(w).year))
+    becomeCapital(w)
+  }
+}
+// ---- the capital ------------------------------------------------------------
+// "Legendary" was the end of the game: six milestones, a scoreboard, and then
+// the fortress kept going with nothing left to reach for. A hold that has done
+// everything is not finished, it is *promoted* — and being the capital is a
+// job, not a prize.
+//
+// The Mountainhomes send the crown. The baron is raised to king and stays, the
+// hold's cap goes up because everyone wants to live where the king lives, and
+// the goblins start treating it as what it is: three years after the crown
+// arrives they come for it in one piece, announced a season ahead, and holding
+// that is the last thing this game asks of you.
+var ROYAL_DELAY = 48      // days from the crown to the royal siege
+function becomeCapital(w) {
+  if (w.capital) return
+  w.capital = Math.max(1, w.tick)
+  w.popCap = w.popCap + 8
+  var monarch = w.baron ? unitById(w, w.baron) : pickBaron(w)
+  if (monarch) {
+    w.monarch = monarch.id
+    monarch.crowned = w.tick
+    announce(w, LF("msg.capital", "As Montanhas-Lar reconhecem {0} como capital, e coroam {1}.", w.name, monarch.name), 2)
+    legend(w, LF("lg.capital", "{0} tornou-se capital no ano {1}, e {2} foi coroado.", w.name, date(w).year, monarch.name))
+    // the barony is vacant again: somebody else gets the title
+    w.baron = 0; w.demand = null
+  } else announce(w, LF("msg.capital.nobody", "As Montanhas-Lar reconhecem {0} como capital.", w.name), 2)
+  var ds = dwarves(w)
+  for (var k = 0; k < ds.length; k++) thought(w, ds[k], L("th.capital", "vive na capital"), 10)
+  w.royalRaid = w.tick + DAY * ROYAL_DELAY
+  w.royalWarned = 0
+}
+// Living under a crown, and the siege it invites.
+function capitalTick(w, d) {
+  if (!w.capital || w.fallen) return
+  var king = w.monarch ? unitById(w, w.monarch) : null
+  if (!king && w.monarch) {
+    // the king is dead. The hold crowns another, because a capital without one
+    // is just a fortress with a big cap.
+    w.monarch = 0
+    var heir = pickBaron(w)
+    if (heir) {
+      w.monarch = heir.id; heir.crowned = w.tick
+      announce(w, LF("msg.crown.heir", "O rei está morto. {0} é coroado em seu lugar.", heir.name), 2)
+      legend(w, LF("lg.crown.heir", "{0} foi coroado no ano {1}, depois da morte do rei.", heir.name, date(w).year))
+      var ds2 = dwarves(w)
+      for (var q = 0; q < ds2.length; q++) thought(w, ds2[q], L("th.crown.heir", "viu uma coroação"), 4)
+    }
+  } else if (king && w.tick % DAY === 0) {
+    for (var t = 0, ds3 = dwarves(w); t < ds3.length; t++) thought(w, ds3[t], LF("th.monarch", "vive sob o rei {0}", first(king.name)), 1)
+  }
+  if (w.peaceful || !w.royalRaid) return
+  if (!w.royalWarned && w.tick >= w.royalRaid - DAY * 20) {
+    w.royalWarned = 1
+    announce(w, L("msg.royal.warn", "Correm notícias: os goblins souberam da coroa. Vêm buscá-la."), 2)
+    legend(w, LF("lg.royal.warn", "No ano {0}, os goblins puseram os olhos na capital.", date(w).year))
+  }
+  if (w.tick >= w.royalRaid && !w.raid) {
+    w.royalRaid = 0
+    w.royalCame = Math.max(1, w.tick)
+    spawnRaid(w, d, (w.scenario ? w.scenario.wave : 8) + 6)
+    announce(w, L("msg.royal.raid", "O cerco real: tudo o que os goblins têm, de uma vez."), 2)
   }
 }
 // What a game is worth when it ends, either way. Written once, into the
@@ -3456,7 +3699,7 @@ function checkFall(w) {
 }
 function dayStart(w, d) {
   rosterMilitia(w)
-  if (!w.fallen) { nobleTick(w, d); courtTick(w, d); kingTick(w, d) }
+  if (!w.fallen) { nobleTick(w, d); courtTick(w, d); kingTick(w, d); penTick(w, d); capitalTick(w, d) }
   // Once a day, at dawn. Rewriting the queue four times a day instead looked
   // like the obvious fix for a cellar that runs dry at breakfast, and cost
   // a third of the hold's brewing and six fortresses in sixteen: the churn
@@ -3825,10 +4068,11 @@ function tick(w) {
     else if (u.k === "merchant") actMerchant(w, u)
     else if (u.k === "envoy") actEnvoy(w, u)
     else if (u.k === "king" || u.k === "kingsguard") actKing(w, u)
+    else if (u.k === "goat" || u.k === "cat") actBeast(w, u)
     if (w.build[u.i] === B_TRAP && hostile(u)) { if (trapFires(w, u) && w.units.indexOf(u) < 0) continue }
     // liquids
     var t = w.tile[u.i]
-    if (t === T_MAGMA) { if (u.k === "dwarf") die(w, u, L("death.magma", "queimou até a morte no magma")); else removeUnit(w, u) }
+    if (t === T_MAGMA) { if (u.k === "dwarf") die(w, u, L("death.magma", "queimou até a morte no magma")); else { if (u.k === "goat" || u.k === "cat") beastDied(w, u, "magma"); removeUnit(w, u) } }
     else if (t === T_WATER) { u.drown = (u.drown || 0) + 1; if (u.drown > 6) { if (u.k === "dwarf") die(w, u, L("death.drowned", "afogou-se")); else removeUnit(w, u) } else { var esc = neighbors(w, u.i, u, nb); if (esc > 0) u.i = nb[0] } }
     else u.drown = 0
   }
@@ -3843,7 +4087,14 @@ function actDwarf(w, u) {
   if (u.thirst > 140 && w.tick % 12 === 0) { u.hp -= 1; if (u.hp <= 0) { die(w, u, L("death.thirst", "morreu de sede")); return } }
   // Mending happens twice as fast beside a fire, which is the one thing in the
   // hold that helps a wounded dwarf without anybody working on it.
-  if (u.hp < u.maxhp && u.hunger < 80 && w.tick % (nearAny(w, cache(w).hearths, u.i, 3) ? 20 : 40) === 0) u.hp++
+  // A scratch closes on its own, quickly. A bad wound closes too, but four
+  // days a point — slow enough that an infirmary is worth building and not so
+  // slow that a hold without one is condemned. Zero was tried: it cost two
+  // dwarves a fortress, because the classic embark never has a bed at all.
+  if (u.hp < u.maxhp && u.hunger < 80) {
+    var rate = wounded(u) ? DAY * 4 : nearAny(w, cache(w).hearths, u.i, 3) ? 20 : 40
+    if (w.tick % rate === 0) u.hp++
+  }
   moodTick(w, u)
   if (w.units.indexOf(u) < 0) return
   if (u.mood_state === "berserk") {
@@ -4007,6 +4258,10 @@ function scenario(w, n, opts) {
     place(w, cx, cy, z2, -1, 2, B_GAMES); place(w, cx, cy, z2, 1, 2, B_GAMES)
     place(w, cx, cy, z2, 8, 4, B_CRYSTAL)
   }
+  // A pen on the farm level, where the grass is: goats need something growing
+  // under them to be worth keeping.
+  var nPens = opts.pens === undefined ? 1 : opts.pens
+  for (k = 0; k < nPens && k < 3; k++) place(w, cx, cy, z1, -6 + k * 2, 3, B_PEN)
   if (halls >= 2) {
     place(w, cx, cy, z2, -8, -4, B_HEARTH); place(w, cx, cy, z2, 8, -4, B_CRYSTAL)
     place(w, cx, cy, z2, -1, -2, B_GAMES); place(w, cx, cy, z2, 1, -2, B_GAMES)
@@ -4020,6 +4275,10 @@ function scenario(w, n, opts) {
   for (var r = 0; r < bedRows.length && beds < n + 4; r++) for (dx = -8; dx <= -1 && beds < n + 4; dx++) if (place(w, cx, cy, z3, dx, bedRows[r], B_BED) >= 0) beds++
   place(w, cx, cy, z3, 2, -4, B_SMELTER); place(w, cx, cy, z3, 4, -4, B_FORGE); place(w, cx, cy, z3, 6, -4, B_WORKSHOP); place(w, cx, cy, z3, 8, -4, B_WORKSHOP)
   place(w, cx, cy, z3, 3, 2, B_TRAINING); place(w, cx, cy, z3, 5, 2, B_TRAINING); place(w, cx, cy, z3, 7, 2, B_STATUE); place(w, cx, cy, z3, 8, -2, B_JEWELER)
+  // An infirmary beside the dormitory: two beds, which is what a hold that
+  // expects to be hurt keeps. A garrison that skipped the hall still gets them.
+  var nBeds = opts.hospital === undefined ? 2 : opts.hospital
+  for (k = 0; k < nBeds && k < 4; k++) place(w, cx, cy, z3, -8 + k, 4, B_HOSPITAL)
   var stock3 = []
   for (dx = 2; dx <= 8; dx++) for (dy = 3; dy <= 4; dy++) { var s3 = place(w, cx, cy, z3, dx, dy, B_STOCK); if (s3 >= 0) stock3.push(s3) }
   place(w, cx, cy, z3, -6, 0, B_TORCH); place(w, cx, cy, z3, -2, 0, B_TORCH); place(w, cx, cy, z3, 2, 0, B_TORCH); place(w, cx, cy, z3, 6, 0, B_TORCH)
@@ -4325,7 +4584,7 @@ var JOB_PT = { dig: "cavando", digstair: "cavando escada", chop: "cortando", bui
   sleep: "dormindo", fight: "lutando", arm: "pegando arma", mood: "humor estranho", flee: "fugindo", idle: "ocioso",
   equip: "equipando", train: "treinando", cook: "cozinhando", smelt: "fundindo", forge: "forjando", cut: "lapidando", setgem: "fazendo joia",
   bury: "sepultando os mortos", mourn: "velando os mortos", play: "jogando", station: "indo para o posto",
-  trade: "levando à caravana" }
+  trade: "levando à caravana", rest: "de cama, ferido", tend: "cuidando de um ferido" }
 function jobName(u) {
   if (!u.job) return u.mood_state === "melancholy" ? L("mood.melancholy", "melancólico") : u.mood_state === "berserk" ? L("mood.berserk", "furioso") : L("job.idle", "ocioso")
   var j = u.job, key = j.k === "dig" && j.stair ? "digstair" : j.k
@@ -4407,6 +4666,11 @@ function deserialize(json) {
   if (typeof w.caravanAt !== "number") w.caravanAt = 0
   if (w.crown === undefined) w.crown = null
   if (typeof w.blessed !== "number") w.blessed = 0
+  if (typeof w.capital !== "number") w.capital = 0
+  if (typeof w.monarch !== "number") w.monarch = 0
+  if (typeof w.royalRaid !== "number") w.royalRaid = 0
+  if (typeof w.royalWarned !== "number") w.royalWarned = 0
+  if (typeof w.royalCame !== "number") w.royalCame = 0
   for (var aq = 0; aq < (w.artifacts || []).length; aq++) if (w.artifacts[aq].about === undefined) w.artifacts[aq].about = null
   if (typeof w.demandSince !== "number") w.demandSince = 0
   if (w.demand === undefined) w.demand = null

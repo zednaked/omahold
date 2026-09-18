@@ -8,7 +8,7 @@ const fs = require("fs"), path = require("path")
 const src = fs.readFileSync(path.join(__dirname, "..", "sim.js"), "utf8").replace(".pragma library", "")
 const S = new Function(src + `; return { newScenario, tick, dwarves, pop, addUnit, addItem, cache, cellLight, isLit,
   B_HEARTH, B_CRYSTAL, B_GAMES, B_GRAVE, B_TORCH, B_TRAP, B_NONE, B_POST, B_WELL, B_FLOODGATE, T_WATER, T_OPEN,
-  TRAP_CHARGES, BOND_FRIEND, POST_REACH, trapFires, trapCharges, armTrap, bondTotal, shiftBond, nearBuilding,
+  TRAP_CHARGES, BOND_FRIEND, POST_REACH, WOUND_AT, trapFires, trapCharges, armTrap, bondTotal, shiftBond, nearBuilding,
   buildName, canDesignate, rosterMilitia, spreadLiquids, touchesWater, idx, ix, iy, iz, dist, N, W, H, NN, DAY }`)()
 
 let passed = 0, failed = 0
@@ -57,10 +57,15 @@ w.build[open] = S.B_NONE; w.dirty = true; S.tick(w)
 const fire = c.hearths[0]
 const near = S.dwarves(w)[0], far = S.dwarves(w)[1]
 near.i = fire + 1; far.i = open
-near.hp = far.hp = 4; near.hunger = far.hunger = 0; near.thirst = far.thirst = 0
+// Above the wound threshold, or neither of them heals at all: a badly hurt
+// dwarf needs an infirmary bed and somebody to tend them, and the hearth's
+// bonus is about scratches.
+near.hp = far.hp = Math.ceil(near.maxhp * S.WOUND_AT) + 1; near.hunger = far.hunger = 0; near.thirst = far.thirst = 0
 check(S.nearBuilding(w, near.i, S.B_HEARTH, 3) && !S.nearBuilding(w, far.i, S.B_HEARTH, 3),
       "one dwarf is by the fire and the other is not")
-for (let k = 0; k < 200; k++) {
+// Short enough that the one by the fire has not simply topped out: at full
+// health both of them read the same and the test proves nothing.
+for (let k = 0; k < 120; k++) {
   near.i = fire + 1; far.i = open            // hold them in place against the job loop
   near.hunger = far.hunger = 0; near.thirst = far.thirst = 0
   S.tick(w)

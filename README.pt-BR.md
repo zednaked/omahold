@@ -353,6 +353,86 @@ predefinição é: a fundação na maioria, um parente numa fortaleza de famíli
 profundezas numa que já cavou até lá. O embarque clássico começa sem história
 nenhuma, que é o sentido de um embarque clássico.
 
+## A caravana, e o negócio
+
+A caravana era o único visitante amistoso do jogo e era um autômato: levava até
+quatro coisas que ela mesma escolhia e deixava comida numa proporção fixa, então
+artesanato e joias valiam só a riqueza que somavam.
+
+Agora é um negócio de duas pontas. **≡ menu → Ordens → Caravana** põe os seus
+bens na mesa e nomeia o que você quer em troca; eles pesam os dois lados aos
+preços deles e aceitam se o que dão vale no máximo **quatro quintos** do que
+levam. Os anões então carregam a oferta até o acampamento como qualquer outro
+transporte, e **nada se move até a oferta inteira chegar** — é isso que faz
+disso uma decisão em vez de um botão. Eles partem no quinto dia e pagam pelo que
+chegou a tempo.
+
+**Se você não disser nada, a fortaleza negocia sozinha.** Mesmo princípio das
+ordens da manhã: vende o que está empilhando acima de um piso e pede o que está
+acabando — comida abaixo de 60% do teto da despensa, bebida, madeira, barras,
+uma picareta — e encolhe o pedido até caber na margem deles. No instante em que
+você encosta na mesa, ela é sua, inclusive esvaziá-la de propósito.
+
+## O rei sobe
+
+O rei perdido era um nome na frase do emissário: *"em nome do rei fulano"*. Uma
+fortaleza que paga o tributo é uma fortaleza que vale visitar, então vinte e
+cinco dias depois ele sobe das profundezas em pessoa, com dois guardas, e fica
+seis dias. Enquanto está no salão, todo mundo comenta.
+
+O que ele acha da visita depende do que encontra:
+
+- uma fortaleza que **cresceu** desde o tributo ganha uma arma nomeada do
+  ferreiro dele — grau 4, acima do aço, abaixo da relíquia da tumba;
+- uma que **se manteve** ganha a palavra dele, e a proteção do seu povo;
+- uma que **desandou** ganha um olhar, e eles sentem.
+
+## Feridas
+
+Uma ferida era um número que voltava a subir sozinho, então se machucar custava
+tempo e mais nada. Abaixo de **um terço** dos pontos de vida um anão está
+*ferido*: trabalha na metade da velocidade e não se cura sozinho de jeito
+nenhum.
+
+Ele precisa de um **leito de enfermaria** (`i`) para deitar e de alguém para
+cuidar dele — qualquer anão serve, mais rápido quem tem mão para isso. Cuidar
+recupera 3 ou mais pontos e cria um vínculo entre os dois, porque ser cuidado
+não é pouca coisa. A página Aqui nomeia quem está de cama, e avisa se não há
+onde pôr ninguém.
+
+Sozinha, uma ferida grave fecha a **quatro dias por ponto de vida** — devagar o
+bastante para valer a pena ter enfermaria, e não tanto que uma fortaleza sem
+ela esteja condenada. Não curar nada foi tentado primeiro e custou dois anões
+por fortaleza: o embarque clássico nunca tem leito.
+
+## Animais
+
+Um **cercado** (`a`) é a coisa mais barata para ter na fortaleza algo que não é
+trabalho de ninguém. A caravana traz criação para quem tem onde pôr: cabras,
+que pastam na grama ou no musgo e dão à cozinha algo que não vem da lavoura, e
+gatos, que andam por aí, aparecem ao lado de quem está parado e se fazem
+adotar.
+
+Todo animal tem nome. Quando um morre a fortaleza percebe, e quem o criava fica
+de luto — o sistema de luto já existia, e um animal é a coisa mais barata deste
+jogo que pode ser amada.
+
+## A capital
+
+"Lendária" era o fim: seis marcos, um placar, e a fortaleza seguia sem nada
+para alcançar. Uma fortaleza que fez tudo não está terminada, está
+**promovida**.
+
+As Montanhas-Lar a reconhecem como **capital** e mandam a coroa. O barão é
+elevado a rei e o baronato fica vago; o teto de população sobe em oito, porque
+todo mundo quer morar onde o rei mora; e todos ganham **+10** de humor por
+viver num lugar que importa. Se o rei morre, a fortaleza coroa outro — a única
+sucessão do jogo.
+
+E os goblins passam a tratá-la pelo que ela é. **Quarenta e oito dias depois da
+coroa**, anunciado com vinte de antecedência, eles vêm buscá-la com tudo de uma
+vez: o cerco real. Contê-lo é a última coisa que este jogo pede de você.
+
 ## Vidas
 
 A página Lendas tem tudo o que aconteceu, em ordem. Isso é um registro, não uma
@@ -775,6 +855,8 @@ make surfaces  o que o painel e a janelinha têm de concordar
 make lives     a crônica lida como a biografia de um anão
 make artifacts sobre o que é um humor estranho, e o que ele grava no objeto
 make stairs    descer, que já quebrou três vezes
+make trade     a caravana, e o negócio que o jogador monta
+make court     a enfermaria, o cercado e a coroa
 make hostile   o que o save.py recusa, num $HOME descartável
 make validate  omarchy plugin validate .
 ```

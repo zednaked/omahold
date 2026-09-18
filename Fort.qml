@@ -70,9 +70,9 @@ Item {
   readonly property var buildKeys: ({ b: Sim.B_BED, t: Sim.B_TABLE, f: Sim.B_FARM, w: Sim.B_WALL, p: Sim.B_DOOR, e: Sim.B_STOCK, o: Sim.B_WORKSHOP, d: Sim.B_STILL, s: Sim.B_STATUE,
                                       c: Sim.B_KITCHEN, u: Sim.B_SMELTER, j: Sim.B_FORGE, l: Sim.B_TORCH, r: Sim.B_TRAINING, g: Sim.B_JEWELER,
                                       h: Sim.B_HEARTH, y: Sim.B_CRYSTAL, m: Sim.B_GAMES, x: Sim.B_TRAP,
-                                      k: Sim.B_POST, n: Sim.B_WELL, z: Sim.B_FLOODGATE })
-  readonly property var buildOrder: ["b", "t", "f", "e", "p", "w", "l", "h", "y", "m", "x", "k", "n", "z", "o", "d", "c", "u", "j", "g", "r", "s"]
-  readonly property var buildGlyph: ({ 1: "X", 2: "θ", 3: "Π", 4: "≡", 5: "¶", 6: "⌂", 7: "O", 8: "+", 9: "=", 10: "Ω", 11: "π", 12: "∆", 13: "‡", 14: "¡", 15: "Ξ", 16: "◊", 17: "†", 18: "Ψ", 19: "¥", 20: "Ж", 21: "^", 22: "Å", 23: "Ϙ", 24: "╫" })
+                                      k: Sim.B_POST, n: Sim.B_WELL, z: Sim.B_FLOODGATE, i: Sim.B_HOSPITAL, a: Sim.B_PEN })
+  readonly property var buildOrder: ["b", "t", "f", "e", "p", "w", "l", "h", "y", "m", "x", "k", "n", "z", "i", "a", "o", "d", "c", "u", "j", "g", "r", "s"]
+  readonly property var buildGlyph: ({ 1: "X", 2: "θ", 3: "Π", 4: "≡", 5: "¶", 6: "⌂", 7: "O", 8: "+", 9: "=", 10: "Ω", 11: "π", 12: "∆", 13: "‡", 14: "¡", 15: "Ξ", 16: "◊", 17: "†", 18: "Ψ", 19: "¥", 20: "Ж", 21: "^", 22: "Å", 23: "Ϙ", 24: "╫", 25: "┼", 26: "∩" })
   // a list, not a binding: it has to be rebuilt when the language changes
   function viewModeList() {
     return [["normal", root.t("view.normal"), root.t("m.view.normal")],
@@ -494,7 +494,7 @@ Item {
           if (sel.post >= 0 && w.build[sel.post] === Sim.B_POST) out.push({ t: root.tf("p.post", Sim.ix(sel.post), Sim.iy(sel.post), Sim.iz(sel.post)), c: "accent", wrap: true })
           if (sel.thoughts.length) { out.push({ t: root.t("p.thoughts"), c: "muted" }); for (k = 0; k < Math.min(5, sel.thoughts.length); k++) { var th = sel.thoughts[k]; out.push({ t: "  " + (th.v >= 0 ? "+" : "") + th.v + " " + th.m, c: th.v < 0 ? "warn" : "good", wrap: true }) } }
         } else {
-          var kinds = { goblin: root.t("unit.goblin"), wolf: root.t("unit.wolf"), deer: root.t("unit.deer"), kobold: root.t("unit.kobold"), merchant: root.t("unit.merchant"), crawler: root.t("unit.crawler"), sentinel: root.t("unit.sentinel"), envoy: root.t("unit.envoy"), king: root.t("unit.king"), kingsguard: root.t("unit.kingsguard") }
+          var kinds = { goblin: root.t("unit.goblin"), wolf: root.t("unit.wolf"), deer: root.t("unit.deer"), kobold: root.t("unit.kobold"), merchant: root.t("unit.merchant"), crawler: root.t("unit.crawler"), sentinel: root.t("unit.sentinel"), envoy: root.t("unit.envoy"), king: root.t("unit.king"), kingsguard: root.t("unit.kingsguard"), goat: root.t("unit.goat"), cat: root.t("unit.cat") }
           out.push({ t: kinds[sel.k] || sel.k, c: "accent" }); out.push({ t: "hp " + sel.hp + "/" + sel.maxhp + " · z" + Sim.iz(sel.i), c: "muted" })
         }
       } else out.push({ t: root.t("p.selecthint"), c: "muted", wrap: true })
@@ -531,6 +531,11 @@ Item {
       out.push({ t: root.tf("p.militia.count", mil, w.scenario ? root.tf("p.nextwave", w.scenario.wave, Math.max(0, Math.ceil((w.scenario.nextRaid - w.tick) / Sim.DAY))) : ""), c: w.raid ? "urgent" : "", wrap: true })
       var lt = Sim.cellLight(w, i)
       out.push({ t: root.tf("p.light", Math.round(lt * 100), lt < 0.3 ? root.t("p.light.dark") : ""), c: lt < 0.3 ? "muted" : "" })
+      var hurt = Sim.dwarves(w).filter(function (q) { return Sim.wounded(q) })
+      if (hurt.length) {
+        out.push({ t: root.tf("p.wounded", hurt.map(function (q) { return q.name.split(" ")[0] }).join(", ")), c: "urgent", wrap: true })
+        if (!Sim.cache(w).hospital.length) out.push({ t: root.t("p.nohospital"), c: "warn", wrap: true })
+      }
       if (w.lockdown) out.push({ t: root.t("p.locked"), c: "warn" })
       if (w.gatesOpen) out.push({ t: root.t("p.gates.open"), c: "warn" })
       if (w.caravan && w.caravan.stage === "trade") out.push({ t: root.tf("p.trade", Math.max(0, 5 - w.caravan.days)), c: "accent", wrap: true })
@@ -545,6 +550,12 @@ Item {
       if (w.court && w.court.said) {
         var cleft = Math.max(0, Sim.TRIBUTE_DAYS - Math.round((w.tick - w.court.since) / Sim.DAY))
         out.push({ t: root.tf("p.court", w.court.race, w.court.n, Sim.itemName(w.court.k), cleft), c: cleft <= 5 ? "warn" : "accent", wrap: true })
+      }
+      if (w.capital) {
+        var mon = w.monarch ? Sim.unitById(w, w.monarch) : null
+        out.push({ t: mon ? root.tf("p.capital", mon.name) : root.t("p.capital.plain"), c: "accent", wrap: true })
+        if (w.royalRaid) out.push({ t: root.tf("p.royal.due", Math.max(0, Math.round((w.royalRaid - w.tick) / Sim.DAY))), c: w.royalWarned ? "urgent" : "warn", wrap: true })
+        else if (Sim.royalHeld(w)) out.push({ t: root.t("p.royal.held"), c: "good", wrap: true })
       }
       if (w.crown && w.crown.came) out.push({ t: root.tf("p.king", w.crown.king, w.crown.race, Math.max(0, Sim.KING_STAY - Math.round((w.tick - w.crown.came) / Sim.DAY))), c: "accent", wrap: true })
       else if (w.crown) out.push({ t: root.tf("p.king.due", w.crown.king, w.crown.race), c: "accent", wrap: true })
@@ -673,7 +684,7 @@ Item {
       out.push({ t: "", c: "" })
       out.push({ t: root.t("h.legend"), c: "accent" })
       var legRow = "", legN = 0
-      for (var bq = 1; bq <= 24; bq++) {
+      for (var bq = 1; bq <= 26; bq++) {
         var bg = root.buildGlyph[bq]
         if (!bg) continue
         legRow += "  " + bg + " " + Sim.buildName(bq)
@@ -1012,6 +1023,8 @@ Item {
                       case Sim.B_POST: glyph = "Å"; gcol = p.bPost; break
                       case Sim.B_WELL: glyph = "Ϙ"; gcol = p.bWell; break
                       case Sim.B_FLOODGATE: glyph = "╫"; gcol = w.gatesOpen ? p.bDoor : p.bWell; break
+                      case Sim.B_HOSPITAL: glyph = "┼"; gcol = p.bHospital; break
+                      case Sim.B_PEN: glyph = "∩"; gcol = p.bPen; break
                     }
                   } else fill = p.bg
                   // lighting: sun on what lies under the sky, torches and magma anywhere,
@@ -1075,11 +1088,11 @@ Item {
                   var un = w.units[u], udk = Sim.depthBelow(w, un.i, z)
                   if (udk < 0) continue
                   if (fog && un.k !== "dwarf" && !Sim.seenAt(w, un.i)) continue
-                  var col = un.k === "dwarf" ? (un.mood_state === "berserk" ? p.urgent : un.mood_state ? p.kobold : p.dwarf) : un.k === "goblin" ? p.goblin : un.k === "wolf" ? p.wolf : un.k === "deer" ? p.deer : un.k === "kobold" ? p.kobold : un.k === "crawler" ? p.crawler : un.k === "sentinel" ? p.sentinel : un.k === "envoy" ? p.envoy : un.k === "king" ? p.bCrystal : un.k === "kingsguard" ? p.bPost : p.merchant
+                  var col = un.k === "dwarf" ? (un.mood_state === "berserk" ? p.urgent : un.mood_state ? p.kobold : p.dwarf) : un.k === "goblin" ? p.goblin : un.k === "wolf" ? p.wolf : un.k === "deer" ? p.deer : un.k === "kobold" ? p.kobold : un.k === "crawler" ? p.crawler : un.k === "sentinel" ? p.sentinel : un.k === "envoy" ? p.envoy : un.k === "king" ? p.bCrystal : un.k === "kingsguard" ? p.bPost : un.k === "goat" || un.k === "cat" ? p.bPen : p.merchant
                   if (un.id === World.selectedId) { ctx.fillStyle = p.select; ctx.fillRect(Sim.ix(un.i) * c, Sim.iy(un.i) * c, c, c); col = p.dwarfSel }
                   if (udk) col = Pal.dimmed(col, p.bgRgb, p.dim[udk])
                   else if (un.id !== World.selectedId) { var ub = bright(un.i, Sim.outdoor(w, un.i)); if (ub < 0.98) col = Pal.dimmed(col, p.bgRgb, Math.max(0.5, ub)) }
-                  var gl = un.k === "dwarf" ? "☺" : un.k === "goblin" ? "g" : un.k === "wolf" ? "w" : un.k === "deer" ? "d" : un.k === "kobold" ? "k" : un.k === "crawler" ? "c" : un.k === "sentinel" ? "S" : un.k === "envoy" ? "Ε" : un.k === "king" ? "♔" : un.k === "kingsguard" ? "Ψ" : "☻"
+                  var gl = un.k === "dwarf" ? "☺" : un.k === "goblin" ? "g" : un.k === "wolf" ? "w" : un.k === "deer" ? "d" : un.k === "kobold" ? "k" : un.k === "crawler" ? "c" : un.k === "sentinel" ? "S" : un.k === "envoy" ? "Ε" : un.k === "king" ? "♔" : un.k === "kingsguard" ? "Ψ" : un.k === "goat" ? "n" : un.k === "cat" ? "e" : "☻"
                   ctx.fillStyle = col; ctx.fillText(gl, Sim.ix(un.i) * c + half, Sim.iy(un.i) * c + half + 1)
                 }
                 // pass 4: weather over outdoor cells (light itself is baked into the fills)
