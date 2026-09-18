@@ -1007,6 +1007,21 @@ function bestItem(w, type, u) {
   }
   return best
 }
+// The nearest item of a type there is actually a path to, not just the nearest
+// one. Whoever asks has to remember the ones that turned out to be out of
+// reach, or the next attempt picks the same barrel: `findDesignation` and
+// `branchHaul` did that by hand and the other four callers did not. The one
+// inside a strange mood cost a dwarf their mind - three days staring at a log
+// behind a wall with fifty more in the hall.
+function reachItem(w, u, type, limit, byGrade) {
+  for (var t = 0; t < 3; t++) {
+    var it = byGrade ? bestItem(w, type, u) : freeItem(w, type, u.i, u)
+    if (!it) return null
+    if (go(w, u, function (c) { return c === it.i }, it.i, limit)) return it
+    w.unreach["i" + it.id] = true
+  }
+  return null
+}
 function stockpileSpot(w, from) {
   var stocks = cache(w).stocks
   if (stocks.length === 0) return -1
@@ -1316,8 +1331,8 @@ function needJob(w, u) {
     }
   }
   if (u.thirst > 65) {
-    var b = freeItem(w, "booze", u.i, u, true)
-    if (b && go(w, u, function (c) { return c === b.i }, b.i)) { b.res = u.id; setJob(w, u, { k: "drink", i: b.i, item: b.id, prog: 0 }); return true }
+    var b = reachItem(w, u, "booze")
+    if (b) { b.res = u.id; setJob(w, u, { k: "drink", i: b.i, item: b.id, prog: 0 }); return true }
     // A well, if the hold has one: it is reachable, it is indoors, and nobody
     // has to stand at the edge of open water to use it.
     var well = freeBuilding(w, cache(w).wells, u)
@@ -1326,8 +1341,8 @@ function needJob(w, u) {
     if (go(w, u, function (c) { return touchesWater(w, c) }, nearestTile(w, u.i, T_WATER), 7000)) { setJob(w, u, { k: "drinkwater", i: -1, prog: 0 }); return true }
   }
   if (u.hunger > 65) {
-    var f = freeItem(w, "meal", u.i, u, true) || freeItem(w, "food", u.i, u, true)
-    if (f && go(w, u, function (c) { return c === f.i }, f.i)) { f.res = u.id; setJob(w, u, { k: "eat", i: f.i, item: f.id, prog: 0 }); return true }
+    var f = reachItem(w, u, "meal") || reachItem(w, u, "food")
+    if (f) { f.res = u.id; setJob(w, u, { k: "eat", i: f.i, item: f.id, prog: 0 }); return true }
     if (go(w, u, function (c) { return touchesTile(w, c, T_SHRUB) }, nearestTile(w, u.i, T_SHRUB), 7000)) { setJob(w, u, { k: "forage", i: -1, prog: 0 }); return true }
   }
   if (u.sleep > 75) {
@@ -1709,11 +1724,10 @@ function startOrder(w, u, o, spec) {
   // this the steel sat in the stockpile while the militia was equipped in
   // copper: the grade average was 1.32 out of 3, and the whole point of
   // digging deep never reached the people doing the fighting.
-  if (spec.product === "weapon" || spec.product === "armor") mat = bestItem(w, spec.mat, u)
-  if (!mat) mat = freeItem(w, spec.mat, u.i, u)
-  if (!mat && spec.mat2) mat = freeItem(w, spec.mat2, u.i, u)
+  if (spec.product === "weapon" || spec.product === "armor") mat = reachItem(w, u, spec.mat, null, true)
+  if (!mat) mat = reachItem(w, u, spec.mat)
+  if (!mat && spec.mat2) mat = reachItem(w, u, spec.mat2)
   if (!mat) return false
-  if (!go(w, u, function (q) { return q === mat.i }, mat.i)) return false
   mat.res = u.id
   var job = { k: spec.job, i: b, claims: true, item: mat.id, stage: "fetch", prog: 0, order: o.id }
   if (spec.product) job.product = spec.product
@@ -1771,8 +1785,8 @@ function gearJob(w, u) {
   if (!want) return false
   // The best one, not the nearest: a relic on the floor is worth the walk, and
   // so is steel over copper. Tools stay nearest-first — a pick is a pick.
-  var it = (want === "weapon" || want === "armor") ? bestItem(w, want, u) : freeItem(w, want, u.i, u)
-  if (!it || !go(w, u, function (c) { return c === it.i }, it.i)) return false
+  var it = (want === "weapon" || want === "armor") ? reachItem(w, u, want, null, true) : reachItem(w, u, want)
+  if (!it) return false
   it.res = u.id; setJob(w, u, { k: "equip", i: -1, item: it.id, slot: want }); return true
 }
 // Each kind of work a dwarf can find on their own, as a branch that either
@@ -2390,8 +2404,8 @@ function strangeMoodWork(w, u) {
   }
   if (j.stage === "fetch") {
     if (u.carry) { j.stage = "back"; if (!go(w, u, function (c) { return c === j.i }, j.i)) j.stage = "fetch"; return }
-    var it = freeItem(w, j.want, u.i, u)
-    if (it && go(w, u, function (c) { return c === it.i }, it.i)) { it.res = u.id; j.item = it.id; j.stage = "pick"; return }
+    var it = reachItem(w, u, j.want)
+    if (it) { it.res = u.id; j.item = it.id; j.stage = "pick"; return }
     if (w.tick - j.since > DAY * 3) {
       w.claim[j.i] = 0
       if (chance(w, 0.5)) { announce(w, LF("msg.mood.berserk", "{0} enlouqueceu! Correu berrando pela fortaleza.", u.name), 2); u.mood_state = "berserk" }
