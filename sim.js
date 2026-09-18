@@ -1083,6 +1083,15 @@ function step(w, u) {
   if (u.pi >= u.path.length) { u.path = null; return 1 }
   return 0
 }
+// A move that is not a step along a path still has to do what a step does:
+// what they carry goes with them, and the map remembers having been seen.
+// Fleeing, drowning and the melancholy walk all set `u.i` by hand and none of
+// them did either.
+function moveTo(w, u, i) {
+  u.i = i
+  if (u.k === "dwarf") markSeen(w, u.i)
+  if (u.carry) { var c = itemById(w, u.carry); if (c) c.i = u.i }
+}
 function pickUp(w, u, it) { it.by = u.id; it.res = u.id; u.carry = it.id; it.i = u.i }
 function putDown(w, u) { if (!u.carry) return null; var it = itemById(w, u.carry); if (it) { it.by = 0; it.res = 0; it.i = u.i } u.carry = 0; return it }
 function consumeCarried(w, u) { if (!u.carry) return; var id = u.carry; u.carry = 0; removeItem(w, id) }
@@ -2522,7 +2531,7 @@ function actBeast(w, u) {
   var home = (typeof u.home === "number" && u.home >= 0) ? u.home : w.depot
   if (dist(u.i, home) > 6) { if (go(w, u, function (c) { return c === home }, home, 900)) step(w, u); return }
   var n = neighbors(w, u.i, u, nb)
-  if (n > 0 && chance(w, 0.6)) u.i = nb[ri(w, n)]
+  if (n > 0 && chance(w, 0.6)) moveTo(w, u, nb[ri(w, n)])
 }
 // A death in the pen lands on whoever kept it.
 function beastDied(w, u, how) {
@@ -2778,8 +2787,37 @@ function attack(w, a, b) {
     if (a.k === "dwarf" && a.weapon) wearOut(w, a, "weapon")
   }
 }
+// How far a dwarf notices something hostile. Nine cells for everyone, except
+// the militia with no post to hold: those answer the alarm wherever it is.
+// Leaving a wave to whoever happened to be standing near it is how a hold
+// defends itself one dwarf at a time - measured over 57 waves at 1.65 dwarves
+// touching a foe at any moment, and 610 moments of one of them surrounded with
+// nobody within two cells. A post is an order, so a posted guard still holds
+// it, and a lone wolf is still whoever is closest: the militia only marches
+// for a wave or for more than one of them.
+function alarmRange(w, u) {
+  if (!u.militia) return 9
+  if (u.post >= 0 && w.build[u.post] === B_POST) return 9
+  return (w.raid || w.hostiles > 1) ? 1e9 : 9
+}
+function unitsNear(w, i, r, pred) {
+  var n = 0
+  for (var k = 0; k < w.units.length; k++) { var o = w.units[k]; if (pred(o) && dist(o.i, i) <= r) n++ }
+  return n
+}
+// Give ground toward someone: the neighbour that buys the most distance from
+// the foe per step toward the friend. One cell at a time, like the old flee.
+function giveGround(w, u, foe, toward) {
+  var n = neighbors(w, u.i, u, nb), best = -1, bs = dist(foe.i, u.i) - dist(toward, u.i)
+  for (var k = 0; k < n; k++) {
+    var sc = dist(foe.i, nb[k]) - dist(toward, nb[k])
+    if (sc > bs) { bs = sc; best = nb[k] }
+  }
+  if (best >= 0) { moveTo(w, u, best); return true }
+  return false
+}
 function fightOrFlee(w, u) {
-  var foe = nearestUnit(w, u.i, function (o) { return o !== u && hostile(o) }, 9)
+  var foe = nearestUnit(w, u.i, function (o) { return o !== u && hostile(o) }, alarmRange(w, u))
   if (!foe) return false
   // A posted guard defends their post, not the whole map: chasing a wolf six
   // levels up is how the gate ends up empty when the wave arrives.
@@ -2788,16 +2826,38 @@ function fightOrFlee(w, u) {
   if (u.job && u.job.k === "sleep") dropJob(w, u)
   if (!brave && (adjacent(u.i, foe.i) || u.i === foe.i)) { if (u.cool <= 0) { attack(w, u, foe); u.cool = 2 } return true }
   if (brave) {
-    if (adjacent(u.i, foe.i) || u.i === foe.i) { if (u.cool <= 0) { attack(w, u, foe); u.cool = 2 } return true }
-    if (!u.path || u.job === null || u.job.k !== "fight") { if (go(w, u, function (c) { return adjacent(c, foe.i) }, foe.i, 800)) setJob(w, u, { k: "fight", i: -1 }); else return false }
+    if (adjacent(u.i, foe.i) || u.i === foe.i) {
+      // Two on one with nobody within reach is how a dwarf dies while the rest
+      // of the militia is still walking. Give ground toward the nearest one of
+      // them instead of trading blows - but only while there is someone to
+      // fall back on. Cornered alone, they fight.
+      if (unitsNear(w, u.i, 2, function (o) { return o !== u && hostile(o) }) >= 2) {
+        var mate = nearestUnit(w, u.i, function (o) { return o !== u && o.k === "dwarf" && o.mood_state !== "berserk" && (o.militia || o.weapon) }, 14)
+        if (mate && dist(mate.i, u.i) > 2 && giveGround(w, u, foe, mate.i)) return true
+      }
+      if (u.cool <= 0) { attack(w, u, foe); u.cool = 2 }
+      return true
+    }
+    if (!u.path || u.job === null || u.job.k !== "fight") { if (go(w, u, function (c) { return adjacent(c, foe.i) }, foe.i, 4000)) setJob(w, u, { k: "fight", i: -1 }); else return false }
     step(w, u); return true
   }
-  // flee: pick the neighbor that increases distance
   if (dist(foe.i, u.i) > 5) return false
   dropJob(w, u)
+  // Running in a straight line away from a goblin is how a farmer ends up
+  // alone at the end of a corridor. Run to whoever is armed, or to a post, or
+  // to the gate - something the hold defends - and only take the blind step
+  // away when there is nothing like that to run to.
+  var guard = nearestUnit(w, u.i, function (o) { return o !== u && o.k === "dwarf" && o.militia && o.mood_state !== "berserk" && dist(o.i, foe.i) > 2 }, 1e9)
+  var posts = cache(w).posts
+  var anchor = guard ? guard.i : posts.length ? nearestOf(posts, u.i) : w.depot
+  if (anchor >= 0 && dist(anchor, u.i) > 1 && dist(anchor, foe.i) > 3) {
+    if (!u.path) go(w, u, function (c) { return c === anchor }, anchor, 1500)
+    if (u.path && step(w, u) >= 0) return true
+  }
+  // flee: pick the neighbor that increases distance
   var n = neighbors(w, u.i, u, nb), best = u.i, bd = dist(foe.i, u.i)
   for (var k = 0; k < n; k++) { var d = dist(foe.i, nb[k]); if (d > bd) { bd = d; best = nb[k] } }
-  u.i = best
+  moveTo(w, u, best)
   return true
 }
 function grabWeapon(w, u) {
@@ -2841,7 +2901,7 @@ function leaveMap(w, u) {
 function actDeer(w, u) {
   if (u.wait > 0) { u.wait--; return }
   var foe = nearestUnit(w, u.i, function (o) { return o.k !== "deer" }, 4)
-  if (foe) { var n = neighbors(w, u.i, u, nb), best = u.i, bd = dist(foe.i, u.i); for (var k = 0; k < n; k++) { var d = dist(foe.i, nb[k]); if (d > bd) { bd = d; best = nb[k] } } u.i = best; return }
+  if (foe) { var n = neighbors(w, u.i, u, nb), best = u.i, bd = dist(foe.i, u.i); for (var k = 0; k < n; k++) { var d = dist(foe.i, nb[k]); if (d > bd) { bd = d; best = nb[k] } } moveTo(w, u, best); return }
   if (u.path) { step(w, u); return }
   u.wait = 4 + ri(w, 12)
   var x = ix(u.i) + ri(w, 9) - 4, y = iy(u.i) + ri(w, 9) - 4
@@ -4150,7 +4210,7 @@ function tick(w) {
     // liquids
     var t = w.tile[u.i]
     if (t === T_MAGMA) { if (u.k === "dwarf") die(w, u, L("death.magma", "queimou até a morte no magma")); else { if (u.k === "goat" || u.k === "cat") beastDied(w, u, "magma"); removeUnit(w, u) } }
-    else if (t === T_WATER) { u.drown = (u.drown || 0) + 1; if (u.drown > 6) { if (u.k === "dwarf") die(w, u, L("death.drowned", "afogou-se")); else removeUnit(w, u) } else { var esc = neighbors(w, u.i, u, nb); if (esc > 0) u.i = nb[0] } }
+    else if (t === T_WATER) { u.drown = (u.drown || 0) + 1; if (u.drown > 6) { if (u.k === "dwarf") die(w, u, L("death.drowned", "afogou-se")); else removeUnit(w, u) } else { var esc = neighbors(w, u.i, u, nb); if (esc > 0) moveTo(w, u, nb[0]) } }
     else u.drown = 0
   }
   checkFall(w)
@@ -4184,7 +4244,7 @@ function actDwarf(w, u) {
     if (u.mood >= 45) { u.mood_state = ""; announce(w, LF("msg.melancholy.out", "{0} saiu da melancolia.", u.name), 1) }
     else if (u.job) { work(w, u); return }
     else if ((u.thirst > 95 || u.hunger > 95 || u.sleep > 110) && needJob(w, u)) return
-    else { if (chance(w, 0.1)) { var n = neighbors(w, u.i, u, nb); if (n > 0) u.i = nb[ri(w, n)] } return }
+    else { if (chance(w, 0.1)) { var n = neighbors(w, u.i, u, nb); if (n > 0) moveTo(w, u, nb[ri(w, n)]) } return }
   }
   if (u.mood_state === "strange") {
     if (!u.job) { u.job = u.moodJob || { k: "mood", i: -1, stage: "claim", want: u.moodWant, prog: 0, since: u.moodSince || w.tick }; u.moodJob = null }
