@@ -99,8 +99,8 @@ in it closes the panel.
   waiting.
 - **Options** (kept in `options.json`): pace with the panel closed (frozen, 1
   tick every 4 s / 2 s / 1 s, 4 per second), speed with the panel open, blocks
-  or glyphs, the corner window, the population cap, enemies on or off, goblin
-  waves calm / normal / brutal, and the language.
+  or glyphs, the corner window, full screen, the population cap, enemies on or
+  off, goblin waves calm / normal / brutal, and the language.
 
 The same over IPC: `omarchy-shell omahold preset <classic|ready|garrison|peaceful|kinfolk|depths|siege>`,
 `saveSlot <n>`, `loadSlot <n>`, `slots`, `presets`.
@@ -736,6 +736,7 @@ warnings in a toast at the center.
 | `L` | lock the doors: goblins, wolves and kobolds cannot pass |
 | `g` | blocks ↔ glyphs (the classic look) |
 | `m` | corner window |
+| `F11` | full screen: the panel edge to edge, which on a small screen buys the map a bigger cell |
 | `Tab` `u` `i` `w` `y` `?` | pages: Dwarves, Here, **Orders**, Legends, Help |
 | `Home` | back to the wagon |
 | `n` | New game menu |

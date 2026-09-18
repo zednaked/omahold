@@ -310,6 +310,7 @@ Item {
       item(root.t("m.opt.speed"), World.speed + "×", "◂ ▸", null, { value: true, adjust: function (d) { var sq = [1, 2, 4]; var i = sq.indexOf(World.speed); i = (i + d + 3) % 3; World.speed = sq[i]; World.saveOptions(); rebuildMenu() } })
       item(root.t("m.opt.look"), root.t(World.glyphs ? "m.opt.look.glyphs" : "m.opt.look.blocks"), "◂ ▸", null, { value: true, adjust: function () { World.glyphs = !World.glyphs; rebuildMenu() } })
       item(root.t("m.opt.peek"), root.t(World.peek ? "m.on" : "m.off"), "◂ ▸", null, { value: true, adjust: function () { World.peek = !World.peek; rebuildMenu() } })
+      item(root.t("m.opt.full"), root.t(World.full ? "m.on" : "m.off"), "◂ ▸", null, { value: true, adjust: function () { World.full = !World.full; rebuildMenu() } })
       item(root.t("m.opt.popcap"), String(World.popCap), "◂ ▸", null, { value: true, adjust: function (d) { var caps = [12, 20, 30, 40]; var i = caps.indexOf(World.popCap); if (i < 0) i = 1; i = (i + d + caps.length) % caps.length; World.popCap = caps[i]; rebuildMenu() } })
       item(root.t("m.opt.enemies"), root.t(World.enemies ? "m.opt.enemies.yes" : "m.opt.enemies.no"), "◂ ▸", null, { value: true, adjust: function () { World.setEnemies(!World.enemies); rebuildMenu() } })
       item(root.t("m.opt.waves"), root.t(World.difficulty === "calma" ? "m.opt.waves.calm" : World.difficulty === "brutal" ? "m.opt.waves.brutal" : "m.opt.waves.normal"), "◂ ▸", null, { value: true, adjust: function (d) { var ds = ["calma", "normal", "brutal"]; var i = ds.indexOf(World.difficulty); i = (i + d + 3) % 3; World.setDifficulty(ds[i]); rebuildMenu() } })
@@ -421,6 +422,7 @@ Item {
       case Qt.Key_BracketRight: selectNext(1); break
       case Qt.Key_BracketLeft: selectNext(-1); break
       case Qt.Key_Home: if (w) { root.cx = Sim.ix(w.depot); root.cy = Sim.iy(w.depot); setZ(Sim.iz(w.depot)) } break
+      case Qt.Key_F11: World.full = !World.full; root.flash(root.t(World.full ? "fl.full.on" : "fl.full.off")); break
       case Qt.Key_N: openMenu("new"); break
       case Qt.Key_O: if (shift) openMenu("view"); else cycleViewMode(); break
       default: return
@@ -689,7 +691,7 @@ Item {
         ["x", root.t("h.cancel")], ["r", root.t("h.remove")], ["v / Esc", root.t("h.look")],
         ["] [", root.t("h.nextdwarf")], ["f", root.t("h.follow")], ["Home", root.t("h.home")],
         [root.t("key.space"), root.t("h.pause")], ["+ -", root.t("h.speed")], ["L", root.t("h.lock.short")],
-        ["o / Shift+o", root.t("h.view")], ["g", root.t("h.glyphs")], ["m", root.t("h.peek")], ["Tab u i w y ?", root.t("h.pages")], ["n", root.t("h.new")], ["Shift+S", root.t("h.save")], ["Esc", root.t("h.esc")]]
+        ["o / Shift+o", root.t("h.view")], ["g", root.t("h.glyphs")], ["m", root.t("h.peek")], ["F11", root.t("h.full")], ["Tab u i w y ?", root.t("h.pages")], ["n", root.t("h.new")], ["Shift+S", root.t("h.save")], ["Esc", root.t("h.esc")]]
       for (k = 0; k < H.length; k++) out.push({ t: H[k][0], c: "accent", tail: H[k][1] })
       out.push({ t: "", c: "" })
       out.push({ t: root.t("h.start"), c: "muted", wrap: true })
@@ -780,14 +782,24 @@ Item {
 
       // geometry
       readonly property int pad: Style.space(14)
-      readonly property int sideW: Style.space(350)
+      readonly property int sideMin: Style.space(350)
       readonly property int headH: Style.space(34)
       readonly property int logH: Style.space(118)
-      readonly property int cell: Math.max(8, Math.floor(Math.min((width - Style.space(60) - sideW - pad * 3) / Sim.W, (height - Style.space(60) - headH - logH - pad * 4) / Sim.H)))
+      // the desktop left showing around the card - none of it in full screen
+      readonly property int frame: World.full ? Style.space(8) : Style.space(60)
+      readonly property int cell: Math.max(8, Math.floor(Math.min((width - frame - sideMin - pad * 3) / Sim.W, (height - frame - headH - logH - pad * 4) / Sim.H)))
       readonly property int mapW: cell * Sim.W
       readonly property int mapH: cell * Sim.H
+      // the height left over by the same flooring goes to the footer, where
+      // the log has room for one more announcement
+      readonly property int footH: Math.max(logH, height - frame - mapH - headH - pad * 4)
+      // The map is drawn in whole cells, so flooring leaves a strip of width
+      // over - and on a short screen, where the height decides the cell, that
+      // strip is wide. The card used to wear it as margin while the header
+      // elided the date and the sidebar cut its lines; the sidebar takes it.
+      readonly property int sideW: sideMin + Math.max(0, Math.min(Style.space(260), width - frame - mapW - sideMin - pad * 3))
       readonly property int cardW: mapW + sideW + pad * 3
-      readonly property int cardH: mapH + headH + logH + pad * 4
+      readonly property int cardH: mapH + headH + footH + pad * 4
 
       FocusScope {
         anchors.fill: parent
@@ -802,8 +814,8 @@ Item {
           anchors.centerIn: parent
           color: Color.popups.background
           border.color: Color.popups.border
-          border.width: 1
-          radius: Style.cornerRadius
+          border.width: World.full ? 0 : 1
+          radius: World.full ? 0 : Style.cornerRadius
           clip: true
           MouseArea { anchors.fill: parent; onClicked: {} }
 
@@ -816,22 +828,29 @@ Item {
               anchors { left: parent.left; verticalCenter: parent.verticalCenter }
               spacing: Style.space(10)
               Text {
+                id: headName
                 anchors.verticalCenter: parent.verticalCenter
                 font.family: root.mono; font.pixelSize: Style.font.title; font.bold: true
                 color: Color.popups.text
                 text: World.w ? World.w.name : "Omahold"
               }
               Text {
+                id: headPreset
                 anchors.verticalCenter: parent.verticalCenter
+                // the scenario's name is the one thing up here nobody needs to
+                // read twice, so on a narrow header it is what goes, and the
+                // date keeps its season instead of losing it to an ellipsis
                 visible: !!(World.w && World.w.preset)
+                         && head.width - headChips.width - headName.width - headDate.implicitWidth - Style.space(60) > implicitWidth
                 font.family: root.mono; font.pixelSize: Style.font.caption
                 color: Util.alpha(Color.popups.text, 0.5)
                 text: World.w && World.w.preset ? World.w.preset : ""
               }
             }
             Text {
+              id: headDate
               anchors { right: headChips.left; rightMargin: Style.space(14); verticalCenter: parent.verticalCenter }
-              width: Math.min(implicitWidth, parent.width - headLeft.width - headChips.width - Style.space(40))
+              width: Math.max(0, Math.min(implicitWidth, parent.width - headLeft.width - headChips.width - Style.space(40)))
               elide: Text.ElideLeft
               font.family: root.mono; font.pixelSize: Style.font.body
               color: Util.alpha(Color.popups.text, 0.75)
@@ -1262,15 +1281,30 @@ Item {
             Rectangle {
               visible: root.buildMenu
               anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-              height: buildCol.implicitHeight + Style.space(20)
+              // Twenty-four buildings are taller than the sidebar on a short
+              // screen. The popup used to grow past the top of it and the
+              // sidebar's clip cut the first ones off: they were on the list,
+              // nothing scrolled, and the mouse could not reach them.
+              height: Math.min(side.height, buildHead.implicitHeight + buildCol.implicitHeight + Style.space(28))
               color: Color.popups.background
               border.color: Util.alpha(Color.accent, 0.6); border.width: 1
               radius: Math.min(Style.cornerRadius, 8)
+              Text {
+                id: buildHead
+                anchors { top: parent.top; left: parent.left; right: parent.right; margins: Style.space(10) }
+                font.family: root.mono; font.pixelSize: Style.font.bodySmall; color: Color.accent; text: root.t("h.buildwhat")
+              }
+              Flickable {
+                id: buildFlick
+                anchors { top: buildHead.bottom; left: parent.left; right: parent.right; bottom: parent.bottom
+                          topMargin: Style.space(6); leftMargin: Style.space(10); rightMargin: Style.space(10); bottomMargin: Style.space(10) }
+                contentHeight: buildCol.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
               Column {
                 id: buildCol
-                anchors { fill: parent; margins: Style.space(10) }
+                width: parent.width
                 spacing: 3
-                Text { font.family: root.mono; font.pixelSize: Style.font.bodySmall; color: Color.accent; text: root.t("h.buildwhat") }
                 Repeater {
                   model: root.buildOrder
                   delegate: Item {
@@ -1289,6 +1323,17 @@ Item {
                   }
                 }
               }
+              }
+              // says there is more list than there is room, and where you are in it
+              Rectangle {
+                visible: buildFlick.contentHeight > buildFlick.height + 1
+                width: 3; radius: 1.5
+                x: parent.width - Style.space(6)
+                color: Util.alpha(Color.accent, 0.5)
+                height: Math.max(Style.space(20), buildFlick.height * buildFlick.height / Math.max(1, buildFlick.contentHeight))
+                y: buildFlick.y + (buildFlick.height - height) * (buildFlick.contentHeight > buildFlick.height
+                                                                  ? buildFlick.contentY / (buildFlick.contentHeight - buildFlick.height) : 0)
+              }
             }
           }
 
@@ -1296,30 +1341,45 @@ Item {
           Item {
             id: foot
             x: win.pad; y: mapFrame.y + mapFrame.height + win.pad
-            width: parent.width - win.pad * 2; height: win.logH
-            Column {
-              anchors { left: parent.left; right: parent.right; top: parent.top }
-              spacing: 1
-              Repeater {
-                model: {
-                  World.rev
-                  var w = World.w; if (!w) return []
-                  var n = Math.min(5, w.log.length), out = []
-                  for (var k = w.log.length - n; k < w.log.length; k++) out.push(w.log[k])
-                  return out
-                }
-                delegate: Row {
-                  required property var modelData
-                  required property int index
-                  width: foot.width
-                  spacing: Style.space(8)
-                  opacity: 0.45 + 0.14 * index
-                  Text { width: Style.space(52); font.family: root.mono; font.pixelSize: Style.font.caption; color: Util.alpha(Color.popups.text, 0.6); text: { var d = Sim.date({ tick: modelData.t }); return d.seasonName.substr(0, 3) + " d" + d.day } }
-                  // The announcements are the stories: a caravan arriving, an
-                  // artifact being named, a wave repelled. Eliding them cut off
-                  // the end, which is the part worth reading. The Row grows in
-                  // height and the Column above accommodates it.
-                  Text { width: foot.width - Style.space(60); wrapMode: Text.Wrap; font.family: root.mono; font.pixelSize: Style.font.bodySmall; color: modelData.l === 2 ? Color.urgent : modelData.l === 1 ? Color.accent : Color.popups.text; text: modelData.m }
+            width: parent.width - win.pad * 2; height: win.footH
+            // The keys own the bottom of the footer and the log takes what is
+            // left above them. They used to share the same box: on a screen
+            // short enough for the hints to wrap onto a second row, the
+            // announcements were written straight over the keys.
+            Item {
+              id: logArea
+              anchors { left: parent.left; right: parent.right; top: parent.top; bottom: hints.top; bottomMargin: Style.space(6) }
+              clip: true
+              Column {
+                id: logCol
+                // pinned to the bottom: when there is not room for five lines
+                // what falls off the top is the oldest one, never the one that
+                // just happened
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                spacing: 1
+                Repeater {
+                  model: {
+                    World.rev
+                    var w = World.w; if (!w) return []
+                    var n = Math.min(5, w.log.length), out = []
+                    for (var k = w.log.length - n; k < w.log.length; k++) out.push(w.log[k])
+                    return out
+                  }
+                  delegate: Row {
+                    required property var modelData
+                    required property int index
+                    width: foot.width
+                    spacing: Style.space(8)
+                    // a line whose top is above the frame would show as half a
+                    // line of cut letters: let it go instead
+                    opacity: (logCol.y + y < 0) ? 0 : 0.45 + 0.14 * index
+                    Text { width: Style.space(52); font.family: root.mono; font.pixelSize: Style.font.caption; color: Util.alpha(Color.popups.text, 0.6); text: { var d = Sim.date({ tick: modelData.t }); return d.seasonName.substr(0, 3) + " d" + d.day } }
+                    // The announcements are the stories: a caravan arriving, an
+                    // artifact being named, a wave repelled. Eliding them cut off
+                    // the end, which is the part worth reading. The Row grows in
+                    // height and the Column above accommodates it.
+                    Text { width: foot.width - Style.space(60); wrapMode: Text.Wrap; font.family: root.mono; font.pixelSize: Style.font.bodySmall; color: modelData.l === 2 ? Color.urgent : modelData.l === 1 ? Color.accent : Color.popups.text; text: modelData.m }
+                  }
                 }
               }
             }
@@ -1330,6 +1390,7 @@ Item {
               text: "OMAHOLD · by ZeD"
             }
             Flow {
+              id: hints
               anchors { left: parent.left; right: parent.right; rightMargin: Style.space(150); bottom: parent.bottom }
               spacing: Style.space(10)
               KeyHint { key: "d"; label: root.t("tool.dig") } KeyHint { key: "s"; label: root.t("tool.stair") } KeyHint { key: "c"; label: root.t("tool.chop") } KeyHint { key: "b"; label: root.t("tool.build") }
@@ -1376,10 +1437,24 @@ Item {
               border.width: 1; border.color: Util.alpha(Color.accent, 0.55)
               MouseArea { anchors.fill: parent; onClicked: {} }
               Flickable {
+                id: menuFlick
                 anchors { fill: parent; margins: Style.space(18) }
                 contentHeight: menuCol.implicitHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
+                // a menu taller than the card is scrolled by the cursor: the
+                // arrow keys used to walk the highlight off the bottom edge
+                function ensureVisible(i) {
+                  var it = menuCol.children[i]
+                  if (!it || it.height <= 0 || contentHeight <= height) return
+                  if (it.y < contentY) contentY = Math.max(0, it.y - Style.space(6))
+                  else if (it.y + it.height > contentY + height) contentY = Math.min(contentHeight - height, it.y + it.height - height + Style.space(6))
+                }
+                Connections {
+                  target: root
+                  function onMenuIndexChanged() { menuFlick.ensureVisible(root.menuIndex) }
+                  function onMenuRowsChanged() { menuFlick.ensureVisible(root.menuIndex) }
+                }
                 Column {
                   id: menuCol
                   width: parent.width

@@ -96,8 +96,8 @@ fecha o painel.
   dia" mostra noite e tochas sem esperar.
 - **Opções** (persistem em `options.json`): ritmo com o painel fechado
   (congelado, 1 tick a cada 4 s / 2 s / 1 s, 4 por segundo), velocidade com o
-  painel aberto, blocos ou glifos, janelinha de canto, teto de população,
-  inimigos ligados ou não, ondas goblin calmas / normais / brutais.
+  painel aberto, blocos ou glifos, janelinha de canto, tela cheia, teto de
+  população, inimigos ligados ou não, ondas goblin calmas / normais / brutais.
 
 IPC equivalente: `omarchy-shell omahold preset <classic|ready|garrison|peaceful|kinfolk|depths|siege>`,
 `saveSlot <n>`, `loadSlot <n>`, `slots`, `presets`.
@@ -717,6 +717,7 @@ mapa e os avisos num toast central.
 | `L` | trancar portas: goblins, lobos e kobolds não passam |
 | `g` | blocos ↔ glifos (o visual clássico) |
 | `m` | janelinha de canto |
+| `F11` | tela cheia: o painel de ponta a ponta, o que em tela pequena rende uma célula maior no mapa |
 | `Tab` `u` `i` `w` `y` `?` | páginas: Anões, Local, **Ordens**, Lendas, Ajuda |
 | `Home` | voltar ao acampamento |
 | `n` | menu Novo jogo |

@@ -25,6 +25,9 @@ Singleton {
   property string loadError: ""
 
   property bool open: false           // the overlay
+  // Edge to edge instead of a card with the desktop around it. On a small
+  // screen the frame is the difference between a 13px cell and a 15px one.
+  property bool full: false
   property bool menu: false           // the overlay's menu
   property string viewMode: "normal"  // normal light mood access
   property bool peek: false           // the corner window
@@ -376,10 +379,11 @@ Singleton {
     if (o.speed !== undefined) root.speed = Number(o.speed)
     if (o.lang !== undefined && I18n.known(String(o.lang))) root.lang = String(o.lang)
     if (o.fog !== undefined) root.fog = !!o.fog
+    if (o.full !== undefined) root.full = !!o.full
     root.applyingOptions = false
   }
   function saveOptions() {
-    var o = { backgroundMs: root.backgroundMs, glyphs: root.glyphs, peek: root.peek, popCap: root.popCap, difficulty: root.difficulty, enemies: root.enemies, speed: root.speed, lang: root.lang, fog: root.fog }
+    var o = { backgroundMs: root.backgroundMs, glyphs: root.glyphs, peek: root.peek, popCap: root.popCap, difficulty: root.difficulty, enemies: root.enemies, speed: root.speed, lang: root.lang, fog: root.fog, full: root.full }
     root.queueWrite("options.json", JSON.stringify(o))
   }
   function setDifficulty(d, quiet) {
@@ -395,6 +399,7 @@ Singleton {
   onGlyphsChanged: if (root.ready && !root.applyingOptions) root.saveOptions()
   onFogChanged: { root.rev++; if (root.ready && !root.applyingOptions) root.saveOptions() }
   onPeekChanged: if (root.ready && !root.applyingOptions) root.saveOptions()
+  onFullChanged: if (root.ready && !root.applyingOptions) root.saveOptions()
   onSpeedChanged: if (root.ready && !root.applyingOptions) root.saveOptions()
   onPopCapChanged: { if (root.w) root.w.popCap = root.popCap; if (root.ready && !root.applyingOptions) root.saveOptions() }
 
