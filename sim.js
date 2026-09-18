@@ -469,7 +469,8 @@ function addItem(w, type, i, grade) {
   w.items.push(it); return it
 }
 function addUnit(w, kind, i) {
-  var hp = { dwarf: 12, goblin: 5, deer: 5, wolf: 5, kobold: 4, merchant: 10, crawler: 7, sentinel: 16, envoy: 14 }[kind] || 6
+  var hp = { dwarf: 12, goblin: 5, deer: 5, wolf: 5, kobold: 4, merchant: 10, crawler: 7, sentinel: 16, envoy: 14,
+             king: 30, kingsguard: 20 }[kind] || 6
   var u = { id: w.nextId++, k: kind, i: i, hp: hp, maxhp: hp, path: null, pi: 0, job: null, born: w.tick, cool: 0, wait: 0 }
   w.units.push(u); return u
 }
@@ -1785,6 +1786,7 @@ var BRANCHES = [
   { cat: "",      fn: takeOrder },   // orders carry their own kind; takeOrder sorts them
   { cat: "farm",  fn: branchGather },
   { cat: "fight", fn: branchTrain },
+  { cat: "haul",  fn: branchTrade },  // the caravan leaves on the fifth day
   { cat: "haul",  fn: branchHaul },
   { cat: "",      fn: branchPlay }   // last: only ever instead of idling
 ]
@@ -2027,6 +2029,25 @@ function work(w, u) {
       if (u.thirst > 65 || u.hunger > 65 || u.sleep > 75) { dropJob(w, u); return }
       if (!u.path && dist(u.i, j.i) > 2) { dropJob(w, u); return }
       if (dist(u.i, j.i) <= 2) { if (chance(w, 0.02)) thought(w, u, L("th.station", "montou guarda no posto"), 1); dropJob(w, u) }
+      return
+    case "trade":
+      if (j.stage === "fetch") {
+        it = itemById(w, j.item)
+        if (!it || it.i !== u.i) { dropJob(w, u); return }
+        pickUp(w, u, it); j.stage = "go"
+        if (!go(w, u, function (c) { return c === j.i || adjacent(c, j.i) }, j.i)) dropJob(w, u)
+        return
+      }
+      if (!w.caravan || w.caravan.stage !== "trade") { putDown(w, u); dropJob(w, u); return }
+      if (dist(u.i, j.i) > 2) { if (!u.path) dropJob(w, u); return }
+      consumeCarried(w, u)
+      var tr2 = tradeTable(w)
+      if (!tr2.delivered) tr2.delivered = {}
+      tr2.delivered[j.what] = (tr2.delivered[j.what] || 0) + 1
+      w.dirty = true
+      gainSkill(w, u, "craft", 1)
+      tradeSettle(w)
+      dropJob(w, u)
       return
     case "play":
       j.prog++
@@ -3171,6 +3192,10 @@ function courtTick(w, d) {
     }
     var ds = dwarves(w)
     for (var q = 0; q < ds.length; q++) thought(w, ds[q], L("th.court.paid", "a fortaleza tratou com um rei das profundezas"), 5)
+    // A hold that dealt fairly is a hold worth visiting. The king himself comes
+    // later — the envoy was only ever a messenger, and a king who never arrives
+    // is a name in a sentence.
+    w.crown = { race: c.race, king: c.king, z: c.z, since: w.tick, due: w.tick + DAY * KING_DELAY, came: 0 }
     envoy.going = c.z
     w.court = null
     return
@@ -3197,6 +3222,84 @@ function descendHome(w, u) {
     u.job = { k: "leave", i: -1 }
   }
   if (step(w, u) === 1) removeUnit(w, u)
+}
+// ---- the king comes up ------------------------------------------------------
+// The lost king was a name in the envoy's sentence and nothing else: "in the
+// name of king so-and-so". A king nobody ever meets is set dressing.
+//
+// So he comes. A season after a tribute is paid he climbs out of the deep with
+// two of his guard, walks to the depot, and stays a while. While he is in the
+// hold everyone's mood lifts — this is the oldest thing in the world and it is
+// in your dining room — and when he leaves he decides what the visit was worth:
+// a hold that grew since the tribute gets his own smith's work, one that is
+// merely holding gets his blessing, and one that has fallen apart gets a look.
+var KING_DELAY = 25      // days between paying tribute and the visit
+var KING_STAY = 6        // days he stays
+function kingTick(w, d) {
+  var c = w.crown
+  if (!c || w.fallen) return
+  if (!c.came) {
+    if (w.tick < c.due || w.raid || w.siege) return
+    var spot = deepSpot(w, c.z)
+    if (spot < 0) { c.due = w.tick + DAY * 3; return }
+    var k = addUnit(w, "king", spot)
+    k.name = c.king
+    k.going = -1
+    c.came = Math.max(1, w.tick)
+    c.wealthThen = w.wealth
+    c.popThen = pop(w)
+    c.guards = []
+    for (var g = 0; g < 2; g++) {
+      var gs = deepSpot(w, c.z)
+      if (gs < 0) continue
+      var gu = addUnit(w, "kingsguard", gs)
+      gu.name = dwarfName(w)
+      c.guards.push(gu.id)
+    }
+    c.unit = k.id
+    announce(w, LF("msg.king.come", "O rei {0}, dos {1}, sobe das profundezas em pessoa.", c.king, c.race), 2)
+    legend(w, LF("lg.king.come", "O rei {0}, dos {1}, visitou a fortaleza no ano {2}.", c.king, c.race, date(w).year))
+    return
+  }
+  var king = unitById(w, c.unit)
+  if (!king) { w.crown = null; return }
+  // while he is here
+  if (w.tick % (DAY / 2) < 1) {
+    var ds2 = dwarves(w)
+    for (var q = 0; q < ds2.length; q++) thought(w, ds2[q], LF("th.king", "viu o rei {0} com os próprios olhos", first(c.king)), 3)
+  }
+  if (w.tick - c.came < DAY * KING_STAY) return
+  // and what he makes of it
+  var grew = w.wealth > (c.wealthThen || 0) * 1.15 || pop(w) > (c.popThen || 0)
+  var held = pop(w) >= Math.max(3, Math.floor((c.popThen || 0) * 0.7))
+  if (grew) {
+    var kn = artifactName(w, "ore", { k: "pact", who: c.race }).split("|")
+    var gift = addItem(w, "weapon", w.depot, 4)
+    gift.nm = kn[0]; gift.title = kn[1]
+    w.artifacts.push({ name: kn[0], title: kn[1], desc: kn[2], maker: LF("king.smith", "o ferreiro do rei {0}", first(c.king)), t: w.tick, about: { k: "pact", who: c.race } })
+    w.stats.artifacts++
+    announce(w, LF("msg.king.gift", "O rei parte satisfeito e deixa {0}, {1}, forjada pelo seu próprio ferreiro.", kn[0], kn[1]), 2)
+    legend(w, LF("lg.king.gift", "O rei {0} deixou {1} à fortaleza no ano {2}.", c.king, kn[0], date(w).year))
+  } else if (held) {
+    w.blessed = Math.max(1, w.tick)
+    announce(w, LF("msg.king.bless", "O rei {0} parte, e deixa a sua palavra: esta fortaleza está sob a proteção dos {1}.", c.king, c.race), 1)
+  } else {
+    announce(w, LF("msg.king.cold", "O rei {0} desce sem dizer nada. Ele viu o bastante.", c.king), 1)
+    var ds3 = dwarves(w)
+    for (var q3 = 0; q3 < ds3.length; q3++) thought(w, ds3[q3], L("th.king.cold", "o rei das profundezas não se impressionou"), -4)
+  }
+  king.going = c.z
+  for (var gq = 0; gq < (c.guards || []).length; gq++) { var gu2 = unitById(w, c.guards[gq]); if (gu2) gu2.going = c.z }
+  w.crown = null
+}
+// A king walks to the depot and stands there; his guard stands with him. They
+// are not hostile and nothing they do is urgent.
+function actKing(w, u) {
+  if (typeof u.going === "number" && u.going >= 0) { descendHome(w, u); return }
+  if (dist(u.i, w.depot) <= 3) { u.wait = 30; return }
+  if (u.wait > 0) { u.wait--; return }
+  if (!u.path && !go(w, u, function (q) { return dist(q, w.depot) <= 3 }, w.depot, 4000)) { u.wait = 40; return }
+  step(w, u)
 }
 // A level shown by people who have lived in it. The one way the fog comes off
 // somewhere a dwarf has never walked.
@@ -3353,23 +3456,26 @@ function checkFall(w) {
 }
 function dayStart(w, d) {
   rosterMilitia(w)
-  if (!w.fallen) { nobleTick(w, d); courtTick(w, d) }
+  if (!w.fallen) { nobleTick(w, d); courtTick(w, d); kingTick(w, d) }
   // Once a day, at dawn. Rewriting the queue four times a day instead looked
   // like the obvious fix for a cellar that runs dry at breakfast, and cost
   // a third of the hold's brewing and six fortresses in sixteen: the churn
   // orphaned the order every dwarf was already working on.
-  if (!w.fallen) { spoilFood(w); holdOrders(w); noAccessTick(w) }
+  if (!w.fallen) { spoilFood(w); holdOrders(w); holdTrade(w); noAccessTick(w) }
   if (w.scenario && !w.fallen) prospect(w)
   if (w.scenario && !w.peaceful && !w.fallen && !w.raid && !w.caravan && w.tick >= w.scenario.nextRaid) spawnRaid(w, d, w.scenario.wave)
   // weather
   if (d.seasonName === "primavera" || d.seasonName === "outono") w.weather = chance(w, 0.3) ? 1 : 0
   else if (d.seasonName === "inverno") w.weather = chance(w, 0.8) ? 2 : 0
   else w.weather = chance(w, 0.08) ? 1 : 0
-  // caravan
-  if (d.seasonName === "outono" && d.day === 3 && !w.caravan && !w.raid && !w.fallen) {
+  // caravan: on the third day of autumn, or whenever a preset asked for one
+  var summoned = !!(w.caravanAt && w.tick >= w.caravanAt)
+  if (summoned) w.caravanAt = 0
+  if ((summoned || (d.seasonName === "outono" && d.day === 3)) && !w.caravan && !w.raid && !w.fallen) {
     var sp = edgeSurface(w)
     if (sp >= 0) {
       w.caravan = { stage: "arrive", spot: w.depot, arrived: 0, days: 0, n: 3 }
+      w.trade = { sell: {}, buy: {}, delivered: {}, closed: false }
       for (var k = 0; k < 3; k++) { var m = addUnit(w, "merchant", nearFree(w, sp, 1)); m.wait = 0 }
       announce(w, L("msg.caravan", "Uma caravana das Montanhas-Lar chegou!"), 1)
       w.stats.caravans++
@@ -3448,6 +3554,173 @@ function spawnRaid(w, d, wave) {
   if (w.scenario) { w.scenario.wave = wave + 1; w.scenario.nextRaid = w.tick + w.scenario.raidEvery }
   return true
 }
+// ---- trading with the caravan -----------------------------------------------
+// The caravan was the one friendly visitor in the game and it was an automaton:
+// it took up to four things it picked itself and left food and drink in a fixed
+// ratio. The player chose nothing — not what to sell, not what to ask for — so
+// crafts and jewels were worth only the wealth number they added.
+//
+// Now it is a deal. You put goods on the table and name what you want back,
+// they weigh both at their own prices, and dwarves carry the offer to the camp
+// like any other hauling job. Nothing moves until the whole offer is delivered,
+// which is what makes a trade a decision rather than a button.
+var TRADE_SELL = ["craft", "cutgem", "jewel", "bar", "gem", "ore", "weapon", "armor", "meal", "booze", "stone", "log"]
+var TRADE_BUY = ["food", "booze", "log", "stone", "bar", "pick", "axe", "weapon", "armor", "gem"]
+var TRADE_MARGIN = 0.8   // they buy at four fifths of what they sell at: that is the trade
+function tradeTable(w) {
+  if (!w.trade) w.trade = { sell: {}, buy: {}, delivered: {}, closed: false }
+  return w.trade
+}
+function tradeValue(w, map) {
+  var v = 0
+  for (var k in map) v += (ITEM_VALUE[k] || 1) * map[k]
+  return v
+}
+// What the hold has spare, so the table cannot promise what it does not own.
+function tradeSpare(w, t) {
+  var n = countItems(w, t), tr = tradeTable(w)
+  return Math.max(0, n - (tr.sell[t] || 0))
+}
+// `d` is a quantity, not a direction: the menu passes ±1 and gets one step,
+// and anything else asking for eight gets eight. Offering is capped by what the
+// hold actually owns, so the table can never promise goods that are not there.
+function tradeOffer(w, t, d, byPlayer) {
+  var tr = tradeTable(w)
+  if (tr.closed || !d) return false
+  if (byPlayer) tr.byPlayer = true
+  var have = tr.sell[t] || 0
+  var want = have + d
+  if (d > 0) want = Math.min(want, have + tradeSpare(w, t))
+  if (want < 0) want = 0
+  if (want === have) return false
+  if (want) tr.sell[t] = want; else delete tr.sell[t]
+  w.dirty = true
+  return true
+}
+function tradeWant(w, t, d, byPlayer) {
+  var tr = tradeTable(w)
+  if (tr.closed || !d) return false
+  if (byPlayer) tr.byPlayer = true
+  var had = tr.buy[t] || 0, now = Math.max(0, had + d)
+  if (now === had) return false
+  if (now) tr.buy[t] = now; else delete tr.buy[t]
+  w.dirty = true
+  return true
+}
+function tradeClear(w, byPlayer) {
+  var tr = tradeTable(w)
+  if (tr.closed) return
+  tr.sell = {}; tr.buy = {}
+  // Clearing by hand is also a decision: the hold does not immediately fill the
+  // table back up, or the player could never say "nothing, thank you".
+  if (byPlayer) tr.byPlayer = true
+  w.dirty = true
+}
+// What the hold trades when nobody tells it to. Same principle as the morning
+// work orders: if the player has not said otherwise, the dwarves act on what
+// they can see — sell what is piling up, ask for what is running out. A player
+// who touches the table takes it over, including clearing it to nothing.
+function holdTrade(w) {
+  var c = w.caravan
+  if (!c || c.stage !== "trade") return
+  var tr = tradeTable(w)
+  if (tr.closed || tr.byPlayer) return
+  if (tradeValue(w, tr.sell) > 0 || tradeValue(w, tr.buy) > 0) return
+  var p = Math.max(1, pop(w))
+  // what the hold is short of, most pressing first
+  var wants = []
+  var food = countItems(w, "food") + countItems(w, "meal") * 2
+  if (food < p * FOOD_PER_DWARF * 0.6) wants.push(["food", Math.ceil(p * 1.5)])
+  if (countItems(w, "booze") < p * 3) wants.push(["booze", Math.ceil(p * 1.5)])
+  if (countItems(w, "log") < 8) wants.push(["log", 8])
+  if (countItems(w, "bar") < 4) wants.push(["bar", 3])
+  if (countItems(w, "pick") < 1) wants.push(["pick", 1])
+  if (!wants.length) wants.push(["food", Math.ceil(p)])
+  // what it can spare, dearest first, keeping a floor of each
+  var floors = { craft: 2, cutgem: 0, jewel: 0, gem: 2, ore: 4, stone: 12, log: 12, bar: 4 }
+  var spares = []
+  for (var t in floors) {
+    var spare = countItems(w, t) - floors[t]
+    if (spare > 0) spares.push([t, spare, ITEM_VALUE[t] || 1])
+  }
+  spares.sort(function (a, b) { return b[2] - a[2] })
+  if (!spares.length) return
+  // ask for what is wanted, then put up just enough to pay for it
+  var asked = 0
+  for (var q = 0; q < wants.length && asked < 3; q++) { tradeWant(w, wants[q][0], wants[q][1]); asked++ }
+  var need = tradeValue(w, tr.buy) / TRADE_MARGIN
+  for (var sq = 0; sq < spares.length && tradeValue(w, tr.sell) < need; sq++) {
+    var sp = spares[sq]
+    for (var n = 0; n < sp[1] && tradeValue(w, tr.sell) < need; n++) tradeOffer(w, sp[0], 1)
+  }
+  // if the hold cannot cover it, scale the ask back until they would take it
+  var guard = 0
+  while (!tradeAccepts(w) && guard++ < 200) {
+    var biggest = null, bv = -1
+    for (var bk in tr.buy) { var v = (ITEM_VALUE[bk] || 1) * tr.buy[bk]; if (v > bv) { bv = v; biggest = bk } }
+    if (!biggest) break
+    tradeWant(w, biggest, -1)
+  }
+  if (!tradeAccepts(w)) { tr.sell = {}; tr.buy = {}; return }
+  var sold = 0, bought = 0
+  for (var sk in tr.sell) sold += tr.sell[sk]
+  for (var bk2 in tr.buy) bought += tr.buy[bk2]
+  announce(w, LF("msg.trade.hold", "Sem ordens suas, a fortaleza montou a própria troca: {0} bens por {1}.", sold, bought), 1)
+}
+// Their side of the arithmetic, and the one number the player is playing
+// against: what they give is worth four fifths of what they take.
+function tradeAccepts(w) {
+  var tr = tradeTable(w)
+  var give = tradeValue(w, tr.sell), take = tradeValue(w, tr.buy)
+  return give > 0 && take <= give * TRADE_MARGIN
+}
+function tradeOwed(w) {
+  var tr = tradeTable(w), left = {}
+  for (var k in tr.sell) {
+    var done = (tr.delivered || {})[k] || 0
+    if (tr.sell[k] > done) left[k] = tr.sell[k] - done
+  }
+  return left
+}
+// Carrying one promised item to the camp. It is a haul with a different
+// destination, so it uses the same machinery.
+function branchTrade(w, u) {
+  var c = w.caravan
+  if (!c || c.stage !== "trade") return false
+  var tr = tradeTable(w)
+  if (tr.closed || !tradeAccepts(w)) return false
+  var left = tradeOwed(w)
+  for (var t in left) {
+    var it = freeItem(w, t, u.i, u)
+    if (!it) continue
+    if (!go(w, u, function (q) { return q === it.i }, it.i)) continue
+    it.res = u.id
+    setJob(w, u, { k: "trade", i: c.spot, item: it.id, what: t, stage: "fetch" })
+    return true
+  }
+  return false
+}
+// Everything promised has arrived: they hand over what was asked for.
+function tradeSettle(w) {
+  var tr = tradeTable(w), c = w.caravan
+  // Settling twice hands the goods over twice. Two dwarves delivering the last
+  // two items in the same tick is enough to get here twice, and the second call
+  // used to pay out again.
+  if (tr.closed) return false
+  var owed = tradeOwed(w)
+  for (var k in owed) return false          // still something to carry
+  var spot = c ? c.spot : w.depot, given = 0
+  for (var b in tr.buy) for (var q = 0; q < tr.buy[b]; q++) { addItem(w, b, nearFree(w, spot, 2), b === "bar" || b === "weapon" || b === "armor" || b === "pick" || b === "axe" ? 2 : 0); given++ }
+  var took = 0
+  for (var sK in tr.sell) took += tr.sell[sK]
+  w.stats.traded = (w.stats.traded || 0) + took
+  tr.closed = true
+  announce(w, LF("msg.trade.done", "Negócio fechado: {0} bens saíram, {1} chegaram.", took, given), 1)
+  legend(w, LF("lg.trade", "Um negócio foi fechado com os mercadores no ano {0}.", date(w).year))
+  var ds = dwarves(w)
+  for (var d = 0; d < ds.length; d++) thought(w, ds[d], L("th.trade", "a fortaleza fez um bom negócio"), 3)
+  return true
+}
 function caravanDay(w) {
   var c = w.caravan
   var merchants = w.units.filter(function (u) { return u.k === "merchant" })
@@ -3455,19 +3728,21 @@ function caravanDay(w) {
   if (c.stage === "arrive" && c.arrived >= merchants.length) { c.stage = "trade"; announce(w, L("msg.merchants.camp", "Os mercadores montaram acampamento junto ao depósito."), 0) }
   if (c.stage === "trade") {
     c.days++
-    // they buy crafts, gems and ore; they sell food, drink and logs
-    var bought = 0, sold = 0, worth = 0
-    for (var k = w.items.length - 1; k >= 0 && bought < 4; k--) {
-      var it = w.items[k]
-      if (it.by || it.res) continue
-      var wgt = it.t === "jewel" ? 4 : it.t === "cutgem" ? 2 : (it.t === "craft" || it.t === "gem" || (it.t === "ore" && countItems(w, "ore") > 3)) ? 1 : 0
-      if (wgt) { w.items.splice(k, 1); bought++; worth += wgt }
+    if (c.days === 1) announce(w, L("msg.trade.open", "Os mercadores abriram as arcas. Monte a troca no menu de Ordens."), 1)
+    // A deal left half-carried when they leave is not stolen: they pay for
+    // what actually arrived, at their own rate, and go.
+    if (c.days >= 5) {
+      var tr = tradeTable(w)
+      var partial = 0
+      for (var pk in (tr.delivered || {})) partial += (ITEM_VALUE[pk] || 1) * tr.delivered[pk]
+      if (!tr.closed && partial > 0) {
+        var back = Math.max(1, Math.floor(partial * TRADE_MARGIN / (ITEM_VALUE.food || 2)))
+        for (var pq = 0; pq < back; pq++) addItem(w, pick(w, ["food", "booze"]), nearFree(w, c.spot, 2))
+        announce(w, LF("msg.trade.partial", "Os mercadores pagaram pelo que chegou a tempo: {0} suprimentos.", back), 1)
+      }
+      c.stage = "leave"
+      announce(w, L("msg.merchants.left", "Os mercadores partiram."), 0)
     }
-    var give = ["food", "booze", "log"]
-    for (var q = 0; q < worth * 2; q++) { addItem(w, pick(w, give), nearFree(w, c.spot, 2)); sold++ }
-    if (bought > 0) announce(w, LF("msg.trade", "Comércio: os mercadores levaram {0} bens e deixaram {1} suprimentos.", bought, sold), 1)
-    else if (c.days === 1) announce(w, L("msg.trade.nothing", "Os mercadores não encontraram nada que valesse a pena comprar."), 0)
-    if (c.days >= 4) { c.stage = "leave"; announce(w, L("msg.merchants.left", "Os mercadores partiram."), 0) }
   }
   if (w.raid && c.stage !== "leave") { c.stage = "leave"; announce(w, L("msg.merchants.flee", "Os mercadores fogem da emboscada!"), 1) }
 }
@@ -3549,6 +3824,7 @@ function tick(w) {
     else if (u.k === "kobold") actKobold(w, u)
     else if (u.k === "merchant") actMerchant(w, u)
     else if (u.k === "envoy") actEnvoy(w, u)
+    else if (u.k === "king" || u.k === "kingsguard") actKing(w, u)
     if (w.build[u.i] === B_TRAP && hostile(u)) { if (trapFires(w, u) && w.units.indexOf(u) < 0) continue }
     // liquids
     var t = w.tile[u.i]
@@ -3817,6 +4093,9 @@ function scenario(w, n, opts) {
   stockAt(w, stock1, "food", 40); stockAt(w, stock1, "meal", 12); stockAt(w, stock1, "booze", 40)
   stockAt(w, stock3, "log", 20); stockAt(w, stock3, "stone", 24); stockAt(w, stock3, "ore", 12); stockAt(w, stock3, "bar", 8)
   stockAt(w, stock3, "pick", 1); stockAt(w, stock3, "axe", 1); stockAt(w, stock3, "weapon", 2); stockAt(w, stock3, "armor", 2); stockAt(w, stock3, "gem", 4)
+  // something worth putting on a merchant's table: a hold with nothing to sell
+  // meets its first caravan with nothing to say to it
+  stockAt(w, stock3, "craft", 6); stockAt(w, stock3, "cutgem", 2)
   // the dwarves: a militia of a third, the rest by trade
   var roles = ["miner", "miner", "woodcutter", "farmer", "brewer", "smith", "builder", "farmer", "miner", "woodcutter", "crafter", "farmer", "smith", "miner", "brewer", "builder"]
   var militia = opts.militia !== undefined ? Math.min(n, opts.militia) : Math.max(2, Math.ceil(n / 3)), ri2 = 0
@@ -3903,6 +4182,10 @@ function scenario(w, n, opts) {
   // Garrison and Siege pass their own, harsher numbers.
   w.scenario = { n: n, wave: 1, raidEvery: opts.raidEvery || DAY * 15, nextRaid: w.tick + (opts.firstRaid || DAY * 6),
     base: opts.waveBase || 3, step: opts.waveStep || 1, eliteFrom: opts.eliteFrom || 5, cap: opts.cap || 9 }
+  // Merchants normally come on the third day of autumn, most of a year away
+  // from a spring start. A preset that is about the economy says so and gets
+  // them at once.
+  if (opts.caravanIn) w.caravanAt = w.tick + DAY * opts.caravanIn
   if (opts.peaceful) { w.peaceful = true; w.scenario = null }
   w.preset = opts.name || "Fortaleza pronta"
   w.popCap = Math.max(w.popCap, n + 6)
@@ -3924,7 +4207,7 @@ var PRESETS = [
   { id: "classic", name: "Embarque clássico", desc: "Sete anões, uma carroça de suprimentos e uma colina. Do zero, como manda a tradição.", kind: "classic", n: 7 },
   { id: "ready", name: "Fortaleza pronta", desc: "Doze anões com ofícios e uma fortaleza já escavada em quatro níveis, com lareira, mesas de jogo e estacas na entrada.", kind: "scenario", n: 12, opts: { name: "Fortaleza pronta" } },
   { id: "garrison", name: "Guarnição", desc: "Dez anões, seis na milícia, e o corredor da entrada cheio de estacas. Ondas mais cedo e mais frequentes: um teste de defesa.", kind: "scenario", n: 10, opts: { name: "Guarnição", militia: 6, firstRaid: DAY * 3, raidEvery: DAY * 9, waveBase: 4, waveStep: 2, eliteFrom: 3, cap: 14, halls: 0, traps: 6, posts: 3 } },
-  { id: "peaceful", name: "Vale tranquilo", desc: "Fortaleza pronta, sem goblins nem lobos, e o salão inteiro arrumado: duas lareiras, dois cristais, quatro mesas de jogo. Para ver a economia e os humores sem sangue.", kind: "scenario", n: 12, opts: { name: "Vale tranquilo", peaceful: true, halls: 2, traps: 0, posts: 0 } },
+  { id: "peaceful", name: "Vale tranquilo", desc: "Fortaleza pronta, sem goblins nem lobos, o salão inteiro arrumado e uma caravana chegando no segundo dia. Para ver a economia, o comércio e os humores sem sangue.", kind: "scenario", n: 12, opts: { name: "Vale tranquilo", peaceful: true, halls: 2, traps: 0, posts: 0, caravanIn: 2 } },
   { id: "kinfolk", name: "Casa cheia", desc: "Dezesseis anões que chegaram em família, metade deles inseparável, num salão completo. As histórias começam de véspera — e a primeira perda dói.", kind: "scenario", n: 16, opts: { name: "Casa cheia", kin: true, halls: 2, traps: 2, cap: 10 } },
   { id: "depths", name: "Soleira das profundezas", desc: "Doze anões e um poço já cavado até o ferro. O último nível, onde algo dorme desde antes da fortaleza, fica para você decidir.", kind: "scenario", n: 12, opts: { name: "Soleira das profundezas", deepShaft: true, halls: 1, traps: 4, militia: 5, posts: 2 } },
   { id: "siege", name: "Cerco", desc: "Oito anões, ondas grandes desde o segundo dia com veteranos, e estacas por todo o corredor. Ninguém espera que dure.", kind: "scenario", n: 8, opts: { name: "Cerco", militia: 4, firstRaid: DAY * 2, raidEvery: DAY * 7, waveBase: 5, waveStep: 2.5, eliteFrom: 2, cap: 16, halls: 0, traps: 8, posts: 4 } }
@@ -4041,7 +4324,8 @@ var JOB_PT = { dig: "cavando", digstair: "cavando escada", chop: "cortando", bui
   brew: "fermentando", craft: "criando", haul: "carregando", eat: "comendo", forage: "coletando", drink: "bebendo", drinkwater: "bebendo água",
   sleep: "dormindo", fight: "lutando", arm: "pegando arma", mood: "humor estranho", flee: "fugindo", idle: "ocioso",
   equip: "equipando", train: "treinando", cook: "cozinhando", smelt: "fundindo", forge: "forjando", cut: "lapidando", setgem: "fazendo joia",
-  bury: "sepultando os mortos", mourn: "velando os mortos", play: "jogando", station: "indo para o posto" }
+  bury: "sepultando os mortos", mourn: "velando os mortos", play: "jogando", station: "indo para o posto",
+  trade: "levando à caravana" }
 function jobName(u) {
   if (!u.job) return u.mood_state === "melancholy" ? L("mood.melancholy", "melancólico") : u.mood_state === "berserk" ? L("mood.berserk", "furioso") : L("job.idle", "ocioso")
   var j = u.job, key = j.k === "dig" && j.stair ? "digstair" : j.k
@@ -4119,6 +4403,10 @@ function deserialize(json) {
   if (typeof w.grudge !== "number") w.grudge = 0
   if (typeof w.gatesOpen !== "boolean") w.gatesOpen = false
   if (typeof w.militiaWant !== "number") w.militiaWant = 0
+  if (!w.trade) w.trade = { sell: {}, buy: {}, delivered: {}, closed: false }
+  if (typeof w.caravanAt !== "number") w.caravanAt = 0
+  if (w.crown === undefined) w.crown = null
+  if (typeof w.blessed !== "number") w.blessed = 0
   for (var aq = 0; aq < (w.artifacts || []).length; aq++) if (w.artifacts[aq].about === undefined) w.artifacts[aq].about = null
   if (typeof w.demandSince !== "number") w.demandSince = 0
   if (w.demand === undefined) w.demand = null

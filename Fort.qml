@@ -254,12 +254,48 @@ Item {
       gap()
       rows.push({ kind: "note", t: root.t("m.orders.note") })
       item(root.t("m.orders.clear"), root.t("m.orders.clear.sub"), "x", function () { Sim.clearPlayerOrders(w); World.rev++; rebuildMenu(); root.flash(root.t("fl.orders.cleared")) })
+      gap()
+      item(root.t("m.trade"), w.caravan && w.caravan.stage === "trade" ? root.t("m.trade.hint") : root.t("m.trade.none"), "c",
+           w.caravan && w.caravan.stage === "trade" ? function () { root.menuSection = "trade"; root.menuIndex = 0; rebuildMenu() } : null)
       // the two standing levers: doors against goblins, floodgates against
       // everything. Both are all-or-nothing on purpose — this game has no
       // room for a per-building setting screen.
       item(root.t("m.gates"), root.t(w.gatesOpen ? "m.gates.open" : "m.gates.shut"), "g", function () { World.toggleGates(); rebuildMenu() })
       item(root.t("chip.locked"), root.t(w.lockdown ? "m.gates.shut" : "m.gates.open"), "L", function () { World.toggleLockdown(); rebuildMenu() })
       item(root.t("m.back"), "", "Esc", function () { root.menuSection = "main"; root.menuIndex = 0; rebuildMenu() })
+    } else if (root.menuSection === "trade") {
+      // Both halves of the deal on one screen, with their answer under it: the
+      // player is playing against one number — they give four fifths of what
+      // they take — and it has to be visible while the table is being built.
+      var tr = Sim.tradeTable(w)
+      var give = Sim.tradeValue(w, tr.sell), take = Sim.tradeValue(w, tr.buy)
+      title(root.t("m.trade"), root.t("m.trade.hint"))
+      rows.push({ kind: "note", t: tr.closed ? root.t("m.trade.state.closed")
+        : (give === 0 && take === 0) ? root.t("m.trade.state.empty")
+        : Sim.tradeAccepts(w) ? root.tf("m.trade.state.ok", give, take)
+        : root.tf("m.trade.state.greedy", take, give) })
+      var owed = Sim.tradeOwed(w), left = 0, promised = 0
+      for (var ok2 in owed) left += owed[ok2]
+      for (var pk2 in tr.sell) promised += tr.sell[pk2]
+      if (promised > 0) rows.push({ kind: "note", t: root.tf("m.trade.carrying", promised - left, promised) })
+      gap()
+      rows.push({ kind: "note", t: root.t("m.trade.give") })
+      for (k = 0; k < Sim.TRADE_SELL.length; k++) (function (t) {
+        var have = Sim.countItems(w, t), on = tr.sell[t] || 0
+        if (!have && !on) return
+        item(Sim.itemName(t), on ? root.tf("m.trade.offered", on) : root.tf("m.trade.spare", Sim.tradeSpare(w, t)), "◂ ▸", null,
+             { value: true, adjust: function (d) { Sim.tradeOffer(w, t, d, true); World.rev++; rebuildMenu() } })
+      })(Sim.TRADE_SELL[k])
+      gap()
+      rows.push({ kind: "note", t: root.t("m.trade.want") })
+      for (k = 0; k < Sim.TRADE_BUY.length; k++) (function (t) {
+        var on2 = tr.buy[t] || 0
+        item(Sim.itemName(t), on2 ? root.tf("m.trade.asked", on2) : "", "◂ ▸", null,
+             { value: true, adjust: function (d) { Sim.tradeWant(w, t, d, true); World.rev++; rebuildMenu() } })
+      })(Sim.TRADE_BUY[k])
+      gap()
+      item(root.t("m.trade.clear"), "", "x", function () { Sim.tradeClear(w, true); World.rev++; rebuildMenu() })
+      item(root.t("m.back"), "", "Esc", function () { root.menuSection = "orders"; root.menuIndex = 0; rebuildMenu() })
     } else if (root.menuSection === "view") {
       title(root.t("m.view"), root.t("m.view.hint"))
       for (k = 0; k < root.viewModes.length; k++) (function (vm, n) { item((World.viewMode === vm[0] ? "● " : "○ ") + vm[1], vm[2], String(n + 1), function () { setViewMode(vm[0]); closeMenu() }, { wrap: true }) })(root.viewModes[k], k)
@@ -458,7 +494,7 @@ Item {
           if (sel.post >= 0 && w.build[sel.post] === Sim.B_POST) out.push({ t: root.tf("p.post", Sim.ix(sel.post), Sim.iy(sel.post), Sim.iz(sel.post)), c: "accent", wrap: true })
           if (sel.thoughts.length) { out.push({ t: root.t("p.thoughts"), c: "muted" }); for (k = 0; k < Math.min(5, sel.thoughts.length); k++) { var th = sel.thoughts[k]; out.push({ t: "  " + (th.v >= 0 ? "+" : "") + th.v + " " + th.m, c: th.v < 0 ? "warn" : "good", wrap: true }) } }
         } else {
-          var kinds = { goblin: root.t("unit.goblin"), wolf: root.t("unit.wolf"), deer: root.t("unit.deer"), kobold: root.t("unit.kobold"), merchant: root.t("unit.merchant"), crawler: root.t("unit.crawler"), sentinel: root.t("unit.sentinel"), envoy: root.t("unit.envoy") }
+          var kinds = { goblin: root.t("unit.goblin"), wolf: root.t("unit.wolf"), deer: root.t("unit.deer"), kobold: root.t("unit.kobold"), merchant: root.t("unit.merchant"), crawler: root.t("unit.crawler"), sentinel: root.t("unit.sentinel"), envoy: root.t("unit.envoy"), king: root.t("unit.king"), kingsguard: root.t("unit.kingsguard") }
           out.push({ t: kinds[sel.k] || sel.k, c: "accent" }); out.push({ t: "hp " + sel.hp + "/" + sel.maxhp + " · z" + Sim.iz(sel.i), c: "muted" })
         }
       } else out.push({ t: root.t("p.selecthint"), c: "muted", wrap: true })
@@ -497,6 +533,7 @@ Item {
       out.push({ t: root.tf("p.light", Math.round(lt * 100), lt < 0.3 ? root.t("p.light.dark") : ""), c: lt < 0.3 ? "muted" : "" })
       if (w.lockdown) out.push({ t: root.t("p.locked"), c: "warn" })
       if (w.gatesOpen) out.push({ t: root.t("p.gates.open"), c: "warn" })
+      if (w.caravan && w.caravan.stage === "trade") out.push({ t: root.tf("p.trade", Math.max(0, 5 - w.caravan.days)), c: "accent", wrap: true })
       var pst = Sim.cache(w).posts
       if (pst.length) {
         var manned = Sim.dwarves(w).filter(function (q) { return q.militia && q.post >= 0 }).length
@@ -509,6 +546,9 @@ Item {
         var cleft = Math.max(0, Sim.TRIBUTE_DAYS - Math.round((w.tick - w.court.since) / Sim.DAY))
         out.push({ t: root.tf("p.court", w.court.race, w.court.n, Sim.itemName(w.court.k), cleft), c: cleft <= 5 ? "warn" : "accent", wrap: true })
       }
+      if (w.crown && w.crown.came) out.push({ t: root.tf("p.king", w.crown.king, w.crown.race, Math.max(0, Sim.KING_STAY - Math.round((w.tick - w.crown.came) / Sim.DAY))), c: "accent", wrap: true })
+      else if (w.crown) out.push({ t: root.tf("p.king.due", w.crown.king, w.crown.race), c: "accent", wrap: true })
+      if (w.blessed) out.push({ t: root.t("p.blessed"), c: "good", wrap: true })
       if (w.pact) out.push({ t: root.t("p.pact"), c: "good", wrap: true })
       else if (w.grudge) out.push({ t: root.t("p.grudge"), c: "warn", wrap: true })
       if (w.relic) out.push({ t: root.tf("p.relic", w.relic.nm, w.relic.title), c: "accent", wrap: true })
@@ -1035,11 +1075,11 @@ Item {
                   var un = w.units[u], udk = Sim.depthBelow(w, un.i, z)
                   if (udk < 0) continue
                   if (fog && un.k !== "dwarf" && !Sim.seenAt(w, un.i)) continue
-                  var col = un.k === "dwarf" ? (un.mood_state === "berserk" ? p.urgent : un.mood_state ? p.kobold : p.dwarf) : un.k === "goblin" ? p.goblin : un.k === "wolf" ? p.wolf : un.k === "deer" ? p.deer : un.k === "kobold" ? p.kobold : un.k === "crawler" ? p.crawler : un.k === "sentinel" ? p.sentinel : un.k === "envoy" ? p.envoy : p.merchant
+                  var col = un.k === "dwarf" ? (un.mood_state === "berserk" ? p.urgent : un.mood_state ? p.kobold : p.dwarf) : un.k === "goblin" ? p.goblin : un.k === "wolf" ? p.wolf : un.k === "deer" ? p.deer : un.k === "kobold" ? p.kobold : un.k === "crawler" ? p.crawler : un.k === "sentinel" ? p.sentinel : un.k === "envoy" ? p.envoy : un.k === "king" ? p.bCrystal : un.k === "kingsguard" ? p.bPost : p.merchant
                   if (un.id === World.selectedId) { ctx.fillStyle = p.select; ctx.fillRect(Sim.ix(un.i) * c, Sim.iy(un.i) * c, c, c); col = p.dwarfSel }
                   if (udk) col = Pal.dimmed(col, p.bgRgb, p.dim[udk])
                   else if (un.id !== World.selectedId) { var ub = bright(un.i, Sim.outdoor(w, un.i)); if (ub < 0.98) col = Pal.dimmed(col, p.bgRgb, Math.max(0.5, ub)) }
-                  var gl = un.k === "dwarf" ? "☺" : un.k === "goblin" ? "g" : un.k === "wolf" ? "w" : un.k === "deer" ? "d" : un.k === "kobold" ? "k" : un.k === "crawler" ? "c" : un.k === "sentinel" ? "S" : un.k === "envoy" ? "Ε" : "☻"
+                  var gl = un.k === "dwarf" ? "☺" : un.k === "goblin" ? "g" : un.k === "wolf" ? "w" : un.k === "deer" ? "d" : un.k === "kobold" ? "k" : un.k === "crawler" ? "c" : un.k === "sentinel" ? "S" : un.k === "envoy" ? "Ε" : un.k === "king" ? "♔" : un.k === "kingsguard" ? "Ψ" : "☻"
                   ctx.fillStyle = col; ctx.fillText(gl, Sim.ix(un.i) * c + half, Sim.iy(un.i) * c + half + 1)
                 }
                 // pass 4: weather over outdoor cells (light itself is baked into the fills)

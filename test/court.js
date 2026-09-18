@@ -9,7 +9,8 @@
 const fs = require("fs"), path = require("path")
 const src = fs.readFileSync(path.join(__dirname, "..", "sim.js"), "utf8").replace(".pragma library", "")
 const S = new Function(src + `; return { newScenario, tick, dwarves, pop, addItem, courtArrive, courtTick, actEnvoy,
-  courtGoods, payTribute, wakeOdds, wakeChance, revealLevel, seenAt, date, unitById, idx, iz, N, DAY, YEAR, D }`)()
+  courtGoods, payTribute, wakeOdds, wakeChance, revealLevel, seenAt, date, unitById, idx, iz, N, DAY, YEAR, D,
+  kingTick, dwarves, pop, serialize, deserialize, KING_STAY }`)()
 
 let passed = 0, failed = 0
 function check(cond, what) {
@@ -95,6 +96,66 @@ if (rw) {
   check(gw.units.filter(u => u.k === "crawler" || u.k === "sentinel").length > foesBefore,
         "something comes up in the envoy's place")
   check((gw.stats.tributesFailed || 0) === 1, "the refusal is counted")
+}
+
+// --- the king comes up himself ------------------------------------------------
+// The lost king used to be a name in the envoy's sentence: "in the name of king
+// so-and-so". A hold that pays its tribute is a hold worth visiting, and what
+// he makes of the visit depends on what he finds when he gets here.
+function crowned(seed) {
+  const w = S.newScenario(seed, 12, {})
+  S.tick(w)
+  w.crown = { race: "Ourofria", king: "Mosen Ourolonga", z: 1, since: w.tick, due: w.tick, came: 0 }
+  return w
+}
+{
+  const w = crowned(7)
+  S.kingTick(w, S.date(w))
+  const king = w.units.filter(u => u.k === "king")[0]
+  check(!!king, "the king climbs out when he is due")
+  check(!!(king && king.name === "Mosen Ourolonga"), "and he is the king the envoy spoke for")
+  check(w.units.filter(u => u.k === "kingsguard").length === 2, "with two of his guard")
+  check(!!w.crown.came, "the visit is recorded")
+  const before = S.pop(w)
+  for (let k = 0; k < 400; k++) S.tick(w)
+  check(S.pop(w) === before, "nobody is hurt by the visit")
+  check(S.dwarves(w).some(u => u.thoughts.some(t => /rei/.test(t.m))), "and the hold talks about having seen him")
+}
+{
+  const w = crowned(11)
+  S.kingTick(w, S.date(w))
+  w.crown.wealthThen = 1; w.crown.popThen = 1
+  w.crown.came = w.tick - S.DAY * (S.KING_STAY + 1)
+  const artsBefore = w.artifacts.length
+  S.kingTick(w, S.date(w))
+  check(w.artifacts.length === artsBefore + 1, "a hold that grew is given a named weapon")
+  const gift = w.items.filter(it => it.nm)[0]
+  check(!!gift && gift.q === 4, "forged above steel, below the tomb's relic (" + (gift ? gift.q : "—") + ")")
+  check(w.crown === null, "and the visit is over")
+}
+{
+  const w = crowned(3)
+  S.kingTick(w, S.date(w))
+  w.crown.wealthThen = 1e9; w.crown.popThen = S.pop(w)
+  w.crown.came = w.tick - S.DAY * (S.KING_STAY + 1)
+  S.kingTick(w, S.date(w))
+  check(!!w.blessed, "a hold that held its ground is blessed instead")
+}
+{
+  const w = crowned(5)
+  S.kingTick(w, S.date(w))
+  w.crown.wealthThen = 1e9; w.crown.popThen = 100
+  w.crown.came = w.tick - S.DAY * (S.KING_STAY + 1)
+  S.kingTick(w, S.date(w))
+  check(!w.blessed, "a hold that fell apart gets neither")
+  check(S.dwarves(w).some(u => u.thoughts.some(t => /impressionou/.test(t.m))), "and they feel it")
+}
+{
+  const w = crowned(7)
+  S.kingTick(w, S.date(w))
+  const back = S.deserialize(S.serialize(w))
+  check(!!(back.crown && back.crown.king === w.crown.king), "a visit in progress survives a save")
+  check(back.units.filter(u => u.k === "king").length === 1, "and so does the king")
 }
 
 console.log("\n" + (passed + failed) + " checks, " + failed + " failed")

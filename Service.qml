@@ -138,7 +138,7 @@ Item {
               var un = w.units[u], udk = Sim.depthBelow(w, un.i, z)
               if (udk < 0) continue
               if (fog && un.k !== "dwarf" && !Sim.seenAt(w, un.i)) continue
-              var ucol = un.k === "dwarf" ? (un.id === World.selectedId ? p.dwarfSel : p.dwarf) : un.k === "goblin" ? p.goblin : un.k === "wolf" ? p.wolf : un.k === "deer" ? p.deer : un.k === "kobold" ? p.kobold : un.k === "crawler" ? p.crawler : un.k === "sentinel" ? p.sentinel : un.k === "envoy" ? p.envoy : p.merchant
+              var ucol = un.k === "dwarf" ? (un.id === World.selectedId ? p.dwarfSel : p.dwarf) : un.k === "goblin" ? p.goblin : un.k === "wolf" ? p.wolf : un.k === "deer" ? p.deer : un.k === "kobold" ? p.kobold : un.k === "crawler" ? p.crawler : un.k === "sentinel" ? p.sentinel : un.k === "envoy" ? p.envoy : un.k === "king" ? p.bCrystal : un.k === "kingsguard" ? p.bPost : p.merchant
               ctx.fillStyle = udk ? Pal.dimmed(ucol, p.bgRgb, dimK[udk]) : ucol
               ctx.fillRect(Sim.ix(un.i) * c + 1, Sim.iy(un.i) * c + 1, c - 2, c - 2)
             }

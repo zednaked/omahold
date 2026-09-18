@@ -11,10 +11,11 @@
 #   make lives     the chronicle read back as one dwarf's biography
 #   make artifacts what a strange mood is about, and what it puts on the object
 #   make stairs    going down, which has broken three times
+#   make trade     the caravan, and the deal the player builds with it
 
-.PHONY: test sim i18n hostile deep halls presets surfaces lives artifacts stairs validate
+.PHONY: test sim i18n hostile deep halls presets surfaces lives artifacts stairs trade validate
 
-test: sim i18n deep halls presets surfaces lives artifacts stairs hostile
+test: sim i18n deep halls presets surfaces lives artifacts stairs trade hostile
 
 sim:
 	@echo "== simulation =="
@@ -53,6 +54,10 @@ artifacts:
 stairs:
 	@echo "== stairs =="
 	@node test/stairs.js | tail -1
+
+trade:
+	@echo "== trade =="
+	@node test/trade.js | tail -1
 
 hostile:
 	@echo "== save.py =="
