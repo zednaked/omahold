@@ -36,6 +36,7 @@ Item {
   property int selStart: -1
   property string page: "units"         // units local orders legends lives help
   property int livesIndex: 0            // whose life is open on the Lives page
+  property int chronFrom: 0             // how far back the chronicle is scrolled
   property string status: ""
   property bool dragging: false
   property int dragStart: -1
@@ -386,8 +387,14 @@ Item {
       case Qt.Key_G: if (shift) { World.toggleGates(); root.flash(root.t(w.gatesOpen ? "p.gates.open" : "ipc.gates.shut")); e.accepted = true; return } break
       case Qt.Key_Left: case Qt.Key_H: moveCursor(-stepN, 0); break
       case Qt.Key_Right: case Qt.Key_L: if (e.key === Qt.Key_L && shift) { World.toggleLockdown(); root.flash(w.lockdown ? root.t("h.lock") : "portas destrancadas") } else moveCursor(stepN, 0); break
-      case Qt.Key_Up: case Qt.Key_K: if (root.page === "lives") { root.livesIndex = Math.max(0, root.livesIndex - 1); refreshLines(); e.accepted = true; return } moveCursor(0, -stepN); break
-      case Qt.Key_Down: case Qt.Key_J: if (root.page === "lives") { root.livesIndex = root.livesIndex + 1; refreshLines(); e.accepted = true; return } moveCursor(0, stepN); break
+      case Qt.Key_Up: case Qt.Key_K:
+        if (root.page === "lives") { root.livesIndex = Math.max(0, root.livesIndex - 1); refreshLines(); e.accepted = true; return }
+        if (root.page === "legends") { root.chronFrom = root.chronFrom + 5; refreshLines(); e.accepted = true; return }
+        moveCursor(0, -stepN); break
+      case Qt.Key_Down: case Qt.Key_J:
+        if (root.page === "lives") { root.livesIndex = root.livesIndex + 1; refreshLines(); e.accepted = true; return }
+        if (root.page === "legends") { root.chronFrom = Math.max(0, root.chronFrom - 5); refreshLines(); e.accepted = true; return }
+        moveCursor(0, stepN); break
       case Qt.Key_Less: case Qt.Key_Comma: case Qt.Key_PageUp: setZ(root.vz + 1); break
       case Qt.Key_Greater: case Qt.Key_Period: case Qt.Key_PageDown: setZ(root.vz - 1); break
       case Qt.Key_Return: case Qt.Key_Enter: enterPressed(); break
@@ -664,8 +671,16 @@ Item {
       out.push({ t: "", c: "" })
       if (w.artifacts.length) { out.push({ t: root.t("p.artifacts"), c: "accent" }); for (k = w.artifacts.length - 1; k >= Math.max(0, w.artifacts.length - 4); k--) { var a = w.artifacts[k]; out.push({ t: "☼ " + a.name + ", '" + a.title + "'", c: "", wrap: true }); out.push({ t: "  " + a.desc + " — " + a.maker + ", " + root.tf("p.art.year", Sim.date({ tick: a.t }).year), c: "muted", wrap: true }) } out.push({ t: "", c: "" }) }
       if (w.dead.length) { out.push({ t: root.t("p.memorial"), c: "accent" }); for (k = w.dead.length - 1; k >= Math.max(0, w.dead.length - 5); k--) out.push({ t: "† " + w.dead[k].name + " — " + w.dead[k].how, c: "muted", wrap: true }); out.push({ t: "", c: "" }) }
-      out.push({ t: root.t("p.chronicle"), c: "accent" })
-      for (k = w.legends.length - 1; k >= Math.max(0, w.legends.length - 10); k--) { var d = Sim.date({ tick: w.legends[k].t }); out.push({ t: "a" + d.year + " " + d.seasonName + ": " + w.legends[k].m, c: "", wrap: true }) }
+      // The chronicle keeps 300 lines and the page showed the last ten, so
+      // everything before the last season was saved and unreadable. `↑ ↓`
+      // walks back through it, five lines at a time.
+      var chron = w.legends.length, span = 10
+      if (root.chronFrom > Math.max(0, chron - span)) root.chronFrom = Math.max(0, chron - span)
+      if (root.chronFrom < 0) root.chronFrom = 0
+      var top = chron - 1 - root.chronFrom
+      out.push({ t: root.t("p.chronicle") + (chron > span ? "  " + root.tf("p.chron.of", Math.max(1, top - span + 2), top + 1, chron) : ""), c: "accent", wrap: true })
+      for (k = top; k >= 0 && k > top - span; k--) { var d = Sim.date({ tick: w.legends[k].t }); out.push({ t: "a" + d.year + " " + d.seasonName + ": " + w.legends[k].m, c: "", wrap: true }) }
+      if (chron > span) out.push({ t: root.t("p.chron.keys"), c: "muted", wrap: true })
     } else {
       var H = [
         [root.t("h.key.arrows"), root.t("h.arrows")], ["< >  , .  PgUp/PgDn", root.t("h.levels")], [root.t("h.key.wheel"), root.t("h.wheel")],

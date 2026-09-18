@@ -1056,6 +1056,29 @@ function gainSkill(w, u, s, n) {
   }
 }
 // Which kind of work a job counts as, for inclination and frustration.
+// Jobs that are not themselves a need, and must give way to one. `work()` runs
+// before `needJob()`, so a job that only ends on its own terms is a dwarf who
+// stops eating: `station` starved five dwarves across sixteen fortresses, and
+// then `rest` killed one lying in an infirmary bed with the cellar four steps
+// away. Rather than fix the third one after it happens, they all yield.
+// The number is the thirst or hunger that interrupts that job. Open-ended jobs
+// give way at the ordinary threshold, because they will otherwise never end; a
+// game of something takes twelve ticks and standing at a grave twenty, and
+// interrupting those at 65 threw away the whole point of them — it cost the
+// hold five points of mood before the thresholds were split.
+var NEED_YIELD = { rest: 65, station: 65, tend: 65, train: 80, mourn: 95, play: 95 }
+function yieldsToNeed(w, u) {
+  if (!u.job) return false
+  var at = NEED_YIELD[u.job.k]
+  if (!at) return false
+  // An infirmary bed is a bed: lying in one covers sleep, so only food and
+  // drink get a wounded dwarf out of it. Without this they left to sleep in
+  // their own bed, and nobody could tend them because tending needs the
+  // patient to actually be lying in the infirmary.
+  var needsSleep = u.job.k !== "rest" && u.sleep > 75
+  if (u.thirst > at || u.hunger > at || needsSleep) { dropJob(w, u); return true }
+  return false
+}
 function jobCat(kind) {
   if (kind === "dig" || kind === "stair") return "mine"
   if (kind === "chop") return "wood"
@@ -1813,6 +1836,11 @@ var BRANCHES = [
 ]
 function economyJob(w, u) {
   if (gearJob(w, u)) return true
+  // Being badly hurt outranks the watch. This shortcut runs before the branch
+  // list, so a wounded guard went and stood at their post instead of lying
+  // down — and since tending needs the patient actually in the bed, nobody
+  // could treat them: 561 ticks drilling at 2 hit points out of 12.
+  if (wounded(u) && branchRest(w, u)) return true
   // A posted guard does not take work. Letting them pick up a hauling job
   // meant they held the post 12% of the time and were somewhere across the
   // fortress the rest of it, which is the same as having no post at all. The
@@ -2055,6 +2083,7 @@ function work(w, u) {
       if (w.build[j.i] !== B_HOSPITAL) { dropJob(w, u); return }
       if (u.i !== j.i) { if (!u.path) dropJob(w, u); return }
       j.prog++
+      u.sleep = Math.max(0, u.sleep - 2.5)
       // Lying down alone does not mend a bad wound — that is what the tending
       // is for. It keeps them from making it worse, and keeps them findable.
       if (!wounded(u)) { thought(w, u, L("th.mended", "levantou do leito curado"), 5); dropJob(w, u) }
@@ -4132,6 +4161,7 @@ function actDwarf(w, u) {
     var wi = itemById(w, u.job.item); if (wi && wi.i === u.i) { removeItem(w, wi.id); u.weapon = true; thought(w, u, L("th.armed", "pegou em armas"), 1) }
     dropJob(w, u); return
   }
+  if (yieldsToNeed(w, u) && needJob(w, u)) return
   if (u.job) { work(w, u); return }
   if (u.mood_state === "strange") return
   if (needJob(w, u)) return
@@ -4354,7 +4384,7 @@ function scenario(w, n, opts) {
   stockAt(w, stock3, "pick", 1); stockAt(w, stock3, "axe", 1); stockAt(w, stock3, "weapon", 2); stockAt(w, stock3, "armor", 2); stockAt(w, stock3, "gem", 4)
   // something worth putting on a merchant's table: a hold with nothing to sell
   // meets its first caravan with nothing to say to it
-  stockAt(w, stock3, "craft", 6); stockAt(w, stock3, "cutgem", 2)
+  stockAt(w, stock3, "craft", 6); stockAt(w, stock3, "cutgem", 2); stockAt(w, stock3, "jewel", 1)
   // the dwarves: a militia of a third, the rest by trade
   var roles = ["miner", "miner", "woodcutter", "farmer", "brewer", "smith", "builder", "farmer", "miner", "woodcutter", "crafter", "farmer", "smith", "miner", "brewer", "builder"]
   var militia = opts.militia !== undefined ? Math.min(n, opts.militia) : Math.max(2, Math.ceil(n / 3)), ri2 = 0
@@ -4464,12 +4494,12 @@ function newScenario(seed, n, opts) { var w = newWorld(seed); return scenario(w,
 // different part of the game to look at first.
 var PRESETS = [
   { id: "classic", name: "Embarque clássico", desc: "Sete anões, uma carroça de suprimentos e uma colina. Do zero, como manda a tradição.", kind: "classic", n: 7 },
-  { id: "ready", name: "Fortaleza pronta", desc: "Doze anões com ofícios e uma fortaleza já escavada em quatro níveis, com lareira, mesas de jogo e estacas na entrada.", kind: "scenario", n: 12, opts: { name: "Fortaleza pronta" } },
-  { id: "garrison", name: "Guarnição", desc: "Dez anões, seis na milícia, e o corredor da entrada cheio de estacas. Ondas mais cedo e mais frequentes: um teste de defesa.", kind: "scenario", n: 10, opts: { name: "Guarnição", militia: 6, firstRaid: DAY * 3, raidEvery: DAY * 9, waveBase: 4, waveStep: 2, eliteFrom: 3, cap: 14, halls: 0, traps: 6, posts: 3 } },
+  { id: "ready", name: "Fortaleza pronta", desc: "Doze anões com ofícios e uma fortaleza escavada em quatro níveis: lareira, mesas de jogo, coluna de cristal, poço e comporta, posto de guarda, enfermaria, cercado, estacas na entrada e uma herança na prateleira. Caravana no décimo dia. Ondas goblin a cada quinze dias.", kind: "scenario", n: 12, opts: { name: "Fortaleza pronta", caravanIn: 10 } },
+  { id: "garrison", name: "Guarnição", desc: "Dez anões, seis na milícia, três postos de guarda e o corredor cheio de estacas — e salão nenhum, porque não houve tempo. Ondas mais cedo e mais frequentes: um teste de defesa.", kind: "scenario", n: 10, opts: { name: "Guarnição", militia: 6, firstRaid: DAY * 3, raidEvery: DAY * 9, waveBase: 4, waveStep: 2, eliteFrom: 3, cap: 14, halls: 0, traps: 6, posts: 3 } },
   { id: "peaceful", name: "Vale tranquilo", desc: "Fortaleza pronta, sem goblins nem lobos, o salão inteiro arrumado e uma caravana chegando no segundo dia. Para ver a economia, o comércio e os humores sem sangue.", kind: "scenario", n: 12, opts: { name: "Vale tranquilo", peaceful: true, halls: 2, traps: 0, posts: 0, caravanIn: 2 } },
-  { id: "kinfolk", name: "Casa cheia", desc: "Dezesseis anões que chegaram em família, metade deles inseparável, num salão completo. As histórias começam de véspera — e a primeira perda dói.", kind: "scenario", n: 16, opts: { name: "Casa cheia", kin: true, halls: 2, traps: 2, cap: 10 } },
-  { id: "depths", name: "Soleira das profundezas", desc: "Doze anões e um poço já cavado até o ferro. O último nível, onde algo dorme desde antes da fortaleza, fica para você decidir.", kind: "scenario", n: 12, opts: { name: "Soleira das profundezas", deepShaft: true, halls: 1, traps: 4, militia: 5, posts: 2 } },
-  { id: "siege", name: "Cerco", desc: "Oito anões, ondas grandes desde o segundo dia com veteranos, e estacas por todo o corredor. Ninguém espera que dure.", kind: "scenario", n: 8, opts: { name: "Cerco", militia: 4, firstRaid: DAY * 2, raidEvery: DAY * 7, waveBase: 5, waveStep: 2.5, eliteFrom: 2, cap: 16, halls: 0, traps: 8, posts: 4 } }
+  { id: "kinfolk", name: "Casa cheia", desc: "Dezesseis anões que chegaram em família, metade deles inseparável, num salão completo com herança sobre um parente. As histórias começam de véspera — e a primeira perda dói.", kind: "scenario", n: 16, opts: { name: "Casa cheia", kin: true, halls: 2, traps: 2, cap: 10 } },
+  { id: "depths", name: "Soleira das profundezas", desc: "Doze anões, cinco na milícia, dois postos e um poço já cavado até o ferro. O último nível, onde algo dorme desde antes da fortaleza, fica para você decidir.", kind: "scenario", n: 12, opts: { name: "Soleira das profundezas", deepShaft: true, halls: 1, traps: 4, militia: 5, posts: 2 } },
+  { id: "siege", name: "Cerco", desc: "Oito anões, quatro postos, estacas por todo o corredor e ondas grandes desde o segundo dia com veteranos. Ninguém espera que dure.", kind: "scenario", n: 8, opts: { name: "Cerco", militia: 4, firstRaid: DAY * 2, raidEvery: DAY * 7, waveBase: 5, waveStep: 2.5, eliteFrom: 2, cap: 16, halls: 0, traps: 8, posts: 4 } }
 ]
 // A preset's name and blurb are text like any other, so they go through the
 // table. The fallback is the Portuguese in the list above, which is how every

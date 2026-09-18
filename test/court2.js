@@ -67,6 +67,27 @@ function check(cond, what) {
   check((w.stats.tended || 0) > 0, "the tending is counted")
 }
 
+// A standing job must give way to thirst. `work()` runs before `needJob()`, so
+// this has bitten twice: a guard holding an unreachable post, and then a dwarf
+// lying in an infirmary bed who died of thirst with the cellar four steps away.
+{
+  const w = S.newScenario(7, 12, {})
+  S.tick(w)
+  const bed = S.cache(w).hospital[0]
+  const u = S.dwarves(w)[0]
+  u.hp = 2                                   // wounded, so they want the bed
+  u.i = bed
+  u.job = { k: "rest", i: bed, claims: true, prog: 0 }
+  u.thirst = 90
+  let left = false
+  for (let k = 0; k < 400 && !left; k++) { S.tick(w); if (!u.job || u.job.k !== "rest") left = true }
+  check(left, "a wounded dwarf leaves the bed when they are thirsty")
+  let drank = false
+  for (let k = 0; k < 3000 && !drank; k++) { S.tick(w); if (u.thirst < 30) drank = true }
+  check(drank, "and drinks (thirst " + Math.round(u.thirst) + ")")
+  check(u.hp >= 2, "without getting worse for it (" + u.hp + " hp)")
+}
+
 // --- the pen ------------------------------------------------------------------
 {
   const w = S.newFromPreset(7, "peaceful", 0)

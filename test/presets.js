@@ -10,7 +10,8 @@ const fs = require("fs"), path = require("path")
 const src = fs.readFileSync(path.join(__dirname, "..", "sim.js"), "utf8").replace(".pragma library", "")
 const S = new Function(src + `; return { newFromPreset, tick, PRESETS, presetName, presetDesc, cache, dwarves, pop,
   digDepth, iz, bondTotal, isKin, BOND_FRIEND, YEAR, DAY, setI18n, countItems, dwarves, touchesWater,
-  B_FLOODGATE, NN, rosterMilitia, reachableFrom, openNeighbours, ix, iy }`)()
+  B_FLOODGATE, NN, rosterMilitia, reachableFrom, openNeighbours, ix, iy,
+  BUILD_INFO, BUILD_KEY, buildName, B_STAIR, B_GRAVE, B_HEARTH, B_CRYSTAL, B_GAMES, B_TRAP, B_POST }`)()
 const I18n = (function () {
   const isrc = fs.readFileSync(path.join(__dirname, "..", "I18n.js"), "utf8").replace(".pragma library", "")
   return new Function(isrc + "; return { t, tf, plural, table, inSeason, STRINGS, TABLES }")()
@@ -23,14 +24,18 @@ function check(cond, what) {
 }
 
 // what each preset is for, which is what its blurb promises
+const S_HEARTH = S.B_HEARTH, S_CRYSTAL = S.B_CRYSTAL, S_GAMES = S.B_GAMES, S_TRAP = S.B_TRAP, S_POST = S.B_POST
 const WANT = {
   classic:  { pop: 7,  scenario: false },
-  ready:    { pop: 12, hearths: 1, crystals: 1, games: 2, traps: 2, posts: 1, well: true },
-  garrison: { pop: 10, hearths: 0, games: 0, trapsAtLeast: 6, posts: 3, militia: 6, well: true },
-  peaceful: { pop: 12, hearths: 2, crystals: 2, games: 4, traps: 0, posts: 0, peaceful: true, well: true },
-  kinfolk:  { pop: 16, hearths: 2, games: 4, allKin: true, friends: true, well: true },
-  depths:   { pop: 12, deepTo: 2, trapsAtLeast: 4, posts: 2, militia: 5, well: true },
-  siege:    { pop: 8,  hearths: 0, trapsAtLeast: 8, posts: 4, militia: 4, well: true },
+  ready:    { pop: 12, hearths: 1, crystals: 1, games: 2, traps: 2, posts: 1, well: true, without: [] },
+  garrison: { pop: 10, hearths: 0, games: 0, trapsAtLeast: 6, posts: 3, militia: 6, well: true,
+              without: [S_HEARTH, S_CRYSTAL, S_GAMES] },
+  peaceful: { pop: 12, hearths: 2, crystals: 2, games: 4, traps: 0, posts: 0, peaceful: true, well: true,
+              without: [S_TRAP, S_POST] },
+  kinfolk:  { pop: 16, hearths: 2, games: 4, allKin: true, friends: true, well: true, without: [] },
+  depths:   { pop: 12, deepTo: 2, trapsAtLeast: 4, posts: 2, militia: 5, well: true, without: [] },
+  siege:    { pop: 8,  hearths: 0, trapsAtLeast: 8, posts: 4, militia: 4, well: true,
+              without: [S_HEARTH, S_CRYSTAL, S_GAMES] },
 }
 
 check(S.PRESETS.length === Object.keys(WANT).length, "every preset is accounted for here (" + S.PRESETS.length + ")")
@@ -69,6 +74,21 @@ for (const pr of S.PRESETS) {
     let fr = 0
     for (const u of ds) for (const id in (u.bonds || {})) if (u.bonds[id] >= S.BOND_FRIEND) fr++
     check(fr / 2 >= 3, label + " starts with friendships already formed (" + fr / 2 + ")")
+  }
+  // Every building the player can order has to be somewhere in a ready hold,
+  // unless that preset deliberately leaves it out. Derived from BUILD_INFO
+  // rather than listed here, so a building added to the simulation and
+  // forgotten in the scenarios fails this — which is the rule: the presets are
+  // the shop window, and what is not in the ready fortress is invisible.
+  if (want.scenario !== false) {
+    const skip = new Set([S.B_STAIR, S.B_GRAVE].concat(want.without || []))
+    const present = new Set()
+    for (let i = 0; i < S.NN; i++) if (w.build[i]) present.add(w.build[i])
+    const missing = Object.keys(S.BUILD_INFO).map(Number)
+      .filter(b => !skip.has(b) && !present.has(b))
+      .map(b => S.buildName(b))
+    check(missing.length === 0, label + " contains every building it does not deliberately skip" +
+          (missing.length ? " — missing " + missing.join(", ") : ""))
   }
   // the heirloom: a ready hold owns one artifact, made about something
   if (want.scenario !== false) {

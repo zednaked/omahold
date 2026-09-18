@@ -418,6 +418,31 @@ Every animal has a name. When one dies the hold notices, and whoever kept it
 grieves — the grief system was already there, and an animal is the cheapest
 thing in this game that can be loved.
 
+### A standing job gives way to a need
+
+`work()` runs before `needJob()`, so a job that only ends on its own terms is a
+dwarf who stops eating. This has now bitten three times — a guard holding an
+unreachable post, a wounded dwarf lying in an infirmary bed with the cellar
+four steps away, and a militia dwarf at 2 hit points out of 12 who drilled for
+561 ticks because the guard-post shortcut runs before the branch that puts the
+hurt to bed.
+
+So it is a rule rather than three fixes. Every open-ended job has the thirst or
+hunger that interrupts it:
+
+| job | interrupted at |
+|---|---|
+| lying wounded, holding a post, tending | 65 — the ordinary threshold |
+| drilling | 80 |
+| a game, standing at a grave | 95 |
+
+The split matters: a game takes twelve ticks and a grave twenty, and
+interrupting those at 65 threw the whole point of them away — five points of
+mood across sixteen fortresses. And an infirmary bed counts as a bed, so sleep
+does not get a wounded dwarf out of one; without that they left to sleep
+elsewhere and nobody could tend them, because tending needs the patient
+actually lying there.
+
 ## The capital
 
 "Legendary" used to be the end: six milestones, a scoreboard, and then the

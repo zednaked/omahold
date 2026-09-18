@@ -417,6 +417,29 @@ Todo animal tem nome. Quando um morre a fortaleza percebe, e quem o criava fica
 de luto — o sistema de luto já existia, e um animal é a coisa mais barata deste
 jogo que pode ser amada.
 
+### Trabalho parado cede à necessidade
+
+O `work()` roda antes do `needJob()`, então um job que só termina nos próprios
+termos é um anão que para de comer. Isso já morde pela terceira vez — um guarda
+segurando um posto inalcançável, um ferido deitado na enfermaria com a adega a
+quatro passos, e um miliciano com 2 de 12 pontos de vida que treinou por 561
+ticks porque o atalho do posto roda antes da branch que põe o ferido na cama.
+
+Virou regra, em vez de três correções. Cada job sem fim própria tem a sede ou
+fome que o interrompe:
+
+| job | interrompido em |
+|---|---|
+| de cama ferido, de guarda no posto, cuidando | 65 — o limiar normal |
+| treinando | 80 |
+| jogando, velando os mortos | 95 |
+
+A separação importa: um jogo leva doze ticks e velar vinte, e interromper isso
+em 65 jogava fora o sentido deles — cinco pontos de humor em dezesseis
+fortalezas. E um leito de enfermaria conta como cama, então o sono não tira o
+ferido de lá; sem isso ele ia dormir em outro lugar e ninguém conseguia cuidar
+dele, porque cuidar exige o paciente deitado ali.
+
 ## A capital
 
 "Lendária" era o fim: seis marcos, um placar, e a fortaleza seguia sem nada
