@@ -1861,8 +1861,7 @@ function branchTrain(w, u) {
   return false
 }
 function branchHaul(w, u) {
-  var spot = stockpileSpot(w, u.i)
-  if (spot < 0) return false
+  if (!cache(w).stocks.length) return false
   var best = null, bd = 1e9, hl = w.haulable || w.items
   for (var k = 0; k < hl.length; k++) {
     var ci = hl[k]
@@ -1870,8 +1869,14 @@ function branchHaul(w, u) {
     if (w.unreach["i" + ci.id]) continue
     var d = dist(ci.i, u.i); if (d < bd) { bd = d; best = ci }
   }
-  if (best && go(w, u, function (c2) { return c2 === best.i }, best.i)) { best.res = u.id; setJob(w, u, { k: "haul", i: spot, item: best.id, stage: "fetch", prog: 0 }); return true }
-  if (best) w.unreach["i" + best.id] = true
+  if (!best) return false
+  // The pile nearest the log, not the pile nearest whoever is fetching it:
+  // asking from the dwarf sent them back across the fortress with a rock that
+  // had a stockpile six cells from where it lay.
+  var spot = stockpileSpot(w, best.i)
+  if (spot < 0) return false
+  if (go(w, u, function (c2) { return c2 === best.i }, best.i)) { best.res = u.id; setJob(w, u, { k: "haul", i: spot, item: best.id, stage: "fetch", prog: 0 }); return true }
+  w.unreach["i" + best.id] = true
   return false
 }
 
@@ -2224,7 +2229,14 @@ function work(w, u) {
         it = itemById(w, j.item)
         if (!it || it.i !== u.i) { dropJob(w, u); return }
         pickUp(w, u, it); j.stage = "go"
-        if (w.build[j.i] !== B_STOCK || !go(w, u, function (c) { return c === j.i }, j.i)) dropJob(w, u)
+        // The pile may have filled up or been walled off while they walked to
+        // the item. Ask for another before giving up: dropping the job here
+        // leaves the thing on the floor for the next dwarf to walk to.
+        if (w.build[j.i] !== B_STOCK || !go(w, u, function (c) { return c === j.i }, j.i)) {
+          var alt = stockpileSpot(w, u.i)
+          if (alt >= 0 && alt !== j.i && go(w, u, function (c) { return c === alt }, alt)) { j.i = alt; return }
+          dropJob(w, u)
+        }
         return
       }
       putDown(w, u); dropJob(w, u); return
