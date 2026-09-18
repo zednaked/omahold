@@ -608,13 +608,20 @@ function stepTo(w, i, j, z, u, out, n) {
 var nb = [0, 0, 0, 0, 0, 0]
 // A* from `from` to any cell satisfying goalFn, heuristic toward `hint`.
 // Returns the path as an array of cell indices (excluding `from`), or null.
+// `dist` weighs a level as three cells, which is what a job ranking wants:
+// work one level down really is further away. As an A* heuristic that same
+// weight is a lie - a step up or down the stairs costs exactly 1 - and an
+// overestimate makes A* wander the level it is on before it takes the stairs:
+// longer paths, and searches that run out of budget and report work as
+// unreachable. This one never overestimates.
+function hdist(a, b) { return Math.abs(ix(a) - ix(b)) + Math.abs(iy(a) - iy(b)) + Math.abs(iz(a) - iz(b)) }
 function findPath(w, from, goalFn, hint, u, limit) {
   if (goalFn(from)) return []
   pf.run++
   var run = pf.run
   heapA.length = 0; heapF.length = 0
   pf.g[from] = 0; pf.stamp[from] = run; pf.from[from] = -1; pf.closed[from] = 0
-  hpush(from, dist(from, hint))
+  hpush(from, hdist(from, hint))
   var expanded = 0, max = limit || 4000
   while (heapA.length > 0) {
     var cur = hpop()
@@ -631,7 +638,7 @@ function findPath(w, from, goalFn, hint, u, limit) {
       var nx = nb[k], ng = pf.g[cur] + 1
       if (pf.stamp[nx] === run && ng >= pf.g[nx]) continue
       pf.g[nx] = ng; pf.stamp[nx] = run; pf.from[nx] = cur
-      hpush(nx, ng + dist(nx, hint))
+      hpush(nx, ng + hdist(nx, hint))
     }
   }
   return null
@@ -1028,6 +1035,13 @@ function step(w, u) {
   if (u.pi >= u.path.length) { u.path = null; return 1 }
   var nx = u.path[u.pi]
   if (!passableFor(w, nx, u)) { u.path = null; return -1 }
+  // A move straight up or down is the staircase, and the path was found when
+  // the staircase was there: the player can pull it out from under a dwarf
+  // already walking. Without this the dwarf changed level through the hole
+  // anyway. A slope move also changes level, but it changes x or y with it,
+  // which is what tells the two apart.
+  var dz = nx - u.i
+  if ((dz === N || dz === -N) && (w.build[u.i] !== B_STAIR || w.build[nx] !== B_STAIR)) { u.path = null; return -1 }
   u.i = nx; u.pi++
   if (u.k === "dwarf") markSeen(w, u.i)
   if (u.carry) { var c = itemById(w, u.carry); if (c) c.i = u.i }
