@@ -90,11 +90,19 @@ function check(cond, what) {
 
 // --- the pen ------------------------------------------------------------------
 {
-  const w = S.newFromPreset(7, "peaceful", 0)
-  S.tick(w)
-  check(S.cache(w).pens.length >= 1, "the ready hold has a pen")
-  let beasts = 0
-  for (let k = 0; k < S.DAY * 10; k++) { S.tick(w); beasts = S.livestock(w) }
+  // The caravan offers stock once a day while it trades, on a coin flip, and it
+  // trades for four days: one seed in sixteen sees none of it. This used to
+  // read one seed and went red the first time an unrelated change moved the
+  // random sequence along, so it reads three and asks for the mechanism, not
+  // for the flip.
+  let w = null, beasts = 0
+  for (const seed of [7, 3, 11]) {
+    w = S.newFromPreset(seed, "peaceful", 0)
+    S.tick(w)
+    if (seed === 7) check(S.cache(w).pens.length >= 1, "the ready hold has a pen")
+    for (let k = 0; k < S.DAY * 10; k++) { S.tick(w); beasts = S.livestock(w) }
+    if (beasts > 0) break
+  }
   check(beasts > 0, "the caravan brings livestock to a hold with a pen (" + beasts + ")")
   check(w.units.filter(u => u.k === "goat" || u.k === "cat").every(u => !!u.name), "every animal has a name")
   check((w.stats.milked || 0) > 0, "goats on grass feed the hold (" + (w.stats.milked || 0) + ")")
