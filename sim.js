@@ -601,9 +601,29 @@ function neighbors(w, i, u, out) {
 // a constructed wall has sky over it, not floor, so it cannot be climbed.
 function stepTo(w, i, j, z, u, out, n) {
   if (passableFor(w, j, u)) { out[n++] = j; return n }
-  if (z < D - 1 && solid(w.tile[j]) && w.tile[j] !== T_TREE && w.tile[j] !== T_FUNGUS && w.tile[i + N] === T_OPEN && passableFor(w, j + N, u)) { out[n++] = j + N; return n }
-  if (z > 0 && w.tile[j] === T_OPEN && w.floor[j] === F_NONE && passableFor(w, j - N, u)) { out[n++] = j - N; return n }
+  if (z < D - 1 && climbUp(w, j, u) && w.tile[i + N] === T_OPEN) { out[n++] = j + N; return n }
+  if (z > 0 && w.tile[j] === T_OPEN && w.floor[j] === F_NONE && passableFor(w, j - N, u) && climbOut(w, j - N, u)) { out[n++] = j - N; return n }
   return n
+}
+// The neighbour is a hill to walk up: rock with standing room on top of it.
+function climbUp(w, j, u) {
+  return solid(w.tile[j]) && w.tile[j] !== T_TREE && w.tile[j] !== T_FUNGUS && passableFor(w, j + N, u)
+}
+// Going down a hillside and dropping into a shaft are the same move to the
+// pathfinder, and the second one is a one-way edge: nothing takes a dwarf back
+// up a hole in a floor. One taken to save three steps can leave them somewhere
+// no path leaves - a trap the player never built and cannot see. So the drop
+// is a step only where the landing can be climbed out of again, which on a
+// hillside is the hill itself and in a dug shaft is nothing.
+function climbOut(w, i, u) {
+  var z = iz(i)
+  if (z >= D - 1 || w.tile[i + N] !== T_OPEN) return false
+  var x = ix(i), y = iy(i)
+  if (x > 0 && climbUp(w, i - 1, u)) return true
+  if (x < W - 1 && climbUp(w, i + 1, u)) return true
+  if (y > 0 && climbUp(w, i - W, u)) return true
+  if (y < H - 1 && climbUp(w, i + W, u)) return true
+  return w.build[i] === B_STAIR && z > 0 && w.build[i - N] === B_STAIR
 }
 var nb = [0, 0, 0, 0, 0, 0]
 // A* from `from` to any cell satisfying goalFn, heuristic toward `hint`.
