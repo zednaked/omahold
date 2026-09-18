@@ -2819,22 +2819,6 @@ function alarmRange(w, u) {
   if (u.post >= 0 && w.build[u.post] === B_POST) return 9
   return (w.raid || w.hostiles > 1) ? 1e9 : 9
 }
-function unitsNear(w, i, r, pred) {
-  var n = 0
-  for (var k = 0; k < w.units.length; k++) { var o = w.units[k]; if (pred(o) && dist(o.i, i) <= r) n++ }
-  return n
-}
-// Give ground toward someone: the neighbour that buys the most distance from
-// the foe per step toward the friend. One cell at a time, like the old flee.
-function giveGround(w, u, foe, toward) {
-  var n = neighbors(w, u.i, u, nb), best = -1, bs = dist(foe.i, u.i) - dist(toward, u.i)
-  for (var k = 0; k < n; k++) {
-    var sc = dist(foe.i, nb[k]) - dist(toward, nb[k])
-    if (sc > bs) { bs = sc; best = nb[k] }
-  }
-  if (best >= 0) { moveTo(w, u, best); return true }
-  return false
-}
 function fightOrFlee(w, u) {
   var foe = nearestUnit(w, u.i, function (o) { return o !== u && hostile(o) }, alarmRange(w, u))
   if (!foe) return false
@@ -2846,14 +2830,6 @@ function fightOrFlee(w, u) {
   if (!brave && (adjacent(u.i, foe.i) || u.i === foe.i)) { if (u.cool <= 0) { attack(w, u, foe); u.cool = 2 } return true }
   if (brave) {
     if (adjacent(u.i, foe.i) || u.i === foe.i) {
-      // Two on one with nobody within reach is how a dwarf dies while the rest
-      // of the militia is still walking. Give ground toward the nearest one of
-      // them instead of trading blows - but only while there is someone to
-      // fall back on. Cornered alone, they fight.
-      if (unitsNear(w, u.i, 2, function (o) { return o !== u && hostile(o) }) >= 2) {
-        var mate = nearestUnit(w, u.i, function (o) { return o !== u && o.k === "dwarf" && o.mood_state !== "berserk" && (o.militia || o.weapon) }, 14)
-        if (mate && dist(mate.i, u.i) > 2 && giveGround(w, u, foe, mate.i)) return true
-      }
       if (u.cool <= 0) { attack(w, u, foe); u.cool = 2 }
       return true
     }
@@ -2862,17 +2838,12 @@ function fightOrFlee(w, u) {
   }
   if (dist(foe.i, u.i) > 5) return false
   dropJob(w, u)
-  // Running in a straight line away from a goblin is how a farmer ends up
-  // alone at the end of a corridor. Run to whoever is armed, or to a post, or
-  // to the gate - something the hold defends - and only take the blind step
-  // away when there is nothing like that to run to.
-  var guard = nearestUnit(w, u.i, function (o) { return o !== u && o.k === "dwarf" && o.militia && o.mood_state !== "berserk" && dist(o.i, foe.i) > 2 }, 1e9)
-  var posts = cache(w).posts
-  var anchor = guard ? guard.i : posts.length ? nearestOf(posts, u.i) : w.depot
-  if (anchor >= 0 && dist(anchor, u.i) > 1 && dist(anchor, foe.i) > 3) {
-    if (!u.path) go(w, u, function (c) { return c === anchor }, anchor, 1500)
-    if (u.path && step(w, u) >= 0) return true
-  }
+  // Two ideas were tried here and both were thrown out by the measurement,
+  // which is worth writing down so they are not tried again. Falling back
+  // toward a friend when outnumbered, instead of trading blows: turning your
+  // back on two goblins buys free hits, and it cost 90 deaths in 20 seeds.
+  // Running to the nearest armed dwarf instead of away: it walks the farmer
+  // into the fight, and cost 119. Away from it is the right answer.
   // flee: pick the neighbor that increases distance
   var n = neighbors(w, u.i, u, nb), best = u.i, bd = dist(foe.i, u.i)
   for (var k = 0; k < n; k++) { var d = dist(foe.i, nb[k]); if (d > bd) { bd = d; best = nb[k] } }
