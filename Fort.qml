@@ -1140,7 +1140,7 @@ Item {
                   if (un.id === World.selectedId) { ctx.fillStyle = p.select; ctx.fillRect(Sim.ix(un.i) * c, Sim.iy(un.i) * c, c, c); col = p.dwarfSel }
                   if (udk) col = Pal.dimmed(col, p.bgRgb, p.dim[udk])
                   else if (un.id !== World.selectedId) { var ub = bright(un.i, Sim.outdoor(w, un.i)); if (ub < 0.98) col = Pal.dimmed(col, p.bgRgb, Math.max(0.5, ub)) }
-                  var gl = un.k === "dwarf" ? "☺" : un.k === "goblin" ? "g" : un.k === "wolf" ? "w" : un.k === "deer" ? "d" : un.k === "kobold" ? "k" : un.k === "crawler" ? "c" : un.k === "sentinel" ? "S" : un.k === "envoy" ? "Ε" : un.k === "king" ? "♔" : un.k === "kingsguard" ? "Ψ" : un.k === "goat" ? "n" : un.k === "cat" ? "e" : "☻"
+                  var gl = un.k === "dwarf" ? "☺" : un.k === "goblin" ? "g" : un.k === "wolf" ? "w" : un.k === "deer" ? "d" : un.k === "kobold" ? "k" : un.k === "crawler" ? "c" : un.k === "sentinel" ? "S" : un.k === "envoy" ? "Ε" : un.k === "king" ? "Κ" : un.k === "kingsguard" ? "Ψ" : un.k === "goat" ? "n" : un.k === "cat" ? "e" : "☻"
                   ctx.fillStyle = col; ctx.fillText(gl, Sim.ix(un.i) * c + half, Sim.iy(un.i) * c + half + 1)
                 }
                 // pass 4: weather over outdoor cells (light itself is baked into the fills)

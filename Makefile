@@ -3,6 +3,7 @@
 #   make test      everything below
 #   make sim       the simulation, headless, two years on one seed
 #   make i18n      both languages, the fallback, and key parity
+#   make glyphs    every glyph the plugin draws, against what fonts cover
 #   make hostile   what save.py refuses, in a throwaway $HOME
 #   make deep      the relic from the tomb and the court of the deep
 #   make halls     the hearth, the crystal, the game table and the traps
@@ -17,9 +18,9 @@
 #
 # A check on something the world rolls for reads several seeds: test/seeds.js.
 
-.PHONY: test sim i18n hostile deep halls presets surfaces lives artifacts stairs zmoves trade court validate
+.PHONY: test sim i18n hostile deep halls presets surfaces lives artifacts stairs zmoves glyphs trade court validate
 
-test: sim i18n deep halls presets surfaces lives artifacts stairs zmoves trade court hostile
+test: sim i18n glyphs deep halls presets surfaces lives artifacts stairs zmoves trade court hostile
 
 sim:
 	@echo "== simulation =="
@@ -70,6 +71,10 @@ trade:
 court:
 	@echo "== infirmary, pen, crown =="
 	@node test/court2.js | tail -1
+
+glyphs:
+	@echo "== glifos =="
+	@node test/glyphs.js | tail -2
 
 hostile:
 	@echo "== save.py =="

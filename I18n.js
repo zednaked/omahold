@@ -829,7 +829,7 @@ var STRINGS = {
     "p.deepest": "deepest dug: level {0}{1}",
     "p.stirred": " · {0} thing(s) stirred down there",
     "tip.deep": "How far down the hold has dug, and how much it woke doing it. What wakes comes up from below — a locked door is on the surface.",
-    "chip.deep": "⚷ z{0}",
+    "chip.deep": "↓ z{0}",
     "h.leg.deep": "crawler",
     "h.leg.sentinel": "sentinel",
 
@@ -1716,7 +1716,7 @@ var STRINGS = {
     "p.deepest": "mais fundo escavado: nível {0}{1}",
     "p.stirred": " · {0} coisa(s) despertada(s) lá embaixo",
     "tip.deep": "Quão fundo a fortaleza cavou, e quanto ela despertou fazendo isso. O que desperta sobe de baixo — porta trancada fica na superfície.",
-    "chip.deep": "⚷ z{0}",
+    "chip.deep": "↓ z{0}",
     "h.leg.deep": "rastejante",
     "h.leg.sentinel": "sentinela",
 
