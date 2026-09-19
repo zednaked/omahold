@@ -3401,17 +3401,25 @@ function maybeWake(w, z) {
 // What comes up, sized by the depth it woke at and by how much has already
 // been stirred: a hold that keeps digging keeps paying.
 function spawnDeep(w, z) {
-  var spot = deepSpot(w, z)
+  // O que acorda tem de CHEGAR na fortaleza - "sobe pela escavação", "saem das
+  // galerias". `deepSpot` sorteia qualquer célula do nível, e o nível tem bolhas
+  // isoladas: cavernas que nenhuma galeria tocou.
+  //
+  // Até 19/09/2026 isso não aparecia porque a rampa atravessava o piso do andar
+  // de cima (ver `stepTo`) e ligava tudo a tudo. Fechada aquela passagem,
+  // medindo com spawnDeep forçado no z1: 0 de 3 rastejantes alcançavam o
+  // depósito, contra 1 a 3 antes. Nasciam presos e a ameaça não existia.
+  var spot = deepSpotReachable(w, z)
   if (spot < 0) return false
   var extra = Math.min(3, (w.stirred || 1) - 1)
   if (z <= 0) {
     var s1 = addUnit(w, "sentinel", spot)
     s1.elite = true
-    for (var e = 0; e < extra; e++) { var sp2 = deepSpot(w, z); if (sp2 >= 0) addUnit(w, "crawler", sp2) }
+    for (var e = 0; e < extra; e++) { var sp2 = deepSpotReachable(w, z); if (sp2 >= 0) addUnit(w, "crawler", sp2) }
     announce(w, L("msg.deep.sentinel", "Uma sentinela das profundezas sobe pela escavação."), 2)
   } else {
     var n = 2 + ri(w, 3) + extra
-    for (var k = 0; k < n; k++) { var sp = deepSpot(w, z); if (sp >= 0) addUnit(w, "crawler", sp) }
+    for (var k = 0; k < n; k++) { var sp = deepSpotReachable(w, z); if (sp >= 0) addUnit(w, "crawler", sp) }
     announce(w, LF("msg.deep.crawlers", "{0} rastejantes saem das galerias.", n), 2)
   }
   // a raid like any other, so raidTick reports it when it is over — but marked
@@ -3581,7 +3589,10 @@ function descendHome(w, u) {
   if (iz(u.i) <= z) { removeUnit(w, u); return }
   if (u.wait > 0) { u.wait--; return }
   if (!u.path || !u.job || u.job.k !== "leave") {
-    var home = deepSpot(w, z)
+      // Sem caminho ate o destino, o `removeUnit` abaixo faz o visitante SUMIR
+      // onde esta, em vez de ir embora pelo caminho por onde veio. Um ponto
+      // alcancavel e o que torna a saida uma caminhada.
+    var home = deepSpotReachable(w, z)
     if (home < 0 || !go(w, u, function (q) { return q === home }, home, 4000)) { removeUnit(w, u); return }
     u.job = { k: "leave", i: -1 }
   }
@@ -3604,7 +3615,9 @@ function kingTick(w, d) {
   if (!c || w.fallen) return
   if (!c.came) {
     if (w.tick < c.due || w.raid || w.siege) return
-    var spot = deepSpot(w, c.z)
+      // Chega a pe como o emissario: o ponto precisa de caminho ate a
+      // fortaleza. Ver `deepSpotReachable`.
+    var spot = deepSpotReachable(w, c.z)
     if (spot < 0) { c.due = w.tick + DAY * 3; return }
     var k = addUnit(w, "king", spot)
     k.name = c.king
@@ -3614,7 +3627,8 @@ function kingTick(w, d) {
     c.popThen = pop(w)
     c.guards = []
     for (var g = 0; g < 2; g++) {
-      var gs = deepSpot(w, c.z)
+        // A guarda chega junto com o rei, e a pe como ele.
+      var gs = deepSpotReachable(w, c.z)
       if (gs < 0) continue
       var gu = addUnit(w, "kingsguard", gs)
       gu.name = dwarfName(w)
