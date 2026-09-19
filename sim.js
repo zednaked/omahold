@@ -599,9 +599,22 @@ function neighbors(w, i, u, out) {
 // without stairs (Dwarf Fortress ramps, without the bookkeeping). Stepping up
 // needs headroom over the current cell and a floor on top of the neighbor;
 // a constructed wall has sky over it, not floor, so it cannot be climbed.
+//
+// HEADROOM IS SKY, NOT JUST THE ABSENCE OF ROCK (fixed 19/09/2026). The check
+// used to be `tile[i + N] === T_OPEN` alone, and that is true of a dug corridor
+// on the level above just as much as of open air. `floor[i + N]` is the floor of
+// that level - the ceiling of where the dwarf stands - so with a floor there the
+// climb went straight through it: a dwarf stepping from one storey into the one
+// above with nothing between them. Players saw it as dwarves taking a staircase
+// that was not there.
+//
+// The distinction was already in the line above, applied to the top of the
+// slope: a wall has sky over it, not floor. It was missing over the dwarf's own
+// head. Measured before the fix, over 4000 ticks: 2 of these on seed 7, 7 on
+// seed 3, and 450 on seed 42 - which is why it read as "sometimes".
 function stepTo(w, i, j, z, u, out, n) {
   if (passableFor(w, j, u)) { out[n++] = j; return n }
-  if (z < D - 1 && climbUp(w, j, u) && w.tile[i + N] === T_OPEN) { out[n++] = j + N; return n }
+  if (z < D - 1 && climbUp(w, j, u) && w.tile[i + N] === T_OPEN && w.floor[i + N] === F_NONE) { out[n++] = j + N; return n }
   if (z > 0 && w.tile[j] === T_OPEN && w.floor[j] === F_NONE && passableFor(w, j - N, u) && climbOut(w, j - N, u)) { out[n++] = j - N; return n }
   return n
 }
@@ -1084,6 +1097,23 @@ function step(w, u) {
   // which is what tells the two apart.
   var dz = nx - u.i
   if ((dz === N || dz === -N) && (w.build[u.i] !== B_STAIR || w.build[nx] !== B_STAIR)) { u.path = null; return -1 }
+  // The slope has the same problem as the staircase, and the fix above left it
+  // out: a slope move changes level AND column, so `dz` is not +-N and it slid
+  // past that guard. The rock that held the slope up can be dug out while the
+  // dwarf is one step away, and `passableFor(nx)` stays true because the top of
+  // the slope keeps its floor. Measured: the dwarf climbed a level through open
+  // air, `step` returning 1.
+  //
+  // Revalidating means repeating what `stepTo` decided, against the map as it is
+  // now rather than as it was when the path was drawn.
+  var zc = iz(nx) - iz(u.i)
+  if (zc !== 0 && dz !== N && dz !== -N) {
+    var lat = idx(ix(nx), iy(nx), iz(u.i))
+    var ok
+    if (zc > 0) ok = climbUp(w, lat, u) && w.tile[u.i + N] === T_OPEN && w.floor[u.i + N] === F_NONE
+    else ok = w.tile[lat] === T_OPEN && w.floor[lat] === F_NONE && climbOut(w, nx, u)
+    if (!ok) { u.path = null; return -1 }
+  }
   u.i = nx; u.pi++
   if (u.k === "dwarf") markSeen(w, u.i)
   if (u.carry) { var c = itemById(w, u.carry); if (c) c.i = u.i }
@@ -3398,6 +3428,36 @@ function deepSpot(w, z) {
   for (var j = z * N; j < (z + 1) * N; j++) if (passable(w, j)) return j
   return -1
 }
+// Same as `deepSpot`, but only cells with a real path to the depot - for whoever
+// has to WALK to the hold after appearing: the court's envoy, the king and his
+// guard.
+//
+// Until 19/09/2026 plain `deepSpot` was enough for them by accident. The slope
+// let a dwarf climb through the floor of the level above (see `stepTo`), so from
+// any hole in the deep you could surface anywhere. With that closed, measured on
+// seeds 1/3/7/42 of a fresh hold: ZERO cells of the deep level reach the depot.
+// The envoy would spawn with no path and circle until the court expired.
+//
+// The fiction does not ask them to appear at the bottom - it asks them to come
+// FROM the bottom. So they emerge where the hold reaches closest to their level:
+// the deepest reachable cell, which in a dug hold is the foot of the staircase.
+// "Something is coming up from level N" stays true, and the walk exists by
+// construction instead of by luck.
+//
+// `deepSpot` itself is left alone, and that distinction is the whole point: the
+// tomb, its guard and the crawlers are meant to sit down there unreachable -
+// finding them is what digging is for. Restricting all nine callers broke the
+// tomb (`relic.js`: "the tomb opens on level 1") before this was split out.
+function deepSpotReachable(w, z) {
+  var reach = reachableFrom(w, w.depot, null)
+  var cands = []
+  for (var zz = z; zz < D; zz++) {
+    cands.length = 0
+    for (var j = zz * N; j < (zz + 1) * N; j++) if (passable(w, j) && reach[j]) cands.push(j)
+    if (cands.length) return cands[ri(w, cands.length)]
+  }
+  return -1
+}
 
 // ---- the lost court ---------------------------------------------------------
 // Everything that came up from the deep so far wanted the hold dead, so depth
@@ -3437,7 +3497,7 @@ function payTribute(w, k, n) {
 // cannot get up at all, nothing happens and the level stays quiet.
 function courtArrive(w, z) {
   if (w.court || w.pact || w.grudge) return false
-  var spot = deepSpot(w, z)
+  var spot = deepSpotReachable(w, z)
   if (spot < 0) return false
   var kind = pick(w, TRIBUTE)
   var e = addUnit(w, "envoy", spot)
